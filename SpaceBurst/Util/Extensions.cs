@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace SpaceBurst.Util
+namespace SpaceBurst
 {
     static class Extensions
     {

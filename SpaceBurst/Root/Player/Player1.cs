@@ -1,14 +1,8 @@
 ﻿using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using SpaceBurst.Root.Player;
-using SpaceBurst.Util;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace SpaceBurst.Root
+namespace SpaceBurst
 {
     class Player1 : Entity
     {
@@ -55,6 +49,7 @@ namespace SpaceBurst.Root
             }
 
             var aim = Input.GetAimDirection();
+
             if (aim.LengthSquared() > 0 && cooldownRemaining <= 0)
             {
                 cooldownRemaining = cooldownFrames;
@@ -62,15 +57,15 @@ namespace SpaceBurst.Root
                 Quaternion aimQuat = Quaternion.CreateFromYawPitchRoll(0, 0, aimAngle);
 
                 float randomSpread = rand.NextFloat(-0.04f, 0.04f) + rand.NextFloat(-0.04f, 0.04f);
-                //Vector2 vel = MathUtil.FromPolar(aimAngle + randomSpread, 11f);
+                Vector2 vel = MathUtil.FromPolar(aimAngle + randomSpread, 11f);
 
                 Vector2 offset = Vector2.Transform(new Vector2(35, -8), aimQuat);
-                //EntityManager.Add(new Bullet(Position + offset, vel));
+                EntityManager.Add(new Bullet(Position + offset, vel));
 
                 offset = Vector2.Transform(new Vector2(35, 8), aimQuat);
-                //EntityManager.Add(new Bullet(Position + offset, vel));
+                EntityManager.Add(new Bullet(Position + offset, vel));
 
-                //Sound.Shot.Play(0.2f, rand.NextFloat(-0.2f, 0.2f), 0);
+                Sound.Shot.Play(0.2f, rand.NextFloat(-0.2f, 0.2f), 0);
             }
 
             if (cooldownRemaining > 0)

@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace SpaceBurst.Root
+namespace SpaceBurst
 {
     abstract class Entity
     {

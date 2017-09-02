@@ -1,9 +1,8 @@
-﻿using Microsoft.Xna.Framework;
+﻿using BloomPostprocess;
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Microsoft.Xna.Framework.Media;
-using SpaceBurst.Root;
-using SpaceBurst.Root.Player;
 
 namespace SpaceBurst
 {
@@ -18,84 +17,105 @@ namespace SpaceBurst
 
 		GraphicsDeviceManager graphics;
 		SpriteBatch spriteBatch;
+        BloomComponent bloom;
 
-		public Game()
+        bool paused = false;
+        bool useBloom = false;
+
+        public Game()
 		{
-			Instance = this;
-			graphics = new GraphicsDeviceManager(this);
-			Content.RootDirectory = "Content";
+            Instance = this;
+            graphics = new GraphicsDeviceManager(this);
+            Content.RootDirectory = "Content";
 
-			graphics.PreferredBackBufferWidth = 800;
-			graphics.PreferredBackBufferHeight = 600;
-		}
+            graphics.PreferredBackBufferWidth = 800;
+            graphics.PreferredBackBufferHeight = 600;
+            graphics.IsFullScreen = false;
+
+            bloom = new BloomComponent(this);
+            Components.Add(bloom);
+            bloom.Settings = new BloomSettings(null, 0.25f, 4, 2, 1, 1.5f, 1);
+        }
 
 		protected override void Initialize()
 		{
 			base.Initialize();
 
 			EntityManager.Add(Player1.Instance);
+            //EntityManager.Add(Turret.Instance);
 
-			MediaPlayer.IsRepeating = true;
-			//MediaPlayer.Play(Sound.Music);
+            MediaPlayer.IsRepeating = true;
+			MediaPlayer.Play(Sound.Music);
 		}
 
 		protected override void LoadContent()
 		{
 			spriteBatch = new SpriteBatch(GraphicsDevice);
 			Element.Load(Content);
-			//Sound.Load(Content);
+			Sound.Load(Content);
 		}
 
 		protected override void Update(GameTime gameTime)
 		{
-			GameTime = gameTime;
-			Input.Update();
+            GameTime = gameTime;
+            Input.Update();
 
-			// Allows the game to exit
-			if (Input.WasButtonPressed(Buttons.Back) || Input.WasKeyPressed(Keys.Escape))
-				this.Exit();
+            // Allows the game to exit
+            if (Input.WasButtonPressed(Buttons.Back) || Input.WasKeyPressed(Keys.Escape))
+                this.Exit();
 
-			EntityManager.Update();
-			//EnemySpawner.Update();
-			PlayerStatus.Update();
+            if (Input.WasKeyPressed(Keys.P))
+                paused = !paused;
+            if (Input.WasKeyPressed(Keys.B))
+                useBloom = !useBloom;
 
-			base.Update(gameTime);
-		}
+            if (!paused)
+            {
+                EntityManager.Update();
+                EnemySpawner.Update();
+                PlayerStatus.Update();
+            }
+
+            base.Update(gameTime);
+        }
 
 		protected override void Draw(GameTime gameTime)
 		{
-			GraphicsDevice.Clear(Color.Black);
+            bloom.BeginDraw();
+            if (!useBloom)
+                base.Draw(gameTime);
 
-			// Draw entities. Sort by texture for better batching.
-			spriteBatch.Begin(SpriteSortMode.Texture, BlendState.Additive);
-			EntityManager.Draw(spriteBatch);
-			spriteBatch.End();
+            GraphicsDevice.Clear(Color.Black);
 
-			// Draw user interface
-			spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.Additive);
+            spriteBatch.Begin(SpriteSortMode.Texture, BlendState.Additive);
+            EntityManager.Draw(spriteBatch);
+            spriteBatch.End();
 
-			spriteBatch.DrawString(Element.Font, "Lives: " + PlayerStatus.Lives, new Vector2(5), Color.White);
-			DrawRightAlignedString("Score: " + PlayerStatus.Score, 5);
-			DrawRightAlignedString("Multiplier: " + PlayerStatus.Multiplier, 35);
-			
-			// draw the custom mouse cursor
-			spriteBatch.Draw(Element.Pointer, Input.MousePosition, Color.White);
+            if (useBloom)
+                base.Draw(gameTime);
 
-			if (PlayerStatus.IsGameOver)
-			{
-				string text = "Game Over\n" +
-					"Your Score: " + PlayerStatus.Score + "\n" +
-					"High Score: " + PlayerStatus.HighScore;
+            // Draw user interface
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.Additive);
 
-				Vector2 textSize = Element.Font.MeasureString(text);
-				spriteBatch.DrawString(Element.Font, text, ScreenSize / 2 - textSize / 2, Color.White);
-			}
+            spriteBatch.DrawString(Element.Font, "Lives: " + PlayerStatus.Lives, new Vector2(5), Color.White);
+            DrawRightAlignedString("Score: " + PlayerStatus.Score, 5);
+            DrawRightAlignedString("Multiplier: " + PlayerStatus.Multiplier, 35);
 
-			spriteBatch.End();
+            // draw the custom mouse cursor
+            spriteBatch.Draw(Element.Pointer, Input.MousePosition, Color.White);
 
+            if (PlayerStatus.IsGameOver)
+            {
+                string text = "Game Over\n" +
+                    "Your Score: " + PlayerStatus.Score + "\n" +
+                    "High Score: " + PlayerStatus.HighScore;
 
-			base.Draw(gameTime);
-		}
+                Vector2 textSize = Element.Font.MeasureString(text);
+                spriteBatch.DrawString(Element.Font, text, ScreenSize / 2 - textSize / 2, Color.White);
+            }
+
+            spriteBatch.End();
+        }
 
 		private void DrawRightAlignedString(string text, float y)
 		{

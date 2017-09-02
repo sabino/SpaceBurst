@@ -2,7 +2,6 @@
 using Microsoft.Xna.Framework.Input;
 using System;
 using System.Collections.Generic;
-using SpaceBurst.Root;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -33,8 +32,10 @@ namespace SpaceBurst
             // if the player moves the mouse, enable mouse aiming.
             if (new[] { Keys.Left, Keys.Right, Keys.Up, Keys.Down }.Any(x => keyboardState.IsKeyDown(x)) || gamepadState.ThumbSticks.Right != Vector2.Zero)
                 isAimingWithMouse = false;
-            else if (MousePosition != new Vector2(lastMouseState.X, lastMouseState.Y))
-                isAimingWithMouse = true;
+            else if (mouseState.LeftButton == ButtonState.Pressed)
+                    isAimingWithMouse = true;
+                else
+                    isAimingWithMouse = false;
         }
 
         // Checks if a key was just pressed down
@@ -96,7 +97,7 @@ namespace SpaceBurst
 
         private static Vector2 GetMouseAimDirection()
         {
-            Vector2 direction = MousePosition; //- Root.Player.Instance.Position;
+            Vector2 direction = MousePosition - Player1.Instance.Position;
 
             if (direction == Vector2.Zero)
                 return Vector2.Zero;

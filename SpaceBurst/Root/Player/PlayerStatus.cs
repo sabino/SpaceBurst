@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace SpaceBurst.Root.Player
+namespace SpaceBurst
 {
     static class PlayerStatus
     {
