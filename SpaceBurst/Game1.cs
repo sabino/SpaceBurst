@@ -1,4 +1,4 @@
-﻿using BloomPostprocess;
+﻿//using BloomPostprocess;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -7,22 +7,22 @@ using Microsoft.Xna.Framework.Media;
 namespace SpaceBurst
 {
 
-    public class Game : Microsoft.Xna.Framework.Game
+    public class Game1 : Microsoft.Xna.Framework.Game
     {
 		// some helpful static properties
-		public static Game Instance { get; private set; }
+		public static Game1 Instance { get; private set; }
 		public static Viewport Viewport { get { return Instance.GraphicsDevice.Viewport; } }
 		public static Vector2 ScreenSize { get { return new Vector2(Viewport.Width, Viewport.Height); } }
 		public static GameTime GameTime { get; private set; }
 
 		GraphicsDeviceManager graphics;
 		SpriteBatch spriteBatch;
-        BloomComponent bloom;
+        //BloomComponent bloom;
 
         bool paused = false;
         bool useBloom = false;
 
-        public Game()
+        public Game1()
 		{
             Instance = this;
             graphics = new GraphicsDeviceManager(this);
@@ -32,9 +32,9 @@ namespace SpaceBurst
             graphics.PreferredBackBufferHeight = 600;
             graphics.IsFullScreen = false;
 
-            bloom = new BloomComponent(this);
-            Components.Add(bloom);
-            bloom.Settings = new BloomSettings(null, 0.25f, 4, 2, 1, 1.5f, 1);
+            //bloom = new BloomComponent(this);
+            //Components.Add(bloom);
+            //bloom.Settings = new BloomSettings(null, 0.25f, 4, 2, 1, 1.5f, 1);
         }
 
 		protected override void Initialize()
@@ -81,7 +81,7 @@ namespace SpaceBurst
 
 		protected override void Draw(GameTime gameTime)
 		{
-            bloom.BeginDraw();
+            //bloom.BeginDraw();
             if (!useBloom)
                 base.Draw(gameTime);
 

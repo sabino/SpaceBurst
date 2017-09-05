@@ -23,7 +23,7 @@ namespace SpaceBurst
                 if (rand.Next((int)inverseSpawnChance) == 0)
                     EntityManager.Add(Enemy.CreateWalker(GetSpawnPosition()));
 
-                if (EntityManager.PortalCount < 0 && rand.Next((int)inversePortalChance) == 0)
+                if (EntityManager.PortalCount < 5 && rand.Next((int)inversePortalChance) == 0)
                     EntityManager.Add(new Portal(GetSpawnPosition()));
             }
 
@@ -37,7 +37,7 @@ namespace SpaceBurst
             Vector2 pos;
             do
             {
-                pos = new Vector2(rand.Next((int)Game.ScreenSize.X), rand.Next((int)Game.ScreenSize.Y));
+                pos = new Vector2(rand.Next((int)Game1.ScreenSize.X), rand.Next((int)Game1.ScreenSize.Y));
             }
             while (Vector2.DistanceSquared(pos, Player1.Instance.Position) < 250 * 250);
 

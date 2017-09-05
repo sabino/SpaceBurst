@@ -54,7 +54,7 @@ namespace SpaceBurst
                 }
 
                 Position += Velocity;
-                Position = Vector2.Clamp(Position, Size / 2, Game.ScreenSize - Size / 2);
+                Position = Vector2.Clamp(Position, Size / 2, Game1.ScreenSize - Size / 2);
 
                 Velocity *= 0.8f;
             }
@@ -129,12 +129,12 @@ namespace SpaceBurst
                         Velocity += MathUtil.FromPolar(direction, 0.4f);
                         Orientation -= 0.05f;
 
-                        var bounds = Game.Viewport.Bounds;
+                        var bounds = Game1.Viewport.Bounds;
                         bounds.Inflate(-image.Width / 2 - 1, -image.Height / 2 - 1);
 
                         // if the enemy is outside the bounds, make it move away from the edge
                         if (!bounds.Contains(Position.ToPoint()))
-                            direction = (Game.ScreenSize / 2 - Position).ToAngle() + rand.NextFloat(-MathHelper.PiOver2, MathHelper.PiOver2);
+                            direction = (Game1.ScreenSize / 2 - Position).ToAngle() + rand.NextFloat(-MathHelper.PiOver2, MathHelper.PiOver2);
 
                         yield return 0;
                     }

@@ -24,7 +24,7 @@ namespace SpaceBurst
         public Turret()
         {
             image = Element.Turret;
-            Position = Game.ScreenSize / 2;
+            Position = Game1.ScreenSize / 2;
             Orientation = Velocity.ToAngle();
             Radius = 10;
         }

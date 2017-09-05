@@ -242,21 +242,3 @@
 /processorParam:TextureFormat=Color
 /build:Walker.png
 
-#begin Shaders/BloomCombine.fx
-/importer:EffectImporter
-/processor:EffectProcessor
-/processorParam:DebugMode=Auto
-/build:Shaders/BloomCombine.fx
-
-#begin Shaders/BloomExtract.fx
-/importer:EffectImporter
-/processor:EffectProcessor
-/processorParam:DebugMode=Auto
-/build:Shaders/BloomExtract.fx
-
-#begin Shaders/GaussianBlur.fx
-/importer:EffectImporter
-/processor:EffectProcessor
-/processorParam:DebugMode=Auto
-/build:Shaders/GaussianBlur.fx
-

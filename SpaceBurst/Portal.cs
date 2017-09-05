@@ -30,16 +30,20 @@ namespace SpaceBurst
                 if (entity is Enemy && !(entity as Enemy).IsActive)
                     continue;
 
-                // bullets are attracted by portals and everything else is repelled
-                if (entity is Bullet)
-                {
-                    var dPos = Position - entity.Position;
-                    var length = dPos.Length();
+				// bullets are attracted by portals and everything else is repelled
+				if (entity is Bullet)
+				{
+					entity.Velocity += (entity.Position - Position).ScaleTo(0.3f);
+				}
+				else
+				{
+					var dPos = Position - entity.Position;
+					var length = dPos.Length();
 
-                    entity.Velocity += dPos.ScaleTo(MathHelper.Lerp(2, 0, length / 250f));
-                }
-                else
-                    entity.Velocity += (entity.Position - Position).ScaleTo(0.3f);
+					entity.Velocity += dPos.ScaleTo(MathHelper.Lerp(2, 0, length / 250f));
+				}
+					
+                    
             }
         }
 
@@ -61,7 +65,7 @@ namespace SpaceBurst
         public override void Draw(SpriteBatch spriteBatch)
         {
             // make the size of the black hole pulsate
-            float scale = 1 + 0.1f * (float)Math.Sin(10 * Game.GameTime.TotalGameTime.TotalSeconds);
+            float scale = 1 + 0.1f * (float)Math.Sin(10 * Game1.GameTime.TotalGameTime.TotalSeconds);
             spriteBatch.Draw(image, Position, null, color, Orientation, Size / 2f, scale, 0, 0);
         }
     }

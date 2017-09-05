@@ -48,7 +48,7 @@ namespace SpaceBurst
             if (Multiplier > 1)
             {
                 // update the multiplier timer
-                if ((multiplierTimeLeft -= (float)Game.GameTime.ElapsedGameTime.TotalSeconds) <= 0)
+                if ((multiplierTimeLeft -= (float)Game1.GameTime.ElapsedGameTime.TotalSeconds) <= 0)
                 {
                     multiplierTimeLeft = multiplierExpiryTime;
                     ResetMultiplier();

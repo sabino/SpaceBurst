@@ -26,7 +26,7 @@ namespace SpaceBurst
             Position += Velocity;
 
             // delete bullets that go off-screen
-            if (!Game.Viewport.Bounds.Contains(Position.ToPoint()))
+            if (!Game1.Viewport.Bounds.Contains(Position.ToPoint()))
                 IsExpired = true;
         }
     }

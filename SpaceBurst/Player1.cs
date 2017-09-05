@@ -29,7 +29,7 @@ namespace SpaceBurst
         private Player1()
         {
             image = Element.Player;
-            Position = Game.ScreenSize / 2;
+            Position = Game1.ScreenSize / 2;
             Radius = 10;
         }
 
@@ -42,7 +42,7 @@ namespace SpaceBurst
                     if (PlayerStatus.Lives == 0)
                     {
                         PlayerStatus.Reset();
-                        Position = Game.ScreenSize / 2;
+                        Position = Game1.ScreenSize / 2;
                     }
                 }
                 return;
@@ -74,7 +74,7 @@ namespace SpaceBurst
             const float speed = 8;
             Velocity = speed * Input.GetMovementDirection();
             Position += Velocity;
-            Position = Vector2.Clamp(Position, Size / 2, Game.ScreenSize - Size / 2);
+            Position = Vector2.Clamp(Position, Size / 2, Game1.ScreenSize - Size / 2);
 
             if (Velocity.LengthSquared() > 0)
                 Orientation = Velocity.ToAngle();
