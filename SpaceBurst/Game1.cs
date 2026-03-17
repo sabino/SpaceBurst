@@ -52,12 +52,6 @@ namespace SpaceBurst
             RecalculateScaleMatrix();
 
             base.Initialize();
-
-            EntityManager.Add(Player1.Instance);
-            //EntityManager.Add(Turret.Instance);
-
-            MediaPlayer.IsRepeating = true;
-            MediaPlayer.Play(Sound.Music);
         }
 
         protected override void LoadContent()
@@ -65,6 +59,12 @@ namespace SpaceBurst
             spriteBatch = new SpriteBatch(GraphicsDevice);
             Element.Load(Content);
             Sound.Load(Content);
+
+            EntityManager.Add(Player1.Instance);
+            //EntityManager.Add(Turret.Instance);
+
+            MediaPlayer.IsRepeating = true;
+            MediaPlayer.Play(Sound.Music);
         }
 
         protected override void Update(GameTime gameTime)
