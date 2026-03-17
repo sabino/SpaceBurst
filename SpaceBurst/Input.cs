@@ -1,4 +1,5 @@
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Microsoft.Xna.Framework.Input.Touch;
 using System.Linq;
@@ -13,6 +14,9 @@ namespace SpaceBurst
 
         private static bool isAimingWithMouse = false;
 #if ANDROID
+        private const float StickRadiusFactor = 0.12f;
+        private const float StickZoneWidthFactor = 0.48f;
+        private const float StickZoneHeightFactor = 0.4f;
         private static Vector2 touchMovementDirection;
         private static Vector2 touchAimDirection;
         private static int movementTouchId = -1;
@@ -136,46 +140,54 @@ namespace SpaceBurst
             var touches = TouchPanel.GetState();
             bool movementTouchFound = false;
             bool aimTouchFound = false;
-            float splitX = Game1.ScreenSize.X * 0.4f;
+            Rectangle gameplayBounds = Game1.RenderBounds;
+            Rectangle movementZone = GetMovementZone(gameplayBounds);
+            float stickRadius = GetStickRadius(gameplayBounds);
+            movementTouchOrigin = GetStickOrigin(gameplayBounds);
 
             foreach (var touch in touches)
             {
-                var worldPosition = Game1.ScreenToWorld(touch.Position);
+                var rawScreenPosition = touch.Position;
+                var screenPosition = Vector2.Clamp(
+                    rawScreenPosition,
+                    new Vector2(gameplayBounds.Left, gameplayBounds.Top),
+                    new Vector2(gameplayBounds.Right - 1, gameplayBounds.Bottom - 1));
 
                 if (touch.Id == movementTouchId)
                 {
                     movementTouchFound = true;
-                    movementTouchPosition = worldPosition;
+                    movementTouchPosition = ClampToRadius(screenPosition, movementTouchOrigin, stickRadius);
                     continue;
                 }
 
                 if (touch.Id == aimTouchId)
                 {
                     aimTouchFound = true;
-                    aimTouchPosition = worldPosition;
+                    aimTouchPosition = screenPosition;
                     continue;
                 }
 
-                if (!movementTouchFound && movementTouchId == -1 && worldPosition.X <= splitX)
+                if (!gameplayBounds.Contains(rawScreenPosition.ToPoint()))
+                    continue;
+
+                if (!movementTouchFound && movementTouchId == -1 && movementZone.Contains(screenPosition.ToPoint()))
                 {
                     movementTouchId = touch.Id;
                     movementTouchFound = true;
-                    movementTouchOrigin = worldPosition;
-                    movementTouchPosition = worldPosition;
+                    movementTouchPosition = ClampToRadius(screenPosition, movementTouchOrigin, stickRadius);
                 }
                 else if (!aimTouchFound && aimTouchId == -1)
                 {
                     aimTouchId = touch.Id;
                     aimTouchFound = true;
-                    aimTouchPosition = worldPosition;
+                    aimTouchPosition = screenPosition;
                 }
             }
 
             if (!movementTouchFound)
             {
                 movementTouchId = -1;
-                movementTouchOrigin = Vector2.Zero;
-                movementTouchPosition = Vector2.Zero;
+                movementTouchPosition = movementTouchOrigin;
             }
 
             if (!aimTouchFound)
@@ -184,17 +196,14 @@ namespace SpaceBurst
                 aimTouchPosition = Vector2.Zero;
             }
 
-            touchMovementDirection = GetVirtualStickDirection(movementTouchOrigin, movementTouchPosition, 70f);
+            touchMovementDirection = GetVirtualStickDirection(movementTouchOrigin, movementTouchPosition, stickRadius);
             touchAimDirection = aimTouchId == -1
                 ? Vector2.Zero
-                : GetDirectionToPoint(Player1.Instance.Position, aimTouchPosition);
+                : GetDirectionToPoint(Player1.Instance.Position, Game1.ScreenToWorld(aimTouchPosition));
         }
 
         private static Vector2 GetVirtualStickDirection(Vector2 origin, Vector2 current, float maxDistance)
         {
-            if (origin == Vector2.Zero && current == Vector2.Zero)
-                return Vector2.Zero;
-
             Vector2 delta = current - origin;
             if (delta == Vector2.Zero)
                 return Vector2.Zero;
@@ -209,6 +218,76 @@ namespace SpaceBurst
         {
             Vector2 direction = target - origin;
             return direction == Vector2.Zero ? Vector2.Zero : Vector2.Normalize(direction);
+        }
+
+        public static void DrawTouchControls(SpriteBatch spriteBatch, Texture2D controlTexture)
+        {
+            if (controlTexture == null)
+                return;
+
+            Rectangle gameplayBounds = Game1.RenderBounds;
+            float stickRadius = GetStickRadius(gameplayBounds);
+            Vector2 stickCenter = GetStickOrigin(gameplayBounds);
+            Vector2 stickThumb = movementTouchId == -1 ? stickCenter : movementTouchPosition;
+
+            DrawCircle(spriteBatch, controlTexture, stickCenter, stickRadius * 1.15f, Color.White * 0.12f);
+            DrawCircle(spriteBatch, controlTexture, stickCenter, stickRadius * 0.78f, Color.White * 0.08f);
+            DrawCircle(spriteBatch, controlTexture, stickThumb, stickRadius * 0.46f, Color.White * 0.28f);
+
+            if (aimTouchId != -1)
+            {
+                DrawCircle(spriteBatch, controlTexture, aimTouchPosition, stickRadius * 0.32f, Color.White * 0.18f);
+                DrawCircle(spriteBatch, controlTexture, aimTouchPosition, stickRadius * 0.16f, Color.White * 0.3f);
+            }
+        }
+
+        private static Rectangle GetMovementZone(Rectangle gameplayBounds)
+        {
+            int width = (int)(gameplayBounds.Width * StickZoneWidthFactor);
+            int height = (int)(gameplayBounds.Height * StickZoneHeightFactor);
+            return new Rectangle(gameplayBounds.Left, gameplayBounds.Bottom - height, width, height);
+        }
+
+        private static Vector2 GetStickOrigin(Rectangle gameplayBounds)
+        {
+            float radius = GetStickRadius(gameplayBounds);
+            float margin = radius * 0.6f;
+
+            return new Vector2(
+                gameplayBounds.Left + margin + radius,
+                gameplayBounds.Bottom - margin - radius);
+        }
+
+        private static float GetStickRadius(Rectangle gameplayBounds)
+        {
+            return System.Math.Min(gameplayBounds.Width, gameplayBounds.Height) * StickRadiusFactor;
+        }
+
+        private static Vector2 ClampToRadius(Vector2 position, Vector2 origin, float radius)
+        {
+            Vector2 delta = position - origin;
+            if (delta == Vector2.Zero)
+                return origin;
+
+            if (delta.LengthSquared() > radius * radius)
+                return origin + Vector2.Normalize(delta) * radius;
+
+            return position;
+        }
+
+        private static void DrawCircle(SpriteBatch spriteBatch, Texture2D texture, Vector2 center, float radius, Color color)
+        {
+            float scale = radius * 2f / texture.Width;
+            spriteBatch.Draw(
+                texture,
+                center,
+                null,
+                color,
+                0f,
+                new Vector2(texture.Width / 2f, texture.Height / 2f),
+                scale,
+                SpriteEffects.None,
+                0f);
         }
 #endif
     }

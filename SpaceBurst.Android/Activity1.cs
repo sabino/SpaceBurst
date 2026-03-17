@@ -12,7 +12,7 @@ namespace SpaceBurst
         Icon = "@drawable/icon",
         AlwaysRetainTaskState = true,
         LaunchMode = LaunchMode.SingleInstance,
-        ScreenOrientation = ScreenOrientation.SensorLandscape,
+        ScreenOrientation = ScreenOrientation.SensorPortrait,
         ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.Keyboard | ConfigChanges.KeyboardHidden | ConfigChanges.ScreenSize)]
     public class Activity1 : AndroidGameActivity
     {
