@@ -1,0 +1,114 @@
+{
+    "LevelNumber":  12,
+    "Name":  "Mirror Cross",
+    "IntroSeconds":  1.25,
+    "Waves":  [
+                  {
+                      "Label":  "Wave 1",
+                      "StartSeconds":  0.8,
+                      "Checkpoint":  false,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Walker",
+                                         "Count":  5,
+                                         "Formation":  "Line",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "Straight",
+                                         "AnchorX":  0.18,
+                                         "AnchorY":  0.2,
+                                         "Spacing":  70,
+                                         "DelayBetweenSpawns":  0.16,
+                                         "TravelDuration":  3.2,
+                                         "SpeedMultiplier":  1.1
+                                     },
+                                     {
+                                         "ArchetypeId":  "Interceptor",
+                                         "Count":  5,
+                                         "Formation":  "Line",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "Straight",
+                                         "AnchorX":  0.82,
+                                         "AnchorY":  0.24,
+                                         "Spacing":  70,
+                                         "DelayBetweenSpawns":  0.16,
+                                         "TravelDuration":  3.2,
+                                         "SpeedMultiplier":  1.1
+                                     }
+                                 ]
+                  },
+                  {
+                      "Label":  "Wave 2",
+                      "StartSeconds":  11.5,
+                      "Checkpoint":  false,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Interceptor",
+                                         "Count":  6,
+                                         "Formation":  "V",
+                                         "EntrySide":  "Left",
+                                         "PathType":  "Swoop",
+                                         "AnchorX":  0.36,
+                                         "AnchorY":  0.32,
+                                         "Spacing":  68,
+                                         "DelayBetweenSpawns":  0.12,
+                                         "TravelDuration":  3,
+                                         "SpeedMultiplier":  1.17
+                                     }
+                                 ]
+                  },
+                  {
+                      "Label":  "Wave 3",
+                      "StartSeconds":  23.5,
+                      "Checkpoint":  true,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Destroyer",
+                                         "Count":  4,
+                                         "Formation":  "Column",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "LaneSweep",
+                                         "AnchorX":  0.5,
+                                         "AnchorY":  0.33,
+                                         "Spacing":  80,
+                                         "DelayBetweenSpawns":  0.18,
+                                         "TravelDuration":  3.8,
+                                         "SpeedMultiplier":  1.08
+                                     },
+                                     {
+                                         "ArchetypeId":  "Turret",
+                                         "Count":  4,
+                                         "Formation":  "Arc",
+                                         "EntrySide":  "Right",
+                                         "PathType":  "ChaseAfterDelay",
+                                         "AnchorX":  0.82,
+                                         "AnchorY":  0.38,
+                                         "Spacing":  74,
+                                         "DelayBetweenSpawns":  0.2,
+                                         "TravelDuration":  3.6,
+                                         "SpeedMultiplier":  1.14
+                                     }
+                                 ]
+                  },
+                  {
+                      "Label":  "Wave 4",
+                      "StartSeconds":  36.5,
+                      "Checkpoint":  false,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Turret",
+                                         "Count":  5,
+                                         "Formation":  "Ring",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "OrbitAnchor",
+                                         "AnchorX":  0.5,
+                                         "AnchorY":  0.36,
+                                         "Spacing":  62,
+                                         "DelayBetweenSpawns":  0.1,
+                                         "TravelDuration":  4,
+                                         "SpeedMultiplier":  1.08
+                                     }
+                                 ]
+                  }
+              ],
+    "Boss":  null
+}

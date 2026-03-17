@@ -1,0 +1,83 @@
+{
+    "LevelNumber":  40,
+    "Name":  "Boss 40: Walker Mk II",
+    "IntroSeconds":  1.5,
+    "Waves":  [
+                  {
+                      "Label":  "Boss Warmup 1",
+                      "StartSeconds":  0.8,
+                      "Checkpoint":  false,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Destroyer",
+                                         "Count":  7,
+                                         "Formation":  "Line",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "Straight",
+                                         "AnchorX":  0.18,
+                                         "AnchorY":  0.18,
+                                         "Spacing":  80,
+                                         "DelayBetweenSpawns":  0.18,
+                                         "TravelDuration":  3.4,
+                                         "SpeedMultiplier":  1.2
+                                     },
+                                     {
+                                         "ArchetypeId":  "Turret",
+                                         "Count":  6,
+                                         "Formation":  "V",
+                                         "EntrySide":  "Right",
+                                         "PathType":  "Swoop",
+                                         "AnchorX":  0.82,
+                                         "AnchorY":  0.23,
+                                         "Spacing":  80,
+                                         "DelayBetweenSpawns":  0.22,
+                                         "TravelDuration":  3.6,
+                                         "SpeedMultiplier":  1.26
+                                     }
+                                 ]
+                  },
+                  {
+                      "Label":  "Boss Warmup 2",
+                      "StartSeconds":  12.5,
+                      "Checkpoint":  true,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Turret",
+                                         "Count":  8,
+                                         "Formation":  "Column",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "Swoop",
+                                         "AnchorX":  0.3,
+                                         "AnchorY":  0.24,
+                                         "Spacing":  80,
+                                         "DelayBetweenSpawns":  0.18,
+                                         "TravelDuration":  3.4,
+                                         "SpeedMultiplier":  1.2
+                                     },
+                                     {
+                                         "ArchetypeId":  "Interceptor",
+                                         "Count":  7,
+                                         "Formation":  "Arc",
+                                         "EntrySide":  "Left",
+                                         "PathType":  "LaneSweep",
+                                         "AnchorX":  0.7,
+                                         "AnchorY":  0.29,
+                                         "Spacing":  80,
+                                         "DelayBetweenSpawns":  0.22,
+                                         "TravelDuration":  3.6,
+                                         "SpeedMultiplier":  1.26
+                                     }
+                                 ]
+                  }
+              ],
+    "Boss":  {
+                 "Type":  "WalkerBossMk2",
+                 "DisplayName":  "Walker Mk II",
+                 "ArchetypeId":  "Turret",
+                 "EntrySide":  "Top",
+                 "AnchorX":  0.5,
+                 "AnchorY":  0.22,
+                 "RenderScale":  1.98,
+                 "HitPoints":  140
+             }
+}

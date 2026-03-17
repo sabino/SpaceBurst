@@ -1,0 +1,94 @@
+{
+    "LevelNumber":  9,
+    "Name":  "Outer Ring",
+    "IntroSeconds":  1.25,
+    "Waves":  [
+                  {
+                      "Label":  "Wave 1",
+                      "StartSeconds":  0.8,
+                      "Checkpoint":  false,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Walker",
+                                         "Count":  4,
+                                         "Formation":  "Ring",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "OrbitAnchor",
+                                         "AnchorX":  0.5,
+                                         "AnchorY":  0.18,
+                                         "Spacing":  59,
+                                         "DelayBetweenSpawns":  0.1,
+                                         "TravelDuration":  4,
+                                         "SpeedMultiplier":  1.03
+                                     }
+                                 ]
+                  },
+                  {
+                      "Label":  "Wave 2",
+                      "StartSeconds":  11.5,
+                      "Checkpoint":  true,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Interceptor",
+                                         "Count":  4,
+                                         "Formation":  "Arc",
+                                         "EntrySide":  "Right",
+                                         "PathType":  "Swoop",
+                                         "AnchorX":  0.82,
+                                         "AnchorY":  0.2,
+                                         "Spacing":  67,
+                                         "DelayBetweenSpawns":  0.14,
+                                         "TravelDuration":  3.2,
+                                         "SpeedMultiplier":  1.14
+                                     },
+                                     {
+                                         "ArchetypeId":  "Destroyer",
+                                         "Count":  3,
+                                         "Formation":  "Column",
+                                         "EntrySide":  "Left",
+                                         "PathType":  "LaneSweep",
+                                         "AnchorX":  0.18,
+                                         "AnchorY":  0.32,
+                                         "Spacing":  73,
+                                         "DelayBetweenSpawns":  0.2,
+                                         "TravelDuration":  3.7,
+                                         "SpeedMultiplier":  1.05
+                                     }
+                                 ]
+                  },
+                  {
+                      "Label":  "Wave 3",
+                      "StartSeconds":  23.5,
+                      "Checkpoint":  false,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Destroyer",
+                                         "Count":  3,
+                                         "Formation":  "Line",
+                                         "EntrySide":  "Bottom",
+                                         "PathType":  "ChaseAfterDelay",
+                                         "AnchorX":  0.3,
+                                         "AnchorY":  0.36,
+                                         "Spacing":  70,
+                                         "DelayBetweenSpawns":  0.22,
+                                         "TravelDuration":  3.5,
+                                         "SpeedMultiplier":  1.1
+                                     },
+                                     {
+                                         "ArchetypeId":  "Interceptor",
+                                         "Count":  3,
+                                         "Formation":  "V",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "Straight",
+                                         "AnchorX":  0.7,
+                                         "AnchorY":  0.24,
+                                         "Spacing":  68,
+                                         "DelayBetweenSpawns":  0.14,
+                                         "TravelDuration":  3.3,
+                                         "SpeedMultiplier":  1.07
+                                     }
+                                 ]
+                  }
+              ],
+    "Boss":  null
+}

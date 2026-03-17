@@ -15,6 +15,7 @@ namespace SpaceBurst
 
         public Vector2 Position, Velocity;
         public float Orientation;
+        public float RenderScale = 1f;
         public float Radius = 20;   // used for circular collision detection
         public bool IsExpired;      // true if the entity was destroyed and should be deleted.
 
@@ -22,7 +23,7 @@ namespace SpaceBurst
         {
             get
             {
-                return image == null ? Vector2.Zero : new Vector2(image.Width, image.Height);
+                return image == null ? Vector2.Zero : new Vector2(image.Width, image.Height) * RenderScale;
             }
         }
 
@@ -30,7 +31,7 @@ namespace SpaceBurst
 
         public virtual void Draw(SpriteBatch spriteBatch)
         {
-            spriteBatch.Draw(image, Position, null, color, Orientation, Size / 2f, 1f, 0, 0);
+            spriteBatch.Draw(image, Position, null, color, Orientation, new Vector2(image.Width, image.Height) / 2f, RenderScale, 0, 0);
         }
     }
 }

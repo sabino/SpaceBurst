@@ -1,0 +1,54 @@
+{
+    "Archetypes":  [
+                       {
+                           "Id":  "Walker",
+                           "Texture":  "Walker",
+                           "RenderScale":  0.46,
+                           "CollisionRadius":  13,
+                           "Speed":  2.7,
+                           "HitPoints":  1,
+                           "ScoreValue":  40,
+                           "SpawnDelaySeconds":  0.6
+                       },
+                       {
+                           "Id":  "Interceptor",
+                           "Texture":  "Walker",
+                           "RenderScale":  0.38,
+                           "CollisionRadius":  11,
+                           "Speed":  3.45,
+                           "HitPoints":  1,
+                           "ScoreValue":  55,
+                           "SpawnDelaySeconds":  0.48
+                       },
+                       {
+                           "Id":  "Destroyer",
+                           "Texture":  "Destroyer",
+                           "RenderScale":  0.53,
+                           "CollisionRadius":  17,
+                           "Speed":  2.2,
+                           "HitPoints":  2,
+                           "ScoreValue":  80,
+                           "SpawnDelaySeconds":  0.72
+                       },
+                       {
+                           "Id":  "Turret",
+                           "Texture":  "Turret",
+                           "RenderScale":  0.58,
+                           "CollisionRadius":  19,
+                           "Speed":  1.75,
+                           "HitPoints":  3,
+                           "ScoreValue":  95,
+                           "SpawnDelaySeconds":  0.78
+                       },
+                       {
+                           "Id":  "Bulwark",
+                           "Texture":  "Destroyer",
+                           "RenderScale":  0.64,
+                           "CollisionRadius":  23,
+                           "Speed":  1.9,
+                           "HitPoints":  4,
+                           "ScoreValue":  125,
+                           "SpawnDelaySeconds":  0.82
+                       }
+                   ]
+}

@@ -13,6 +13,8 @@ namespace SpaceBurst
         private static GamePadState gamepadState, lastGamepadState;
 
         private static bool isAimingWithMouse = false;
+        private static bool primaryActionPressed = false;
+        private static Vector2 pointerPosition;
 #if ANDROID
         private const float StickRadiusFactor = 0.12f;
         private const float StickZoneWidthFactor = 0.48f;
@@ -27,12 +29,14 @@ namespace SpaceBurst
 #endif
 
         public static Vector2 MousePosition { get { return Game1.ScreenToWorld(new Vector2(mouseState.X, mouseState.Y)); } }
+        public static Vector2 PointerPosition { get { return pointerPosition; } }
 
         public static void Update()
         {
             lastKeyboardState = keyboardState;
             lastMouseState = mouseState;
             lastGamepadState = gamepadState;
+            primaryActionPressed = false;
 
             keyboardState = Keyboard.GetState();
             gamepadState = GamePad.GetState(PlayerIndex.One);
@@ -43,6 +47,8 @@ namespace SpaceBurst
             isAimingWithMouse = false;
 #else
             mouseState = Mouse.GetState();
+            pointerPosition = MousePosition;
+            primaryActionPressed = lastMouseState.LeftButton == ButtonState.Released && mouseState.LeftButton == ButtonState.Pressed;
 
             // If the player pressed one of the arrow keys or is using a gamepad to aim, we want to disable mouse aiming. Otherwise,
             // if the player moves the mouse, enable mouse aiming.
@@ -64,6 +70,41 @@ namespace SpaceBurst
         public static bool WasButtonPressed(Buttons button)
         {
             return lastGamepadState.IsButtonUp(button) && gamepadState.IsButtonDown(button);
+        }
+
+        public static bool WasPrimaryActionPressed()
+        {
+            return primaryActionPressed;
+        }
+
+        public static bool WasConfirmPressed()
+        {
+            return WasPrimaryActionPressed() || WasKeyPressed(Keys.Enter) || WasKeyPressed(Keys.Space) || WasButtonPressed(Buttons.A);
+        }
+
+        public static bool WasCancelPressed()
+        {
+            return WasKeyPressed(Keys.Escape) || WasButtonPressed(Buttons.Back) || WasButtonPressed(Buttons.B);
+        }
+
+        public static bool WasNavigateUpPressed()
+        {
+            return WasKeyPressed(Keys.Up) || WasKeyPressed(Keys.W) || WasButtonPressed(Buttons.DPadUp);
+        }
+
+        public static bool WasNavigateDownPressed()
+        {
+            return WasKeyPressed(Keys.Down) || WasKeyPressed(Keys.S) || WasButtonPressed(Buttons.DPadDown);
+        }
+
+        public static bool WasNavigateLeftPressed()
+        {
+            return WasKeyPressed(Keys.Left) || WasKeyPressed(Keys.A) || WasButtonPressed(Buttons.DPadLeft);
+        }
+
+        public static bool WasNavigateRightPressed()
+        {
+            return WasKeyPressed(Keys.Right) || WasKeyPressed(Keys.D) || WasButtonPressed(Buttons.DPadRight);
         }
 
         public static Vector2 GetMovementDirection()
@@ -144,6 +185,7 @@ namespace SpaceBurst
             Rectangle movementZone = GetMovementZone(gameplayBounds);
             float stickRadius = GetStickRadius(gameplayBounds);
             movementTouchOrigin = GetStickOrigin(gameplayBounds);
+            pointerPosition = Game1.ScreenSize / 2f;
 
             foreach (var touch in touches)
             {
@@ -152,6 +194,10 @@ namespace SpaceBurst
                     rawScreenPosition,
                     new Vector2(gameplayBounds.Left, gameplayBounds.Top),
                     new Vector2(gameplayBounds.Right - 1, gameplayBounds.Bottom - 1));
+                pointerPosition = Game1.ScreenToWorld(screenPosition);
+
+                if (touch.State == TouchLocationState.Pressed)
+                    primaryActionPressed = true;
 
                 if (touch.Id == movementTouchId)
                 {

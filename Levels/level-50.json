@@ -1,0 +1,116 @@
+{
+    "LevelNumber":  50,
+    "Name":  "Boss 50: Final Core",
+    "IntroSeconds":  1.8,
+    "Waves":  [
+                  {
+                      "Label":  "Boss Warmup 1",
+                      "StartSeconds":  0.8,
+                      "Checkpoint":  false,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Walker",
+                                         "Count":  8,
+                                         "Formation":  "Line",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "Straight",
+                                         "AnchorX":  0.18,
+                                         "AnchorY":  0.18,
+                                         "Spacing":  84,
+                                         "DelayBetweenSpawns":  0.18,
+                                         "TravelDuration":  3.4,
+                                         "SpeedMultiplier":  1.25
+                                     },
+                                     {
+                                         "ArchetypeId":  "Destroyer",
+                                         "Count":  7,
+                                         "Formation":  "V",
+                                         "EntrySide":  "Right",
+                                         "PathType":  "Swoop",
+                                         "AnchorX":  0.82,
+                                         "AnchorY":  0.23,
+                                         "Spacing":  83,
+                                         "DelayBetweenSpawns":  0.22,
+                                         "TravelDuration":  3.6,
+                                         "SpeedMultiplier":  1.32
+                                     }
+                                 ]
+                  },
+                  {
+                      "Label":  "Boss Warmup 2",
+                      "StartSeconds":  12.5,
+                      "Checkpoint":  false,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Destroyer",
+                                         "Count":  9,
+                                         "Formation":  "Column",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "Swoop",
+                                         "AnchorX":  0.3,
+                                         "AnchorY":  0.24,
+                                         "Spacing":  84,
+                                         "DelayBetweenSpawns":  0.18,
+                                         "TravelDuration":  3.4,
+                                         "SpeedMultiplier":  1.25
+                                     },
+                                     {
+                                         "ArchetypeId":  "Turret",
+                                         "Count":  8,
+                                         "Formation":  "Arc",
+                                         "EntrySide":  "Left",
+                                         "PathType":  "LaneSweep",
+                                         "AnchorX":  0.7,
+                                         "AnchorY":  0.29,
+                                         "Spacing":  83,
+                                         "DelayBetweenSpawns":  0.22,
+                                         "TravelDuration":  3.6,
+                                         "SpeedMultiplier":  1.32
+                                     }
+                                 ]
+                  },
+                  {
+                      "Label":  "Boss Warmup 3",
+                      "StartSeconds":  25.5,
+                      "Checkpoint":  true,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Turret",
+                                         "Count":  10,
+                                         "Formation":  "V",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "LaneSweep",
+                                         "AnchorX":  0.18,
+                                         "AnchorY":  0.3,
+                                         "Spacing":  84,
+                                         "DelayBetweenSpawns":  0.18,
+                                         "TravelDuration":  3.4,
+                                         "SpeedMultiplier":  1.25
+                                     },
+                                     {
+                                         "ArchetypeId":  "Bulwark",
+                                         "Count":  9,
+                                         "Formation":  "Ring",
+                                         "EntrySide":  "Right",
+                                         "PathType":  "ChaseAfterDelay",
+                                         "AnchorX":  0.82,
+                                         "AnchorY":  0.35,
+                                         "Spacing":  83,
+                                         "DelayBetweenSpawns":  0.22,
+                                         "TravelDuration":  3.6,
+                                         "SpeedMultiplier":  1.32
+                                     }
+                                 ]
+                  }
+              ],
+    "Boss":  {
+                 "Type":  "FinalBoss",
+                 "DisplayName":  "Final Core",
+                 "ArchetypeId":  "Bulwark",
+                 "EntrySide":  "Top",
+                 "AnchorX":  0.5,
+                 "AnchorY":  0.2,
+                 "RenderScale":  2.12,
+                 "HitPoints":  185
+             }
+}

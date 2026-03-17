@@ -1,0 +1,127 @@
+{
+    "LevelNumber":  22,
+    "Name":  "Three Lane",
+    "IntroSeconds":  1.25,
+    "Waves":  [
+                  {
+                      "Label":  "Wave 1",
+                      "StartSeconds":  0.8,
+                      "Checkpoint":  false,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Turret",
+                                         "Count":  6,
+                                         "Formation":  "Arc",
+                                         "EntrySide":  "Right",
+                                         "PathType":  "Swoop",
+                                         "AnchorX":  0.82,
+                                         "AnchorY":  0.24,
+                                         "Spacing":  73,
+                                         "DelayBetweenSpawns":  0.14,
+                                         "TravelDuration":  3.2,
+                                         "SpeedMultiplier":  1.26
+                                     },
+                                     {
+                                         "ArchetypeId":  "Interceptor",
+                                         "Count":  5,
+                                         "Formation":  "Column",
+                                         "EntrySide":  "Left",
+                                         "PathType":  "LaneSweep",
+                                         "AnchorX":  0.18,
+                                         "AnchorY":  0.36,
+                                         "Spacing":  79,
+                                         "DelayBetweenSpawns":  0.2,
+                                         "TravelDuration":  3.7,
+                                         "SpeedMultiplier":  1.15
+                                     }
+                                 ]
+                  },
+                  {
+                      "Label":  "Wave 2",
+                      "StartSeconds":  11.5,
+                      "Checkpoint":  false,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Interceptor",
+                                         "Count":  5,
+                                         "Formation":  "Line",
+                                         "EntrySide":  "Bottom",
+                                         "PathType":  "ChaseAfterDelay",
+                                         "AnchorX":  0.3,
+                                         "AnchorY":  0.42,
+                                         "Spacing":  74,
+                                         "DelayBetweenSpawns":  0.22,
+                                         "TravelDuration":  3.5,
+                                         "SpeedMultiplier":  1.22
+                                     },
+                                     {
+                                         "ArchetypeId":  "Destroyer",
+                                         "Count":  5,
+                                         "Formation":  "V",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "Straight",
+                                         "AnchorX":  0.7,
+                                         "AnchorY":  0.3,
+                                         "Spacing":  76,
+                                         "DelayBetweenSpawns":  0.14,
+                                         "TravelDuration":  3.3,
+                                         "SpeedMultiplier":  1.17
+                                     }
+                                 ]
+                  },
+                  {
+                      "Label":  "Wave 3",
+                      "StartSeconds":  23.5,
+                      "Checkpoint":  true,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Walker",
+                                         "Count":  6,
+                                         "Formation":  "Line",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "Straight",
+                                         "AnchorX":  0.18,
+                                         "AnchorY":  0.34,
+                                         "Spacing":  74,
+                                         "DelayBetweenSpawns":  0.16,
+                                         "TravelDuration":  3.2,
+                                         "SpeedMultiplier":  1.15
+                                     },
+                                     {
+                                         "ArchetypeId":  "Destroyer",
+                                         "Count":  6,
+                                         "Formation":  "Line",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "Straight",
+                                         "AnchorX":  0.82,
+                                         "AnchorY":  0.38,
+                                         "Spacing":  74,
+                                         "DelayBetweenSpawns":  0.16,
+                                         "TravelDuration":  3.2,
+                                         "SpeedMultiplier":  1.15
+                                     }
+                                 ]
+                  },
+                  {
+                      "Label":  "Wave 4",
+                      "StartSeconds":  36.5,
+                      "Checkpoint":  false,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Destroyer",
+                                         "Count":  7,
+                                         "Formation":  "V",
+                                         "EntrySide":  "Left",
+                                         "PathType":  "Swoop",
+                                         "AnchorX":  0.36,
+                                         "AnchorY":  0.24,
+                                         "Spacing":  73,
+                                         "DelayBetweenSpawns":  0.12,
+                                         "TravelDuration":  3,
+                                         "SpeedMultiplier":  1.23
+                                     }
+                                 ]
+                  }
+              ],
+    "Boss":  null
+}

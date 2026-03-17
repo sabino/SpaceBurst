@@ -16,12 +16,15 @@ namespace SpaceBurst
         static List<Portal> portals = new List<Portal>();
 
         public static IEnumerable<Portal> Portals { get { return portals; } }
+        public static IEnumerable<Enemy> Enemies { get { return enemies; } }
 
         static bool isUpdating;
         static List<Entity> addedEntities = new List<Entity>();
 
         public static int Count { get { return entities.Count; } }
         public static int PortalCount { get { return portals.Count; } }
+        public static int EnemyCount { get { return enemies.Count; } }
+        public static bool HasHostiles { get { return enemies.Count > 0 || portals.Count > 0; } }
 
         public static void Add(Entity entity)
         {
@@ -33,6 +36,9 @@ namespace SpaceBurst
 
         private static void AddEntity(Entity entity)
         {
+            if (entities.Contains(entity))
+                return;
+
             entities.Add(entity);
             if (entity is Bullet)
                 bullets.Add(entity as Bullet);
@@ -40,6 +46,39 @@ namespace SpaceBurst
                 enemies.Add(entity as Enemy);
             else if (entity is Portal)
                 portals.Add(entity as Portal);
+        }
+
+        public static void Reset()
+        {
+            entities.Clear();
+            enemies.Clear();
+            bullets.Clear();
+            portals.Clear();
+            addedEntities.Clear();
+            isUpdating = false;
+        }
+
+        public static void ClearHostiles()
+        {
+            enemies.ForEach(x => x.IsExpired = true);
+            portals.ForEach(x => x.IsExpired = true);
+        }
+
+        public static void ClearHostilesNear(Vector2 position, float radius)
+        {
+            float radiusSquared = radius * radius;
+
+            foreach (var enemy in enemies)
+            {
+                if (Vector2.DistanceSquared(enemy.Position, position) <= radiusSquared)
+                    enemy.IsExpired = true;
+            }
+
+            foreach (var portal in portals)
+            {
+                if (Vector2.DistanceSquared(portal.Position, position) <= radiusSquared)
+                    portal.IsExpired = true;
+            }
         }
 
         public static void Update()
@@ -82,18 +121,21 @@ namespace SpaceBurst
                 {
                     if (IsColliding(enemies[i], bullets[j]))
                     {
-                        enemies[i].WasShot();
+                        enemies[i].HandleBulletHit(bullets[j]);
                         bullets[j].IsExpired = true;
                     }
                 }
 
             // handle collisions between the player and enemies
-            for (int i = 0; i < enemies.Count; i++)
+            if (!Player1.Instance.IsDead && !Player1.Instance.IsInvulnerable)
             {
-                if (enemies[i].IsActive && IsColliding(Player1.Instance, enemies[i]))
+                for (int i = 0; i < enemies.Count; i++)
                 {
-                    KillPlayer();
-                    break;
+                    if (enemies[i].IsActive && IsColliding(Player1.Instance, enemies[i]))
+                    {
+                        Game1.Instance.HandlePlayerCollision();
+                        break;
+                    }
                 }
             }
 
@@ -102,7 +144,7 @@ namespace SpaceBurst
             {
                 for (int j = 0; j < enemies.Count; j++)
                     if (enemies[j].IsActive && IsColliding(portals[i], enemies[j]))
-                        enemies[j].WasShot();
+                        enemies[j].HandleBulletHit(null);
 
                 for (int j = 0; j < bullets.Count; j++)
                 {
@@ -113,20 +155,12 @@ namespace SpaceBurst
                     }
                 }
 
-                if (IsColliding(Player1.Instance, portals[i]))
+                if (!Player1.Instance.IsDead && !Player1.Instance.IsInvulnerable && IsColliding(Player1.Instance, portals[i]))
                 {
-                    KillPlayer();
+                    Game1.Instance.HandlePlayerCollision();
                     break;
                 }
             }
-        }
-
-        private static void KillPlayer()
-        {
-            Player1.Instance.Kill();
-            enemies.ForEach(x => x.WasShot());
-            portals.ForEach(x => x.Kill());
-            EnemySpawner.Reset();
         }
 
         private static bool IsColliding(Entity a, Entity b)

@@ -25,9 +25,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\SpaceBurst.Runtime\SpaceBurst.Runtime.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Remove="Content\bin\**;Content\obj\**" />
     <None Remove="Content\bin\**;Content\obj\**" />
     <EmbeddedResource Remove="Content\bin\**;Content\obj\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\Levels\**\*.json" Link="Levels\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

@@ -5,15 +5,16 @@ namespace SpaceBurst
 {
     static class PlayerStatus
     {
-        // amount of time it takes, in seconds, for a multiplier to expire.
-        private const float multiplierExpiryTime = 0.8f;
+        private const float multiplierExpiryTime = 1.2f;
         private const int maxMultiplier = 20;
+        private const int campaignStartingLives = 4;
+        private const int extraLifeScoreStep = 3000;
 
         public static int Lives { get; private set; }
         public static int Score { get; private set; }
         public static int HighScore { get; private set; }
         public static int Multiplier { get; private set; }
-        public static bool IsGameOver { get { return Lives == 0; } }
+        public static bool IsGameOver { get { return Lives <= 0; } }
 
         private static float multiplierTimeLeft;    // time until the current multiplier expires
         private static int scoreForExtraLife;       // score required to gain an extra life
@@ -27,18 +28,15 @@ namespace SpaceBurst
         static PlayerStatus()
         {
             HighScore = LoadHighScore();
-            Reset();
+            BeginCampaign();
         }
 
-        public static void Reset()
+        public static void BeginCampaign()
         {
-            if (Score > HighScore)
-                SaveHighScore(HighScore = Score);
-
             Score = 0;
             Multiplier = 1;
-            Lives = 4;
-            scoreForExtraLife = 2000;
+            Lives = campaignStartingLives;
+            scoreForExtraLife = extraLifeScoreStep;
             multiplierTimeLeft = 0;
         }
 
@@ -63,7 +61,7 @@ namespace SpaceBurst
             Score += basePoints * Multiplier;
             while (Score >= scoreForExtraLife)
             {
-                scoreForExtraLife += 2000;
+                scoreForExtraLife += extraLifeScoreStep;
                 Lives++;
             }
         }
@@ -86,6 +84,12 @@ namespace SpaceBurst
         public static void RemoveLife()
         {
             Lives--;
+        }
+
+        public static void FinalizeRun()
+        {
+            if (Score > HighScore)
+                SaveHighScore(HighScore = Score);
         }
 
         private static int LoadHighScore()

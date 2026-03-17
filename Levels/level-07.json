@@ -1,0 +1,81 @@
+{
+    "LevelNumber":  7,
+    "Name":  "Pressure Gate",
+    "IntroSeconds":  1.25,
+    "Waves":  [
+                  {
+                      "Label":  "Wave 1",
+                      "StartSeconds":  0.8,
+                      "Checkpoint":  false,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Interceptor",
+                                         "Count":  5,
+                                         "Formation":  "V",
+                                         "EntrySide":  "Left",
+                                         "PathType":  "Swoop",
+                                         "AnchorX":  0.36,
+                                         "AnchorY":  0.24,
+                                         "Spacing":  63,
+                                         "DelayBetweenSpawns":  0.12,
+                                         "TravelDuration":  3,
+                                         "SpeedMultiplier":  1.11
+                                     }
+                                 ]
+                  },
+                  {
+                      "Label":  "Wave 2",
+                      "StartSeconds":  11.5,
+                      "Checkpoint":  true,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Destroyer",
+                                         "Count":  3,
+                                         "Formation":  "Column",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "LaneSweep",
+                                         "AnchorX":  0.5,
+                                         "AnchorY":  0.23,
+                                         "Spacing":  77,
+                                         "DelayBetweenSpawns":  0.18,
+                                         "TravelDuration":  3.8,
+                                         "SpeedMultiplier":  1.04
+                                     },
+                                     {
+                                         "ArchetypeId":  "Walker",
+                                         "Count":  3,
+                                         "Formation":  "Arc",
+                                         "EntrySide":  "Right",
+                                         "PathType":  "ChaseAfterDelay",
+                                         "AnchorX":  0.82,
+                                         "AnchorY":  0.28,
+                                         "Spacing":  70,
+                                         "DelayBetweenSpawns":  0.2,
+                                         "TravelDuration":  3.6,
+                                         "SpeedMultiplier":  1.08
+                                     }
+                                 ]
+                  },
+                  {
+                      "Label":  "Wave 3",
+                      "StartSeconds":  23.5,
+                      "Checkpoint":  false,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Walker",
+                                         "Count":  4,
+                                         "Formation":  "Ring",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "OrbitAnchor",
+                                         "AnchorX":  0.5,
+                                         "AnchorY":  0.26,
+                                         "Spacing":  59,
+                                         "DelayBetweenSpawns":  0.1,
+                                         "TravelDuration":  4,
+                                         "SpeedMultiplier":  1.03
+                                     }
+                                 ]
+                  }
+              ],
+    "Boss":  null
+}

@@ -1,0 +1,160 @@
+{
+    "LevelNumber":  47,
+    "Name":  "Burning Sky",
+    "IntroSeconds":  1.25,
+    "Waves":  [
+                  {
+                      "Label":  "Wave 1",
+                      "StartSeconds":  0.8,
+                      "Checkpoint":  false,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Turret",
+                                         "Count":  7,
+                                         "Formation":  "Line",
+                                         "EntrySide":  "Bottom",
+                                         "PathType":  "ChaseAfterDelay",
+                                         "AnchorX":  0.3,
+                                         "AnchorY":  0.46,
+                                         "Spacing":  78,
+                                         "DelayBetweenSpawns":  0.22,
+                                         "TravelDuration":  3.5,
+                                         "SpeedMultiplier":  1.34
+                                     },
+                                     {
+                                         "ArchetypeId":  "Interceptor",
+                                         "Count":  7,
+                                         "Formation":  "V",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "Straight",
+                                         "AnchorX":  0.7,
+                                         "AnchorY":  0.34,
+                                         "Spacing":  84,
+                                         "DelayBetweenSpawns":  0.14,
+                                         "TravelDuration":  3.3,
+                                         "SpeedMultiplier":  1.27
+                                     }
+                                 ]
+                  },
+                  {
+                      "Label":  "Wave 2",
+                      "StartSeconds":  11.5,
+                      "Checkpoint":  false,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Bulwark",
+                                         "Count":  8,
+                                         "Formation":  "Line",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "Straight",
+                                         "AnchorX":  0.18,
+                                         "AnchorY":  0.16,
+                                         "Spacing":  82,
+                                         "DelayBetweenSpawns":  0.16,
+                                         "TravelDuration":  3.2,
+                                         "SpeedMultiplier":  1.25
+                                     },
+                                     {
+                                         "ArchetypeId":  "Interceptor",
+                                         "Count":  8,
+                                         "Formation":  "Line",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "Straight",
+                                         "AnchorX":  0.82,
+                                         "AnchorY":  0.2,
+                                         "Spacing":  82,
+                                         "DelayBetweenSpawns":  0.16,
+                                         "TravelDuration":  3.2,
+                                         "SpeedMultiplier":  1.25
+                                     }
+                                 ]
+                  },
+                  {
+                      "Label":  "Wave 3",
+                      "StartSeconds":  23.5,
+                      "Checkpoint":  true,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Interceptor",
+                                         "Count":  9,
+                                         "Formation":  "V",
+                                         "EntrySide":  "Left",
+                                         "PathType":  "Swoop",
+                                         "AnchorX":  0.36,
+                                         "AnchorY":  0.28,
+                                         "Spacing":  83,
+                                         "DelayBetweenSpawns":  0.12,
+                                         "TravelDuration":  3,
+                                         "SpeedMultiplier":  1.35
+                                     }
+                                 ]
+                  },
+                  {
+                      "Label":  "Wave 4",
+                      "StartSeconds":  36.5,
+                      "Checkpoint":  false,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Walker",
+                                         "Count":  5,
+                                         "Formation":  "Column",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "LaneSweep",
+                                         "AnchorX":  0.5,
+                                         "AnchorY":  0.27,
+                                         "Spacing":  89,
+                                         "DelayBetweenSpawns":  0.18,
+                                         "TravelDuration":  3.8,
+                                         "SpeedMultiplier":  1.2
+                                     },
+                                     {
+                                         "ArchetypeId":  "Destroyer",
+                                         "Count":  7,
+                                         "Formation":  "Arc",
+                                         "EntrySide":  "Right",
+                                         "PathType":  "ChaseAfterDelay",
+                                         "AnchorX":  0.82,
+                                         "AnchorY":  0.32,
+                                         "Spacing":  86,
+                                         "DelayBetweenSpawns":  0.2,
+                                         "TravelDuration":  3.6,
+                                         "SpeedMultiplier":  1.32
+                                     }
+                                 ]
+                  },
+                  {
+                      "Label":  "Wave 5",
+                      "StartSeconds":  50,
+                      "Checkpoint":  false,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Destroyer",
+                                         "Count":  8,
+                                         "Formation":  "Ring",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "OrbitAnchor",
+                                         "AnchorX":  0.5,
+                                         "AnchorY":  0.32,
+                                         "Spacing":  71,
+                                         "DelayBetweenSpawns":  0.1,
+                                         "TravelDuration":  4,
+                                         "SpeedMultiplier":  1.23
+                                     },
+                                     {
+                                         "ArchetypeId":  "Bulwark",
+                                         "Count":  2,
+                                         "Formation":  "Line",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "LaneSweep",
+                                         "AnchorX":  0.5,
+                                         "AnchorY":  0.22,
+                                         "Spacing":  96,
+                                         "DelayBetweenSpawns":  0.28,
+                                         "TravelDuration":  4.2,
+                                         "SpeedMultiplier":  1.11
+                                     }
+                                 ]
+                  }
+              ],
+    "Boss":  null
+}

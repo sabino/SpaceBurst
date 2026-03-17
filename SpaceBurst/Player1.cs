@@ -6,6 +6,10 @@ namespace SpaceBurst
 {
     class Player1 : Entity
     {
+        private const float DefaultMoveSpeed = 8f;
+        private const float DefaultRespawnSeconds = 1.4f;
+        private const float DefaultInvulnerabilitySeconds = 1.6f;
+
         private static Player1 instance;
         public static Player1 Instance
         {
@@ -21,8 +25,10 @@ namespace SpaceBurst
         const int cooldownFrames = 6;
         int cooldownRemaining = 0;
 
-        int framesUntilRespawn = 0;
-        public bool IsDead { get { return framesUntilRespawn > 0; } }
+        float respawnTimer;
+        float invulnerabilityTimer;
+        public bool IsDead { get { return respawnTimer > 0f; } }
+        public bool IsInvulnerable { get { return IsDead || invulnerabilityTimer > 0f; } }
 
         static Random rand = new Random();
 
@@ -30,23 +36,21 @@ namespace SpaceBurst
         {
             image = Element.Player;
             Position = Game1.ScreenSize / 2;
-            Radius = 10;
+            Radius = 14;
         }
 
         public override void Update()
         {
             if (IsDead)
             {
-                if (--framesUntilRespawn == 0)
-                {
-                    if (PlayerStatus.Lives == 0)
-                    {
-                        PlayerStatus.Reset();
-                        Position = Game1.ScreenSize / 2;
-                    }
-                }
+                respawnTimer -= (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
+                if (respawnTimer <= 0f)
+                    RestoreToCenter();
                 return;
             }
+
+            if (invulnerabilityTimer > 0f)
+                invulnerabilityTimer -= (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
 
             var aim = Input.GetAimDirection();
 
@@ -71,8 +75,7 @@ namespace SpaceBurst
             if (cooldownRemaining > 0)
                 cooldownRemaining--;
 
-            const float speed = 8;
-            Velocity = speed * Input.GetMovementDirection();
+            Velocity = DefaultMoveSpeed * Input.GetMovementDirection();
             Position += Velocity;
             Position = Vector2.Clamp(Position, Size / 2, Game1.ScreenSize - Size / 2);
 
@@ -82,14 +85,37 @@ namespace SpaceBurst
 
         public override void Draw(SpriteBatch spriteBatch)
         {
-            if (!IsDead)
+            if (!IsDead && (invulnerabilityTimer <= 0f || ((int)(Game1.GameTime.TotalGameTime.TotalSeconds * 12f) % 2 == 0)))
                 base.Draw(spriteBatch);
         }
 
-        public void Kill()
+        public void ResetForLevel()
         {
-            PlayerStatus.RemoveLife();
-            framesUntilRespawn = PlayerStatus.IsGameOver ? 300 : 120;
+            cooldownRemaining = 0;
+            Velocity = Vector2.Zero;
+            Position = Game1.ScreenSize / 2;
+            respawnTimer = 0f;
+            invulnerabilityTimer = DefaultInvulnerabilitySeconds;
+        }
+
+        public void StartRespawn(float delaySeconds)
+        {
+            cooldownRemaining = 0;
+            Velocity = Vector2.Zero;
+            respawnTimer = delaySeconds <= 0f ? DefaultRespawnSeconds : delaySeconds;
+        }
+
+        public void MakeInvulnerable(float durationSeconds)
+        {
+            invulnerabilityTimer = durationSeconds;
+        }
+
+        public void RestoreToCenter()
+        {
+            Position = Game1.ScreenSize / 2;
+            Velocity = Vector2.Zero;
+            respawnTimer = 0f;
+            invulnerabilityTimer = DefaultInvulnerabilitySeconds;
         }
     }
 }

@@ -1,145 +1,219 @@
-﻿using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
+using SpaceBurst.RuntimeData;
 
 namespace SpaceBurst
 {
-        class Enemy : Entity
+    class Enemy : Entity
+    {
+        protected readonly EnemyArchetypeDefinition archetype;
+        protected readonly Vector2 spawnPoint;
+        protected readonly Vector2 anchorPoint;
+        protected readonly PathType pathType;
+        protected readonly float speedMultiplier;
+        protected readonly int formationIndex;
+        protected readonly float spawnDelaySeconds;
+        protected readonly float orbitRadius;
+        protected readonly float orbitPhase;
+
+        protected float ageSeconds;
+        protected float spawnCountdownSeconds;
+        protected int hitPoints;
+        protected float laneDirection = 1f;
+
+        public static Random Random { get; } = new Random();
+
+        public bool IsActive
         {
-            public static Random rand = new Random();
+            get { return spawnCountdownSeconds <= 0f; }
+        }
 
-            private List<IEnumerator<int>> behaviours = new List<IEnumerator<int>>();
-            private int timeUntilStart = 60;
-            public bool IsActive { get { return timeUntilStart <= 0; } }
-            public int PointValue { get; private set; }
+        public virtual bool IsBoss
+        {
+            get { return false; }
+        }
 
-            public Enemy(Texture2D image, Vector2 position)
+        public virtual int PointValue { get; protected set; }
+
+        public int HitPoints
+        {
+            get { return hitPoints; }
+        }
+
+        public Enemy(
+            EnemyArchetypeDefinition archetype,
+            Vector2 spawnPoint,
+            Vector2 anchorPoint,
+            PathType pathType,
+            int formationIndex,
+            float speedMultiplier)
+        {
+            this.archetype = archetype;
+            this.spawnPoint = spawnPoint;
+            this.anchorPoint = anchorPoint;
+            this.pathType = pathType;
+            this.formationIndex = formationIndex;
+            this.speedMultiplier = speedMultiplier;
+            spawnDelaySeconds = archetype.SpawnDelaySeconds;
+            spawnCountdownSeconds = spawnDelaySeconds;
+            hitPoints = archetype.HitPoints;
+            PointValue = archetype.ScoreValue;
+            orbitRadius = 48f + formationIndex * 10f;
+            orbitPhase = formationIndex * 0.7f;
+
+            image = Element.GetTexture(archetype.Texture);
+            Position = spawnPoint;
+            color = Color.Transparent;
+            RenderScale = archetype.RenderScale;
+            Radius = archetype.CollisionRadius;
+
+            laneDirection = spawnPoint.X <= Game1.ScreenSize.X / 2f ? 1f : -1f;
+        }
+
+        public override void Update()
+        {
+            float deltaSeconds = (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
+            float frameScale = deltaSeconds * 60f;
+
+            if (!IsActive)
             {
-                this.image = image;
-                Position = position;
-                Radius = image.Width / 2f;
-                color = Color.Transparent;
-                PointValue = 1;
+                spawnCountdownSeconds -= deltaSeconds;
+                float fade = 1f - MathHelper.Clamp(spawnCountdownSeconds / Math.Max(0.001f, spawnDelaySeconds), 0f, 1f);
+                color = Color.White * fade;
+                return;
             }
 
-            public static Enemy CreateDestroyer(Vector2 position)
-            {
-                var enemy = new Enemy(Element.Destroyer, position);
-                enemy.AddBehaviour(enemy.FollowPlayer(0.9f));
-                enemy.PointValue = 2;
+            ageSeconds += deltaSeconds;
+            UpdateMovement(frameScale);
+            Position += Velocity * frameScale;
+            Position = Vector2.Clamp(Position, Size / 2f, Game1.ScreenSize - Size / 2f);
+        }
 
-                return enemy;
+        public override void Draw(SpriteBatch spriteBatch)
+        {
+            if (!IsActive)
+            {
+                float progress = 1f - MathHelper.Clamp(spawnCountdownSeconds / Math.Max(0.001f, spawnDelaySeconds), 0f, 1f);
+                float burstScale = RenderScale * MathHelper.Lerp(1.6f, 1f, progress);
+                spriteBatch.Draw(
+                    image,
+                    Position,
+                    null,
+                    Color.White * progress,
+                    Orientation,
+                    new Vector2(image.Width, image.Height) / 2f,
+                    burstScale,
+                    0,
+                    0f);
             }
 
-            public static Enemy CreateWalker(Vector2 position)
-            {
-                var enemy = new Enemy(Element.Walker, position);
-                enemy.AddBehaviour(enemy.MoveRandomly());
+            base.Draw(spriteBatch);
+        }
 
-                return enemy;
+        public virtual void HandleCollision(Enemy other)
+        {
+            Vector2 separation = Position - other.Position;
+            if (separation != Vector2.Zero)
+                Velocity += separation.ScaleTo(0.4f);
+        }
+
+        public virtual void HandleBulletHit(Bullet bullet)
+        {
+            hitPoints--;
+            color = Color.White;
+            if (hitPoints <= 0)
+                Destroy();
+        }
+
+        protected virtual void Destroy()
+        {
+            IsExpired = true;
+            Sound.Explosion.Play(0.45f, Random.NextFloat(-0.2f, 0.2f), 0);
+            PlayerStatus.AddPoints(PointValue);
+            PlayerStatus.IncreaseMultiplier();
+        }
+
+        protected virtual void UpdateMovement(float frameScale)
+        {
+            Vector2 desiredVelocity;
+            switch (pathType)
+            {
+                case PathType.Swoop:
+                    desiredVelocity = GetSwoopVelocity();
+                    break;
+                case PathType.LaneSweep:
+                    desiredVelocity = GetLaneSweepVelocity();
+                    break;
+                case PathType.ChaseAfterDelay:
+                    desiredVelocity = GetChaseVelocity();
+                    break;
+                case PathType.OrbitAnchor:
+                    desiredVelocity = GetOrbitVelocity();
+                    break;
+                default:
+                    desiredVelocity = MoveToward(anchorPoint, archetype.Speed * speedMultiplier);
+                    break;
             }
 
-            public override void Update()
-            {
-                if (timeUntilStart <= 0)
-                    ApplyBehaviours();
-                else
-                {
-                    timeUntilStart--;
-                    color = Color.White * (1 - timeUntilStart / 60f);
-                }
+            Velocity = Vector2.Lerp(Velocity, desiredVelocity, 0.16f * frameScale);
+            if (Velocity.LengthSquared() > 0.001f)
+                Orientation = Velocity.ToAngle();
+        }
 
-                Position += Velocity;
-                Position = Vector2.Clamp(Position, Size / 2, Game1.ScreenSize - Size / 2);
+        protected Vector2 MoveToward(Vector2 target, float speed)
+        {
+            Vector2 delta = target - Position;
+            if (delta == Vector2.Zero)
+                return Vector2.Zero;
 
-                Velocity *= 0.8f;
-            }
+            if (delta.LengthSquared() < 64f)
+                return delta * 0.15f;
 
-            public override void Draw(SpriteBatch spriteBatch)
-            {
-                if (timeUntilStart > 0)
-                {
-                    // Draw an expanding, fading-out version of the sprite as part of the spawn-in effect.
-                    float factor = timeUntilStart / 60f;    // decreases from 1 to 0 as the enemy spawns in
-                    spriteBatch.Draw(image, Position, null, Color.White * factor, Orientation, Size / 2f, 2 - factor, 0, 0);
-                }
+            return delta.ScaleTo(speed);
+        }
 
-                base.Draw(spriteBatch);
-            }
+        private Vector2 GetSwoopVelocity()
+        {
+            Vector2 toAnchor = anchorPoint - Position;
+            if (toAnchor == Vector2.Zero)
+                return Vector2.Zero;
 
-            private void AddBehaviour(IEnumerable<int> behaviour)
-            {
-                behaviours.Add(behaviour.GetEnumerator());
-            }
+            Vector2 direction = Vector2.Normalize(toAnchor);
+            Vector2 perpendicular = new Vector2(-direction.Y, direction.X);
+            float sway = (float)Math.Sin(ageSeconds * 4.5f + formationIndex * 0.8f);
+            return direction * archetype.Speed * speedMultiplier + perpendicular * sway * archetype.Speed * 0.85f;
+        }
 
-            private void ApplyBehaviours()
-            {
-                for (int i = 0; i < behaviours.Count; i++)
-                {
-                    if (!behaviours[i].MoveNext())
-                        behaviours.RemoveAt(i--);
-                }
-            }
+        private Vector2 GetLaneSweepVelocity()
+        {
+            if (Math.Abs(Position.Y - anchorPoint.Y) > 18f)
+                return MoveToward(anchorPoint, archetype.Speed * speedMultiplier);
 
-            public void HandleCollision(Enemy other)
-            {
-                var d = Position - other.Position;
-                Velocity += 10 * d / (d.LengthSquared() + 1);
-            }
+            float horizontalSpeed = archetype.Speed * speedMultiplier;
+            float leftBound = Size.X / 2f + 28f;
+            float rightBound = Game1.ScreenSize.X - Size.X / 2f - 28f;
 
-            public void WasShot()
-            {
-                IsExpired = true;
-                Sound.Explosion.Play(0.5f, rand.NextFloat(-0.2f, 0.2f), 0);
+            if (Position.X <= leftBound)
+                laneDirection = 1f;
+            else if (Position.X >= rightBound)
+                laneDirection = -1f;
 
-                PlayerStatus.AddPoints(PointValue);
-                PlayerStatus.IncreaseMultiplier();
-            }
+            return new Vector2(horizontalSpeed * laneDirection, (anchorPoint.Y - Position.Y) * 0.04f);
+        }
 
-            #region Behaviours
-            IEnumerable<int> FollowPlayer(float acceleration)
-            {
-                while (true)
-                {
-                    if (!Player1.Instance.IsDead)
-                        Velocity += (Player1.Instance.Position - Position).ScaleTo(acceleration);
+        private Vector2 GetChaseVelocity()
+        {
+            if (ageSeconds < 1.25f || Vector2.DistanceSquared(Position, anchorPoint) > 6400f)
+                return MoveToward(anchorPoint, archetype.Speed * speedMultiplier);
 
-                    if (Velocity != Vector2.Zero)
-                        Orientation = Velocity.ToAngle();
+            return MoveToward(Player1.Instance.Position, archetype.Speed * speedMultiplier * 0.95f);
+        }
 
-                    yield return 0;
-                }
-            }
-
-            IEnumerable<int> MoveRandomly()
-            {
-                float direction = rand.NextFloat(0, MathHelper.TwoPi);
-
-                while (true)
-                {
-                    direction += rand.NextFloat(-0.1f, 0.1f);
-                    direction = MathHelper.WrapAngle(direction);
-
-                    for (int i = 0; i < 6; i++)
-                    {
-                        Velocity += MathUtil.FromPolar(direction, 0.4f);
-                        Orientation -= 0.05f;
-
-                        var bounds = Game1.Viewport.Bounds;
-                        bounds.Inflate(-image.Width / 2 - 1, -image.Height / 2 - 1);
-
-                        // if the enemy is outside the bounds, make it move away from the edge
-                        if (!bounds.Contains(Position.ToPoint()))
-                            direction = (Game1.ScreenSize / 2 - Position).ToAngle() + rand.NextFloat(-MathHelper.PiOver2, MathHelper.PiOver2);
-
-                        yield return 0;
-                    }
-                }
-            }
-            #endregion
+        private Vector2 GetOrbitVelocity()
+        {
+            Vector2 orbitTarget = anchorPoint + MathUtil.FromPolar(orbitPhase + ageSeconds * 1.8f, orbitRadius);
+            return MoveToward(orbitTarget, archetype.Speed * speedMultiplier);
         }
     }
+}

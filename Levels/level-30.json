@@ -1,0 +1,83 @@
+{
+    "LevelNumber":  30,
+    "Name":  "Boss 30: Destroyer Mk II",
+    "IntroSeconds":  1.5,
+    "Waves":  [
+                  {
+                      "Label":  "Boss Warmup 1",
+                      "StartSeconds":  0.8,
+                      "Checkpoint":  false,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Turret",
+                                         "Count":  6,
+                                         "Formation":  "Line",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "Straight",
+                                         "AnchorX":  0.18,
+                                         "AnchorY":  0.18,
+                                         "Spacing":  76,
+                                         "DelayBetweenSpawns":  0.18,
+                                         "TravelDuration":  3.4,
+                                         "SpeedMultiplier":  1.15
+                                     },
+                                     {
+                                         "ArchetypeId":  "Interceptor",
+                                         "Count":  5,
+                                         "Formation":  "V",
+                                         "EntrySide":  "Right",
+                                         "PathType":  "Swoop",
+                                         "AnchorX":  0.82,
+                                         "AnchorY":  0.23,
+                                         "Spacing":  77,
+                                         "DelayBetweenSpawns":  0.22,
+                                         "TravelDuration":  3.6,
+                                         "SpeedMultiplier":  1.2
+                                     }
+                                 ]
+                  },
+                  {
+                      "Label":  "Boss Warmup 2",
+                      "StartSeconds":  12.5,
+                      "Checkpoint":  true,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Interceptor",
+                                         "Count":  7,
+                                         "Formation":  "Column",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "Swoop",
+                                         "AnchorX":  0.3,
+                                         "AnchorY":  0.24,
+                                         "Spacing":  76,
+                                         "DelayBetweenSpawns":  0.18,
+                                         "TravelDuration":  3.4,
+                                         "SpeedMultiplier":  1.15
+                                     },
+                                     {
+                                         "ArchetypeId":  "Walker",
+                                         "Count":  6,
+                                         "Formation":  "Arc",
+                                         "EntrySide":  "Left",
+                                         "PathType":  "LaneSweep",
+                                         "AnchorX":  0.7,
+                                         "AnchorY":  0.29,
+                                         "Spacing":  77,
+                                         "DelayBetweenSpawns":  0.22,
+                                         "TravelDuration":  3.6,
+                                         "SpeedMultiplier":  1.2
+                                     }
+                                 ]
+                  }
+              ],
+    "Boss":  {
+                 "Type":  "DestroyerBossMk2",
+                 "DisplayName":  "Destroyer Mk II",
+                 "ArchetypeId":  "Destroyer",
+                 "EntrySide":  "Top",
+                 "AnchorX":  0.5,
+                 "AnchorY":  0.21,
+                 "RenderScale":  1.88,
+                 "HitPoints":  115
+             }
+}

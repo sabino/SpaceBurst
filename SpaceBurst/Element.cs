@@ -32,5 +32,28 @@ namespace SpaceBurst
             Turret = content.Load<Texture2D>("Turret");
             Portal = content.Load<Texture2D>("Portal");
         }
+
+        public static Texture2D GetTexture(string textureId)
+        {
+            switch (textureId)
+            {
+                case "Player":
+                    return Player;
+                case "Pointer":
+                    return Pointer;
+                case "Bullet":
+                    return Bullet;
+                case "Destroyer":
+                    return Destroyer;
+                case "Walker":
+                    return Walker;
+                case "Turret":
+                    return Turret;
+                case "Portal":
+                    return Portal;
+                default:
+                    return null;
+            }
+        }
     }
 }

@@ -25,17 +25,15 @@ namespace SpaceBurst
 
         GraphicsDeviceManager graphics;
         SpriteBatch spriteBatch;
-        //BloomComponent bloom;
         Rectangle renderViewport;
         Matrix scaleMatrix;
+        CampaignDirector campaignDirector;
+        Texture2D uiPixel;
         int virtualWidth = DesktopVirtualWidth;
         int virtualHeight = DesktopVirtualHeight;
 #if ANDROID
         Texture2D touchControlTexture;
 #endif
-
-        bool paused = false;
-        bool useBloom = false;
 
         public Game1()
         {
@@ -52,9 +50,6 @@ namespace SpaceBurst
             graphics.IsFullScreen = false;
 #endif
 
-            //bloom = new BloomComponent(this);
-            //Components.Add(bloom);
-            //bloom.Settings = new BloomSettings(null, 0.25f, 4, 2, 1, 1.5f, 1);
         }
 
         protected override void Initialize()
@@ -70,12 +65,13 @@ namespace SpaceBurst
             spriteBatch = new SpriteBatch(GraphicsDevice);
             Element.Load(Content);
             Sound.Load(Content);
+            uiPixel = new Texture2D(GraphicsDevice, 1, 1);
+            uiPixel.SetData(new[] { Color.White });
 #if ANDROID
             touchControlTexture = CreateControlTexture(128);
 #endif
-
-            EntityManager.Add(Player1.Instance);
-            //EntityManager.Add(Turret.Instance);
+            campaignDirector = new CampaignDirector();
+            campaignDirector.Load();
 
             MediaPlayer.IsRepeating = true;
             MediaPlayer.Play(Sound.Music);
@@ -86,76 +82,37 @@ namespace SpaceBurst
             GameTime = gameTime;
             RecalculateScaleMatrix();
             Input.Update();
-
-            // Allows the game to exit
-            if (Input.WasButtonPressed(Buttons.Back) || Input.WasKeyPressed(Keys.Escape))
-                Exit();
-
-            if (Input.WasKeyPressed(Keys.P))
-                paused = !paused;
-            if (Input.WasKeyPressed(Keys.B))
-                useBloom = !useBloom;
-
-            if (!paused)
-            {
-                EntityManager.Update();
-                EnemySpawner.Update();
-                PlayerStatus.Update();
-            }
+            campaignDirector.Update();
 
             base.Update(gameTime);
         }
 
         protected override void Draw(GameTime gameTime)
         {
-            //bloom.BeginDraw();
-            if (!useBloom)
-                base.Draw(gameTime);
-
             GraphicsDevice.Clear(Color.Black);
 
-            spriteBatch.Begin(SpriteSortMode.Texture, BlendState.Additive, null, null, null, null, scaleMatrix);
-            EntityManager.Draw(spriteBatch);
-            spriteBatch.End();
-
-            if (useBloom)
-                base.Draw(gameTime);
-
-            // Draw user interface
-            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.Additive, null, null, null, null, scaleMatrix);
-
-            spriteBatch.DrawString(Element.Font, "Lives: " + PlayerStatus.Lives, new Vector2(5), Color.White);
-            DrawRightAlignedString("Score: " + PlayerStatus.Score, 5);
-            DrawRightAlignedString("Multiplier: " + PlayerStatus.Multiplier, 35);
-
-            // draw the custom mouse cursor
-#if !ANDROID
-            spriteBatch.Draw(Element.Pointer, Input.MousePosition, Color.White);
-#endif
-
-            if (PlayerStatus.IsGameOver)
+            if (campaignDirector.ShouldDrawWorld)
             {
-                string text = "Game Over\n" +
-                    "Your Score: " + PlayerStatus.Score + "\n" +
-                    "High Score: " + PlayerStatus.HighScore;
-
-                Vector2 textSize = Element.Font.MeasureString(text);
-                spriteBatch.DrawString(Element.Font, text, ScreenSize / 2 - textSize / 2, Color.White);
+                spriteBatch.Begin(SpriteSortMode.Texture, BlendState.Additive, null, null, null, null, scaleMatrix);
+                EntityManager.Draw(spriteBatch);
+                spriteBatch.End();
             }
 
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, null, null, scaleMatrix);
+            campaignDirector.DrawUi(spriteBatch, uiPixel);
+#if !ANDROID
+            spriteBatch.Draw(Element.Pointer, Input.PointerPosition, Color.White);
+#endif
             spriteBatch.End();
 
 #if ANDROID
-            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
-            Input.DrawTouchControls(spriteBatch, touchControlTexture);
-            spriteBatch.End();
+            if (campaignDirector.ShouldDrawTouchControls)
+            {
+                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+                Input.DrawTouchControls(spriteBatch, touchControlTexture);
+                spriteBatch.End();
+            }
 #endif
-        }
-
-        private void DrawRightAlignedString(string text, float y)
-        {
-            var textWidth = Element.Font.MeasureString(text).X;
-            spriteBatch.DrawString(Element.Font, text, new Vector2(ScreenSize.X - textWidth - 5, y), Color.White);
         }
 
         private void RecalculateScaleMatrix()
@@ -207,6 +164,11 @@ namespace SpaceBurst
             virtualWidth = DesktopVirtualWidth;
             virtualHeight = DesktopVirtualHeight;
 #endif
+        }
+
+        public void HandlePlayerCollision()
+        {
+            campaignDirector.HandlePlayerCollision();
         }
 
         private static int GetDefaultVirtualWidth()

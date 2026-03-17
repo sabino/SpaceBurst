@@ -15,7 +15,8 @@ namespace SpaceBurst
             Position = position;
             Velocity = velocity;
             Orientation = Velocity.ToAngle();
-            Radius = 8;
+            RenderScale = 0.9f;
+            Radius = 6;
         }
 
         public override void Update()

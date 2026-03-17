@@ -1,0 +1,83 @@
+{
+    "LevelNumber":  10,
+    "Name":  "Boss 10: Destroyer Prime",
+    "IntroSeconds":  1.5,
+    "Waves":  [
+                  {
+                      "Label":  "Boss Warmup 1",
+                      "StartSeconds":  0.8,
+                      "Checkpoint":  false,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Interceptor",
+                                         "Count":  4,
+                                         "Formation":  "Line",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "Straight",
+                                         "AnchorX":  0.18,
+                                         "AnchorY":  0.18,
+                                         "Spacing":  68,
+                                         "DelayBetweenSpawns":  0.18,
+                                         "TravelDuration":  3.4,
+                                         "SpeedMultiplier":  1.05
+                                     },
+                                     {
+                                         "ArchetypeId":  "Destroyer",
+                                         "Count":  3,
+                                         "Formation":  "V",
+                                         "EntrySide":  "Right",
+                                         "PathType":  "Swoop",
+                                         "AnchorX":  0.82,
+                                         "AnchorY":  0.23,
+                                         "Spacing":  71,
+                                         "DelayBetweenSpawns":  0.22,
+                                         "TravelDuration":  3.6,
+                                         "SpeedMultiplier":  1.08
+                                     }
+                                 ]
+                  },
+                  {
+                      "Label":  "Boss Warmup 2",
+                      "StartSeconds":  12.5,
+                      "Checkpoint":  true,
+                      "Groups":  [
+                                     {
+                                         "ArchetypeId":  "Destroyer",
+                                         "Count":  5,
+                                         "Formation":  "Column",
+                                         "EntrySide":  "Top",
+                                         "PathType":  "Swoop",
+                                         "AnchorX":  0.3,
+                                         "AnchorY":  0.24,
+                                         "Spacing":  68,
+                                         "DelayBetweenSpawns":  0.18,
+                                         "TravelDuration":  3.4,
+                                         "SpeedMultiplier":  1.05
+                                     },
+                                     {
+                                         "ArchetypeId":  "Walker",
+                                         "Count":  4,
+                                         "Formation":  "Arc",
+                                         "EntrySide":  "Left",
+                                         "PathType":  "LaneSweep",
+                                         "AnchorX":  0.7,
+                                         "AnchorY":  0.29,
+                                         "Spacing":  71,
+                                         "DelayBetweenSpawns":  0.22,
+                                         "TravelDuration":  3.6,
+                                         "SpeedMultiplier":  1.08
+                                     }
+                                 ]
+                  }
+              ],
+    "Boss":  {
+                 "Type":  "DestroyerBoss",
+                 "DisplayName":  "Destroyer Prime",
+                 "ArchetypeId":  "Destroyer",
+                 "EntrySide":  "Top",
+                 "AnchorX":  0.5,
+                 "AnchorY":  0.2,
+                 "RenderScale":  1.65,
+                 "HitPoints":  70
+             }
+}

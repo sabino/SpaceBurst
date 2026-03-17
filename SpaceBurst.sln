@@ -1,7 +1,13 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2012
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SpaceBurst", "SpaceBurst\SpaceBurst.csproj", "{ECD1B696-288F-4C65-BFC1-BD1FB7F55AB6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SpaceBurst.Runtime", "SpaceBurst.Runtime\SpaceBurst.Runtime.csproj", "{1DE259A2-D830-40B3-9C26-4363CB219F8D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SpaceBurst.LevelTool", "SpaceBurst.LevelTool\SpaceBurst.LevelTool.csproj", "{C7EE8E92-7FF5-4114-8877-6AFE5C63CAEE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SpaceBurst.Runtime.Tests", "SpaceBurst.Runtime.Tests\SpaceBurst.Runtime.Tests.csproj", "{D7F96B9D-2A50-4980-9EF4-B70443E6B237}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -13,5 +19,17 @@ Global
 		{ECD1B696-288F-4C65-BFC1-BD1FB7F55AB6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{ECD1B696-288F-4C65-BFC1-BD1FB7F55AB6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{ECD1B696-288F-4C65-BFC1-BD1FB7F55AB6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1DE259A2-D830-40B3-9C26-4363CB219F8D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1DE259A2-D830-40B3-9C26-4363CB219F8D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1DE259A2-D830-40B3-9C26-4363CB219F8D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1DE259A2-D830-40B3-9C26-4363CB219F8D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C7EE8E92-7FF5-4114-8877-6AFE5C63CAEE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C7EE8E92-7FF5-4114-8877-6AFE5C63CAEE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C7EE8E92-7FF5-4114-8877-6AFE5C63CAEE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C7EE8E92-7FF5-4114-8877-6AFE5C63CAEE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D7F96B9D-2A50-4980-9EF4-B70443E6B237}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D7F96B9D-2A50-4980-9EF4-B70443E6B237}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D7F96B9D-2A50-4980-9EF4-B70443E6B237}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D7F96B9D-2A50-4980-9EF4-B70443E6B237}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

@@ -19,10 +19,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\SpaceBurst.Runtime\SpaceBurst.Runtime.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Include="..\SpaceBurst\*.cs" Exclude="..\SpaceBurst\Program.cs" Link="Shared\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
     <AndroidAsset Include="..\SpaceBurst\Content\bin\Android\Content\**\*.*" Link="Content\%(RecursiveDir)%(Filename)%(Extension)" />
+    <AndroidAsset Include="..\Levels\**\*.json" Link="Levels\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>
