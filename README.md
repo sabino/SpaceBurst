@@ -24,3 +24,25 @@ dotnet run --project SpaceBurst\SpaceBurst.csproj
 ```
 
 The repo now uses local MonoGame tooling, so you do not need a separate global MonoGame install just to build it.
+
+## Single-File Builds
+
+To create the final self-contained single-file app for both Windows and Linux:
+
+```powershell
+./publish-single-file.ps1
+```
+
+This writes the outputs to:
+
+- `artifacts/singlefile/win-x64/SpaceBurst.exe`
+- `artifacts/singlefile/linux-x64/SpaceBurst`
+
+You can also publish only one target:
+
+```powershell
+./publish-single-file.ps1 -RuntimeIdentifier win-x64
+./publish-single-file.ps1 -RuntimeIdentifier linux-x64
+```
+
+On Linux, the publish output is a single executable file as well. If you build the Linux artifact on Linux, it should be directly runnable from the desktop or terminal. If you generate the Linux artifact on Windows and then copy it to Linux, you may still need to mark it executable once with `chmod +x SpaceBurst`.
