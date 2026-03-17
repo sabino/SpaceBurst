@@ -1,9 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace SpaceBurst
 {
@@ -22,7 +18,10 @@ namespace SpaceBurst
         private static float multiplierTimeLeft;    // time until the current multiplier expires
         private static int scoreForExtraLife;       // score required to gain an extra life
 
-        private const string highScoreFilename = "highscore.txt";
+        private static readonly string highScoreFilename = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "SpaceBurst",
+            "highscore.txt");
 
         // Static constructor
         static PlayerStatus()
@@ -98,6 +97,7 @@ namespace SpaceBurst
 
         private static void SaveHighScore(int score)
         {
+            Directory.CreateDirectory(Path.GetDirectoryName(highScoreFilename));
             File.WriteAllText(highScoreFilename, score.ToString());
         }
     }

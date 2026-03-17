@@ -46,3 +46,31 @@ You can also publish only one target:
 ```
 
 On Linux, the publish output is a single executable file as well. If you build the Linux artifact on Linux, it should be directly runnable from the desktop or terminal. If you generate the Linux artifact on Windows and then copy it to Linux, you may still need to mark it executable once with `chmod +x SpaceBurst`.
+
+## Android APK
+
+There is now an Android project at `SpaceBurst.Android/SpaceBurst.Android.csproj`.
+
+Touch controls:
+
+- Left side drag moves the ship
+- Right side touch aims and fires
+- The game keeps the original 800x600 playfield and scales it to the phone screen
+
+To build an installable debug APK on Windows:
+
+```powershell
+./build-android.ps1 -InstallDependencies
+```
+
+The first run installs the Android SDK into `C:\Android\sdk`.
+
+The generated APK is written to:
+
+- `SpaceBurst.Android/bin/Debug/net8.0-android34.0/com.sabino.spaceburst-Signed.apk`
+
+If your phone is connected with USB debugging enabled, you can also install it directly:
+
+```powershell
+./build-android.ps1 -InstallOnDevice
+```
