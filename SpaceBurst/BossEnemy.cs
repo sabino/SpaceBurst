@@ -35,6 +35,11 @@ namespace SpaceBurst
             get { return definition.DisplayName; }
         }
 
+        public IReadOnlyList<float> PhaseThresholds
+        {
+            get { return phaseThresholds; }
+        }
+
         public BossEnemy(
             EnemyArchetypeDefinition archetype,
             BossDefinition definition,
@@ -70,6 +75,36 @@ namespace SpaceBurst
         {
             base.ApplyBulletHit(bullet, impactPoint);
             CheckPhaseTransitions();
+        }
+
+        public override void ApplyBeamHit(Vector2 impactPoint, int damage, ImpactProfileDefinition impactProfile)
+        {
+            base.ApplyBeamHit(impactPoint, damage, impactProfile);
+            CheckPhaseTransitions();
+        }
+
+        public override EnemySnapshotData CaptureSnapshot()
+        {
+            EnemySnapshotData snapshot = base.CaptureSnapshot();
+            snapshot.IsBoss = true;
+            snapshot.BossPhase = currentPhase;
+            snapshot.BossSweepDirection = sweepDirection;
+            snapshot.BossFireCooldown = bossFireCooldown;
+            snapshot.PendingSupportGroups = new List<SpawnGroupDefinition>(pendingSupportGroups);
+            return snapshot;
+        }
+
+        public void RestoreBossSnapshot(EnemySnapshotData snapshot)
+        {
+            currentPhase = snapshot.BossPhase;
+            sweepDirection = snapshot.BossSweepDirection;
+            bossFireCooldown = snapshot.BossFireCooldown;
+            pendingSupportGroups.Clear();
+            if (snapshot.PendingSupportGroups != null)
+            {
+                for (int i = 0; i < snapshot.PendingSupportGroups.Count; i++)
+                    pendingSupportGroups.Enqueue(snapshot.PendingSupportGroups[i]);
+            }
         }
 
         protected override void UpdateMovement(float deltaSeconds)

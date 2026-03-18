@@ -99,6 +99,18 @@ namespace SpaceBurst
             Multiplier = 1;
         }
 
+        public static void GrantShips(int count)
+        {
+            if (count > 0)
+                Ships += count;
+        }
+
+        public static void GrantLife(int count = 1)
+        {
+            if (count > 0)
+                Lives += count;
+        }
+
         public static PlayerDeathOutcome ConsumeDeath(StageDefinition stage)
         {
             RunProgress.Weapons.ApplyDeathPenalty();
@@ -113,7 +125,7 @@ namespace SpaceBurst
             if (Lives <= 0)
                 return PlayerDeathOutcome.GameOver;
 
-            Ships = stage?.ShipsPerLife > 0 ? stage.ShipsPerLife : RunProgress.ShipsPerLife;
+            Ships = RunProgress.ShipsPerLife;
             return PlayerDeathOutcome.RestartStage;
         }
 
@@ -121,6 +133,34 @@ namespace SpaceBurst
         {
             if (Score > HighScore)
                 SaveHighScore(HighScore = Score);
+        }
+
+        public static PlayerStatusSnapshotData CaptureSnapshot()
+        {
+            return new PlayerStatusSnapshotData
+            {
+                Lives = Lives,
+                Ships = Ships,
+                Score = Score,
+                Multiplier = Multiplier,
+                MultiplierTimeLeft = multiplierTimeLeft,
+                ScoreForExtraLife = scoreForExtraLife,
+                RunProgress = RunProgress.CaptureSnapshot(),
+            };
+        }
+
+        public static void RestoreSnapshot(PlayerStatusSnapshotData snapshot)
+        {
+            if (snapshot == null)
+                return;
+
+            Lives = snapshot.Lives;
+            Ships = snapshot.Ships;
+            Score = snapshot.Score;
+            Multiplier = snapshot.Multiplier;
+            multiplierTimeLeft = snapshot.MultiplierTimeLeft;
+            scoreForExtraLife = snapshot.ScoreForExtraLife > 0 ? snapshot.ScoreForExtraLife : extraLifeScoreStep;
+            RunProgress.RestoreSnapshot(snapshot.RunProgress);
         }
 
         private static int LoadHighScore()

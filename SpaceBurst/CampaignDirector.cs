@@ -10,35 +10,61 @@ namespace SpaceBurst
     sealed class CampaignDirector
     {
         private const float GameOverDelaySeconds = 0.85f;
-        private const float LevelClearSeconds = 1.35f;
+        private const float StageTransitionSeconds = 2.2f;
+        private const float BossApproachSeconds = 1.0f;
         private const float PlayerSafetyClearRadius = 220f;
+        private const float RewindCapacitySeconds = 8f;
+        private const float RewindSnapshotInterval = 1f / 12f;
 
         private readonly CampaignRepository repository = new CampaignRepository();
         private readonly OptionsData options;
         private readonly MedalProgress medals;
         private readonly List<ScheduledSpawn> scheduledSpawns = new List<ScheduledSpawn>();
         private readonly List<ScheduledEvent> scheduledEvents = new List<ScheduledEvent>();
-        private readonly Random random = new Random();
+        private readonly DeterministicRngState gameplayRandom = new DeterministicRngState(1u);
+        private readonly List<RunSaveData> rewindFrames = new List<RunSaveData>();
+        private readonly List<UpgradeDraftCard> draftCards = new List<UpgradeDraftCard>();
 
         private StageDefinition currentStage;
         private BossEnemy activeBoss;
         private GameFlowState state = GameFlowState.Title;
         private GameFlowState helpReturnState = GameFlowState.Title;
+        private GameFlowState slotReturnState = GameFlowState.Title;
+        private GameFlowState draftReturnState = GameFlowState.Playing;
+        private GameFlowState pauseReturnState = GameFlowState.Playing;
         private int currentStageNumber = 1;
         private int currentSectionIndex;
         private int titleSelection;
         private int pauseSelection;
+        private int optionsSelection;
+        private int slotSelection;
         private int helpPageIndex;
+        private int draftSelection;
         private float stageElapsedSeconds;
         private float stateTimer;
         private float activeEventTimer;
         private float activeEventSpawnTimer;
+        private float rewindCaptureTimer;
+        private float rewindMeterSeconds = RewindCapacitySeconds;
+        private float rewindHoldSeconds;
+        private float rewindStepAccumulator;
         private bool stageHadDeath;
         private bool campaignHadDeath;
         private string bannerText = string.Empty;
         private string activeEventWarning = string.Empty;
         private RandomEventType activeEventType = RandomEventType.None;
         private float activeEventIntensity;
+        private int transitionTargetStageNumber;
+        private bool transitionToBoss;
+        private float transitionScrollFrom;
+        private float transitionScrollTo;
+        private float transitionHudBlend;
+        private float bossApproachTimer;
+        private float draftTimer;
+        private bool draftFromTutorial;
+        private bool tutorialReplayMode;
+        private TutorialStep tutorialStep;
+        private float tutorialProgressSeconds;
 
         public CampaignDirector()
         {
@@ -48,12 +74,12 @@ namespace SpaceBurst
 
         public bool ShouldDrawWorld
         {
-            get { return state != GameFlowState.Title || currentStage != null; }
+            get { return state != GameFlowState.Title && currentStage != null; }
         }
 
         public bool ShouldDrawTouchControls
         {
-            get { return state == GameFlowState.Playing && ShouldDrawWorld; }
+            get { return (state == GameFlowState.Playing || state == GameFlowState.StageTransition || state == GameFlowState.Tutorial) && ShouldDrawWorld; }
         }
 
         public float CurrentScrollSpeed
@@ -63,10 +89,21 @@ namespace SpaceBurst
                 if (currentStage == null || state == GameFlowState.Title || state == GameFlowState.Help || state == GameFlowState.Paused || state == GameFlowState.GameOver || state == GameFlowState.CampaignComplete)
                     return 0f;
 
+                if (state == GameFlowState.SaveSlots || state == GameFlowState.LoadSlots || state == GameFlowState.Options || state == GameFlowState.UpgradeDraft)
+                    return 0f;
+
+                if (state == GameFlowState.Tutorial)
+                    return 64f;
+
+                if (state == GameFlowState.StageTransition)
+                {
+                    return GetTransitionScrollSpeed();
+                }
+
                 if (activeBoss != null && currentStage.Boss != null)
                     return currentStage.Boss.ArenaScrollSpeed;
 
-                return currentStage.ScrollSpeed;
+                return GetCurrentStageScrollSpeed();
             }
         }
 
@@ -97,7 +134,8 @@ namespace SpaceBurst
             get
             {
                 float stageFactor = MathHelper.Clamp((currentStageNumber - 1) / 49f, 0f, 1f);
-                return activeBoss != null ? MathHelper.Clamp(stageFactor + 0.15f, 0f, 1f) : stageFactor;
+                float runFactor = MathHelper.Clamp(PlayerStatus.RunProgress.PowerBudget * 0.02f, 0f, 0.28f);
+                return activeBoss != null ? MathHelper.Clamp(stageFactor + runFactor + 0.15f, 0f, 1f) : MathHelper.Clamp(stageFactor + runFactor, 0f, 1f);
             }
         }
 
@@ -116,14 +154,71 @@ namespace SpaceBurst
             get
             {
                 SectionDefinition section = GetActiveSection();
-                return section?.PowerDropBonusChance ?? 0f;
+                return (section?.PowerDropBonusChance ?? 0f) + PlayerStatus.RunProgress.DropBonusChance;
+            }
+        }
+
+        public DeterministicRngState GameplayRandom
+        {
+            get { return gameplayRandom; }
+        }
+
+        public float PowerupMagnetStrength
+        {
+            get { return state == GameFlowState.StageTransition ? 320f + 420f * TransitionWarpStrength : 0f; }
+        }
+
+        public VisualPreset VisualPreset
+        {
+            get { return options.VisualPreset; }
+        }
+
+        public bool EnableBloom
+        {
+            get { return options.EnableBloom && options.VisualPreset != VisualPreset.Low; }
+        }
+
+        public bool EnableShockwaves
+        {
+            get { return options.EnableShockwaves && options.VisualPreset != VisualPreset.Low; }
+        }
+
+        public bool EnableNeonOutlines
+        {
+            get { return options.EnableNeonOutlines && options.VisualPreset != VisualPreset.Low; }
+        }
+
+        public float TransitionWarpStrength
+        {
+            get
+            {
+                if (state != GameFlowState.StageTransition)
+                    return 0f;
+
+                float progress = GetTransitionProgress();
+                if (progress < 0.2f)
+                    return progress / 0.2f * 0.35f;
+                if (progress < 0.75f)
+                    return MathHelper.Lerp(0.35f, 1f, (progress - 0.2f) / 0.55f);
+                return MathHelper.Lerp(1f, 0.25f, (progress - 0.75f) / 0.25f);
+            }
+        }
+
+        public float RewindVisualStrength
+        {
+            get
+            {
+                if (rewindHoldSeconds <= 0f || state != GameFlowState.Playing && state != GameFlowState.Tutorial)
+                    return 0f;
+
+                return MathHelper.Clamp(GetRewindSpeedMultiplier(rewindHoldSeconds) / 2.5f, 0f, 1f);
             }
         }
 
         public void Load()
         {
             repository.Load();
-            state = GameFlowState.Title;
+            EnterTitle(false);
         }
 
         public void Update()
@@ -133,20 +228,32 @@ namespace SpaceBurst
                 case GameFlowState.Title:
                     UpdateTitle();
                     break;
+                case GameFlowState.Options:
+                    UpdateOptions();
+                    break;
                 case GameFlowState.Help:
                     UpdateHelp();
                     break;
                 case GameFlowState.Paused:
                     UpdatePause();
                     break;
+                case GameFlowState.SaveSlots:
+                    UpdateSaveSlots(true);
+                    break;
+                case GameFlowState.LoadSlots:
+                    UpdateSaveSlots(false);
+                    break;
                 case GameFlowState.LevelIntro:
                     UpdateTimedState(GameFlowState.Playing);
                     break;
-                case GameFlowState.BossWarning:
-                    UpdateBossWarning();
+                case GameFlowState.Tutorial:
+                    UpdateTutorial();
                     break;
-                case GameFlowState.LevelClear:
-                    UpdateLevelClear();
+                case GameFlowState.StageTransition:
+                    UpdateStageTransition();
+                    break;
+                case GameFlowState.UpgradeDraft:
+                    UpdateUpgradeDraft();
                     break;
                 case GameFlowState.GameOver:
                 case GameFlowState.CampaignComplete:
@@ -165,6 +272,11 @@ namespace SpaceBurst
                 case GameFlowState.Title:
                     DrawTitle(spriteBatch, pixel);
                     break;
+                case GameFlowState.Options:
+                    if (slotReturnState != GameFlowState.Title)
+                        DrawHud(spriteBatch, pixel);
+                    DrawOptions(spriteBatch, pixel);
+                    break;
                 case GameFlowState.Help:
                     if (helpReturnState != GameFlowState.Title)
                         DrawHud(spriteBatch, pixel);
@@ -174,14 +286,32 @@ namespace SpaceBurst
                     DrawHud(spriteBatch, pixel);
                     DrawPause(spriteBatch, pixel);
                     break;
+                case GameFlowState.SaveSlots:
+                case GameFlowState.LoadSlots:
+                    if (slotReturnState != GameFlowState.Title)
+                        DrawHud(spriteBatch, pixel);
+                    DrawSaveSlots(spriteBatch, pixel, state == GameFlowState.SaveSlots);
+                    break;
                 case GameFlowState.Playing:
                     DrawHud(spriteBatch, pixel);
+                    DrawRewindOverlay(spriteBatch, pixel);
                     break;
                 case GameFlowState.LevelIntro:
-                case GameFlowState.BossWarning:
-                case GameFlowState.LevelClear:
                     DrawHud(spriteBatch, pixel);
                     DrawCenteredBanner(spriteBatch, pixel, bannerText, Color.White, 3f);
+                    break;
+                case GameFlowState.Tutorial:
+                    DrawHud(spriteBatch, pixel);
+                    DrawRewindOverlay(spriteBatch, pixel);
+                    DrawTutorialOverlay(spriteBatch, pixel);
+                    break;
+                case GameFlowState.StageTransition:
+                    DrawHud(spriteBatch, pixel);
+                    DrawTransitionOverlay(spriteBatch, pixel);
+                    break;
+                case GameFlowState.UpgradeDraft:
+                    DrawHud(spriteBatch, pixel);
+                    DrawUpgradeDraft(spriteBatch, pixel);
                     break;
                 case GameFlowState.GameOver:
                     DrawHud(spriteBatch, pixel);
@@ -214,11 +344,14 @@ namespace SpaceBurst
         {
             List<UiButton> buttons = GetPauseButtons();
             UpdateVerticalSelection(ref pauseSelection, buttons.Count);
+            pauseSelection = Math.Clamp(pauseSelection, 0, buttons.Count - 1);
             HandlePointerSelection(buttons, ref pauseSelection);
+
+            bool tutorialPause = pauseReturnState == GameFlowState.Tutorial;
 
             if (Input.WasCancelPressed())
             {
-                state = GameFlowState.Playing;
+                state = pauseReturnState;
                 return;
             }
 
@@ -235,37 +368,159 @@ namespace SpaceBurst
             switch (pauseSelection)
             {
                 case 1:
+                    slotReturnState = GameFlowState.Paused;
+                    slotSelection = 0;
+                    state = GameFlowState.SaveSlots;
+                    break;
+                case 2:
+                    slotReturnState = GameFlowState.Paused;
+                    slotSelection = 0;
+                    state = GameFlowState.LoadSlots;
+                    break;
+                case 3:
+                    slotReturnState = GameFlowState.Paused;
+                    optionsSelection = 0;
+                    state = GameFlowState.Options;
+                    break;
+                case 4:
                     helpReturnState = GameFlowState.Paused;
                     state = GameFlowState.Help;
                     break;
-                case 2:
+                case 5:
+                    if (tutorialPause)
+                    {
+                        options.TutorialCompleted = true;
+                        PersistentStorage.SaveOptions(options);
+                        if (tutorialReplayMode)
+                            EnterTitle(false);
+                        else
+                            BeginFreshCampaign();
+                    }
+                    else
+                    {
+                        PlayerStatus.FinalizeRun();
+                        EnterTitle(false);
+                    }
+                    break;
+                case 6:
                     PlayerStatus.FinalizeRun();
-                    state = GameFlowState.Title;
+                    EnterTitle(false);
                     break;
                 default:
-                    state = GameFlowState.Playing;
+                    state = pauseReturnState;
                     break;
             }
+        }
+
+        private void UpdateOptions()
+        {
+            if (Input.WasCancelPressed())
+            {
+                PersistentStorage.SaveOptions(options);
+                state = slotReturnState;
+                return;
+            }
+
+            UpdateVerticalSelection(ref optionsSelection, 7);
+
+            int delta = 0;
+            if (Input.WasNavigateLeftPressed())
+                delta = -1;
+            else if (Input.WasNavigateRightPressed() || Input.WasConfirmPressed() || Input.WasPrimaryActionPressed())
+                delta = 1;
+
+            if (delta == 0)
+                return;
+
+            switch (optionsSelection)
+            {
+                case 0:
+                    options.DisplayMode = options.DisplayMode == DesktopDisplayMode.BorderlessFullscreen
+                        ? DesktopDisplayMode.Windowed
+                        : DesktopDisplayMode.BorderlessFullscreen;
+                    Game1.Instance.ApplyDisplayMode(options.DisplayMode);
+                    break;
+                case 1:
+                    options.VisualPreset = (VisualPreset)(((int)options.VisualPreset + 3 + delta) % 3);
+                    break;
+                case 2:
+                    options.EnableBloom = !options.EnableBloom;
+                    break;
+                case 3:
+                    options.EnableShockwaves = !options.EnableShockwaves;
+                    break;
+                case 4:
+                    options.EnableNeonOutlines = !options.EnableNeonOutlines;
+                    break;
+                case 5:
+                    options.AutoUpgradeDraft = !options.AutoUpgradeDraft;
+                    break;
+                case 6:
+                    options.ShowHelpHints = !options.ShowHelpHints;
+                    break;
+            }
+        }
+
+        private void UpdateSaveSlots(bool saving)
+        {
+            UpdateVerticalSelection(ref slotSelection, 4);
+
+            if (Input.WasCancelPressed())
+            {
+                state = slotReturnState;
+                return;
+            }
+
+            if (!Input.WasConfirmPressed() && !Input.WasPrimaryActionPressed())
+                return;
+
+            if (slotSelection == 3)
+            {
+                state = slotReturnState;
+                return;
+            }
+
+            if (saving)
+            {
+                PersistentStorage.SaveRunSlot(slotSelection + 1, CaptureRunSaveData(slotSelection + 1, true));
+            }
+            else
+            {
+                RunSaveData save = PersistentStorage.LoadRunSlot(slotSelection + 1);
+                if (save != null)
+                {
+                    RestoreRunSaveData(save, true, false);
+                    return;
+                }
+            }
+
+            state = slotReturnState;
         }
 
         private void UpdateHelp()
         {
             if (Input.WasNavigateLeftPressed())
-                helpPageIndex = (helpPageIndex + 3) % 4;
+                helpPageIndex = (helpPageIndex + 4) % 5;
             else if (Input.WasNavigateRightPressed())
-                helpPageIndex = (helpPageIndex + 1) % 4;
+                helpPageIndex = (helpPageIndex + 1) % 5;
 
-            if (Input.WasCancelPressed() || Input.WasConfirmPressed() || Input.WasPrimaryActionPressed() || Input.WasHelpPressed())
+            if ((Input.WasConfirmPressed() || Input.WasPrimaryActionPressed()) && helpPageIndex == 0)
+            {
+                StartTutorial(true, helpReturnState);
+                return;
+            }
+
+            if (Input.WasCancelPressed() || Input.WasHelpPressed() || ((Input.WasConfirmPressed() || Input.WasPrimaryActionPressed()) && helpPageIndex != 0))
                 state = helpReturnState;
         }
 
         private void UpdatePlaying()
         {
             float deltaSeconds = (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
-            stageElapsedSeconds += deltaSeconds;
 
             if (Input.WasCancelPressed())
             {
+                pauseReturnState = GameFlowState.Playing;
                 state = GameFlowState.Paused;
                 return;
             }
@@ -276,6 +531,16 @@ namespace SpaceBurst
                 state = GameFlowState.Help;
                 return;
             }
+
+            if (Input.IsRewindHeld())
+            {
+                UpdateRewind(deltaSeconds);
+                return;
+            }
+
+            rewindHoldSeconds = 0f;
+
+            stageElapsedSeconds += deltaSeconds;
 
             ScheduleDueSections();
             SpawnDueEntities();
@@ -296,11 +561,7 @@ namespace SpaceBurst
 
             if (activeBoss == null && currentStage.Boss != null && currentSectionIndex >= currentStage.Sections.Count && scheduledSpawns.Count == 0 && !EntityManager.HasHostiles)
             {
-                state = GameFlowState.BossWarning;
-                stateTimer = currentStage.Boss.IntroSeconds;
-                bannerText = string.Concat("BOSS INCOMING\n", currentStage.Boss.DisplayName);
-                activeEventType = RandomEventType.None;
-                activeEventTimer = 0f;
+                BeginBossApproachTransition();
                 return;
             }
 
@@ -312,31 +573,121 @@ namespace SpaceBurst
 
             if (activeBoss != null && activeBoss.IsExpired && !EntityManager.HasHostiles && scheduledSpawns.Count == 0)
                 CompleteStage();
+
+            CaptureRewindFrame(deltaSeconds);
         }
 
-        private void UpdateBossWarning()
+        private void UpdateTutorial()
         {
-            stateTimer -= (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
-            if (stateTimer <= 0f || Input.WasConfirmPressed() || Input.WasPrimaryActionPressed())
+            float deltaSeconds = (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
+
+            if (Input.WasCancelPressed())
+            {
+                pauseReturnState = GameFlowState.Tutorial;
+                state = GameFlowState.Paused;
+                return;
+            }
+
+            if (Input.WasHelpPressed())
+            {
+                helpReturnState = GameFlowState.Tutorial;
+                state = GameFlowState.Help;
+                return;
+            }
+
+            if (Input.IsRewindHeld())
+            {
+                UpdateRewind(deltaSeconds);
+                return;
+            }
+
+            rewindHoldSeconds = 0f;
+
+            stageElapsedSeconds += deltaSeconds;
+
+            EntityManager.Update();
+            PlayerStatus.Update();
+
+            if (Player1.Instance.ConsumeHullDestroyed() || EntityManager.ConsumePlayerHullDestruction())
+            {
+                Player1.Instance.RestoreToWindow();
+                Player1.Instance.MakeInvulnerable(1.2f);
+            }
+
+            UpdateTutorialStep(deltaSeconds);
+            CaptureRewindFrame(deltaSeconds);
+        }
+
+        private void UpdateUpgradeDraft()
+        {
+            if (draftCards.Count == 0)
+            {
+                FinishUpgradeDraft();
+                return;
+            }
+
+            if (Input.WasNavigateLeftPressed())
+                draftSelection = (draftSelection + draftCards.Count - 1) % draftCards.Count;
+            else if (Input.WasNavigateRightPressed())
+                draftSelection = (draftSelection + 1) % draftCards.Count;
+
+            if (Input.WasCancelPressed())
+            {
+                ApplyDraftSelection(draftSelection);
+                return;
+            }
+
+            draftTimer -= (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
+            if (options.AutoUpgradeDraft || draftTimer <= 0f)
+            {
+                ApplyDraftSelection(draftSelection);
+                return;
+            }
+
+            if (Input.WasConfirmPressed() || Input.WasPrimaryActionPressed())
+                ApplyDraftSelection(draftSelection);
+        }
+
+        private void UpdateStageTransition()
+        {
+            float deltaSeconds = (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
+            stateTimer -= deltaSeconds;
+            transitionHudBlend = GetTransitionProgress();
+
+            EntityManager.Update();
+            PlayerStatus.Update();
+
+            if (Player1.Instance.ConsumeHullDestroyed() || EntityManager.ConsumePlayerHullDestruction())
+            {
+                HandlePlayerShipDestroyed();
+                return;
+            }
+
+            if (!transitionToBoss && PlayerStatus.RunProgress.StoredUpgradeCharges > 0 && stateTimer <= StageTransitionSeconds * 0.48f)
+            {
+                OpenUpgradeDraft(GameFlowState.StageTransition, false);
+                return;
+            }
+
+            if (stateTimer > 0f)
+                return;
+
+            if (transitionToBoss)
             {
                 SpawnBoss();
                 state = GameFlowState.Playing;
-            }
-        }
-
-        private void UpdateLevelClear()
-        {
-            stateTimer -= (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
-            if (stateTimer > 0f && !Input.WasConfirmPressed() && !Input.WasPrimaryActionPressed())
+                transitionToBoss = false;
+                transitionHudBlend = 0f;
                 return;
+            }
 
-            if (currentStageNumber >= 50)
+            if (transitionTargetStageNumber >= 50 && currentStageNumber >= 50)
             {
                 EnterEndState(GameFlowState.CampaignComplete, "CAMPAIGN COMPLETE");
                 return;
             }
 
-            PrepareStage(currentStageNumber + 1, false);
+            StartStageFromTransition(transitionTargetStageNumber);
         }
 
         private void UpdateEndState()
@@ -346,7 +697,7 @@ namespace SpaceBurst
                 return;
 
             if (Input.WasConfirmPressed() || Input.WasPrimaryActionPressed() || Input.WasCancelPressed())
-                state = GameFlowState.Title;
+                EnterTitle(false);
         }
 
         private void UpdateTimedState(GameFlowState nextState)
@@ -371,6 +722,7 @@ namespace SpaceBurst
                 case PlayerDeathOutcome.RespawnInPlace:
                     Player1.Instance.StartRespawn(0.95f);
                     EntityManager.ClearHostilesNear(Player1.Instance.Position, PlayerSafetyClearRadius);
+                    ResetRewindBuffer();
                     break;
                 case PlayerDeathOutcome.RestartStage:
                     PrepareStage(currentStageNumber, true);
@@ -404,6 +756,7 @@ namespace SpaceBurst
             EntityManager.Reset();
             Player1.Instance.ResetForStage();
             EntityManager.Add(Player1.Instance);
+            ResetRewindBuffer();
 
             if (!isRetry)
                 stageHadDeath = false;
@@ -418,20 +771,132 @@ namespace SpaceBurst
 
         private void StartCampaign()
         {
-            PlayerStatus.FinalizeRun();
-            PlayerStatus.BeginCampaign(repository.GetStage(1));
-            campaignHadDeath = false;
-            stageHadDeath = false;
-            currentStageNumber = 1;
-            PrepareStage(1, false);
+            if (!options.TutorialCompleted)
+            {
+                StartTutorial(false, GameFlowState.Playing);
+                return;
+            }
+
+            BeginFreshCampaign();
         }
 
         private void CompleteStage()
         {
             UnlockStageMedals();
-            state = GameFlowState.LevelClear;
-            stateTimer = LevelClearSeconds;
-            bannerText = string.Concat("STAGE ", currentStageNumber.ToString("00"), " CLEAR");
+            if (currentStageNumber >= 50)
+            {
+                EnterEndState(GameFlowState.CampaignComplete, "CAMPAIGN COMPLETE");
+                return;
+            }
+
+            state = GameFlowState.StageTransition;
+            stateTimer = StageTransitionSeconds;
+            transitionTargetStageNumber = currentStageNumber + 1;
+            transitionToBoss = false;
+            transitionScrollFrom = GetCurrentStageScrollSpeed();
+            transitionScrollTo = Math.Max(70f, GetStageBaseScrollSpeed(currentStageNumber + 1, repository.GetStage(currentStageNumber + 1)) * 0.88f);
+            transitionHudBlend = 0f;
+            bannerText = string.Concat("STAGE ", currentStageNumber.ToString("00"), " TO ", (currentStageNumber + 1).ToString("00"));
+        }
+
+        private void BeginFreshCampaign()
+        {
+            PlayerStatus.FinalizeRun();
+            PlayerStatus.BeginCampaign(repository.GetStage(1));
+            gameplayRandom.Restore(0xC0FFEEu);
+            campaignHadDeath = false;
+            stageHadDeath = false;
+            tutorialReplayMode = false;
+            tutorialStep = TutorialStep.Move;
+            tutorialProgressSeconds = 0f;
+            currentStageNumber = 1;
+            PrepareStage(1, false);
+        }
+
+        private void StartTutorial(bool replayMode, GameFlowState returnState)
+        {
+            PlayerStatus.FinalizeRun();
+            PlayerStatus.BeginCampaign(repository.GetStage(1));
+            PlayerStatus.RunProgress.Weapons.SetStyleProgress(WeaponStyleId.Pulse, 3, 0, true);
+            gameplayRandom.Restore(0xC0FFEEu);
+            currentStageNumber = 1;
+            currentStage = repository.GetStage(1);
+            currentSectionIndex = 0;
+            stageElapsedSeconds = 0f;
+            stateTimer = 0f;
+            activeBoss = null;
+            scheduledSpawns.Clear();
+            scheduledEvents.Clear();
+            activeEventType = RandomEventType.None;
+            activeEventTimer = 0f;
+            activeEventSpawnTimer = 0f;
+            activeEventIntensity = 0f;
+            activeEventWarning = string.Empty;
+            bannerText = string.Empty;
+            transitionToBoss = false;
+            transitionTargetStageNumber = 0;
+            transitionHudBlend = 0f;
+            titleSelection = 0;
+            helpPageIndex = 0;
+            tutorialReplayMode = replayMode;
+            tutorialStep = TutorialStep.Move;
+            tutorialProgressSeconds = 0f;
+            draftCards.Clear();
+            draftTimer = 0f;
+            draftSelection = 0;
+            draftFromTutorial = false;
+            pauseReturnState = GameFlowState.Tutorial;
+            draftReturnState = returnState;
+            EntityManager.Reset();
+            Player1.Instance.ResetForStage();
+            Player1.Instance.RefreshLoadout();
+            Player1.Instance.MakeInvulnerable(1.5f);
+            EntityManager.Add(Player1.Instance);
+            ResetRewindBuffer();
+            state = GameFlowState.Tutorial;
+        }
+
+        private void EnterTitle(bool finalizeRun)
+        {
+            if (finalizeRun)
+                PlayerStatus.FinalizeRun();
+
+            state = GameFlowState.Title;
+            helpReturnState = GameFlowState.Title;
+            slotReturnState = GameFlowState.Title;
+            pauseReturnState = GameFlowState.Playing;
+            draftReturnState = GameFlowState.Playing;
+            currentStage = null;
+            activeBoss = null;
+            currentStageNumber = 1;
+            currentSectionIndex = 0;
+            stageElapsedSeconds = 0f;
+            stateTimer = 0f;
+            activeEventTimer = 0f;
+            activeEventSpawnTimer = 0f;
+            activeEventWarning = string.Empty;
+            activeEventType = RandomEventType.None;
+            activeEventIntensity = 0f;
+            bannerText = string.Empty;
+            transitionTargetStageNumber = 0;
+            transitionToBoss = false;
+            transitionScrollFrom = 0f;
+            transitionScrollTo = 0f;
+            transitionHudBlend = 0f;
+            bossApproachTimer = 0f;
+            titleSelection = 0;
+            pauseSelection = 0;
+            optionsSelection = 0;
+            slotSelection = 0;
+            helpPageIndex = 0;
+            draftCards.Clear();
+            draftSelection = 0;
+            draftTimer = 0f;
+            draftFromTutorial = false;
+            tutorialStep = TutorialStep.Move;
+            tutorialProgressSeconds = 0f;
+            EntityManager.Reset();
+            ResetRewindBuffer();
         }
 
         private void EnterEndState(GameFlowState endState, string text)
@@ -439,15 +904,406 @@ namespace SpaceBurst
             PlayerStatus.FinalizeRun();
             if (endState == GameFlowState.CampaignComplete)
             {
-                medals.CampaignClear = true;
-                if (!campaignHadDeath)
-                    medals.PerfectCampaign = true;
-                PersistentStorage.SaveMedals(medals);
+                if (PlayerStatus.RunProgress.MedalEligible)
+                {
+                    medals.CampaignClear = true;
+                    if (!campaignHadDeath)
+                        medals.PerfectCampaign = true;
+                    PersistentStorage.SaveMedals(medals);
+                }
             }
 
             bannerText = text;
             state = endState;
             stateTimer = 0.35f;
+        }
+
+        private void BeginBossApproachTransition()
+        {
+            state = GameFlowState.StageTransition;
+            stateTimer = BossApproachSeconds;
+            transitionToBoss = true;
+            transitionTargetStageNumber = currentStageNumber;
+            transitionScrollFrom = GetCurrentStageScrollSpeed();
+            transitionScrollTo = currentStage.Boss != null ? currentStage.Boss.ArenaScrollSpeed : transitionScrollFrom;
+            transitionHudBlend = 0f;
+            activeEventType = RandomEventType.None;
+            activeEventTimer = 0f;
+            activeEventIntensity = 0f;
+            activeEventWarning = "THREAT APPROACH";
+            bossApproachTimer = BossApproachSeconds;
+            ResetRewindBuffer();
+        }
+
+        private void StartStageFromTransition(int stageNumber)
+        {
+            currentStageNumber = stageNumber;
+            currentStage = repository.GetStage(stageNumber);
+            currentSectionIndex = 0;
+            stageElapsedSeconds = 0f;
+            activeBoss = null;
+            activeEventType = RandomEventType.None;
+            activeEventTimer = 0f;
+            activeEventIntensity = 0f;
+            activeEventSpawnTimer = 0f;
+            activeEventWarning = string.Empty;
+            scheduledSpawns.Clear();
+            scheduledEvents.Clear();
+            PlayerStatus.PrepareStage(currentStage, false);
+            Player1.Instance.MakeInvulnerable(0.8f);
+            state = GameFlowState.Playing;
+            transitionHudBlend = 0f;
+            transitionToBoss = false;
+            bannerText = string.Empty;
+            ResetRewindBuffer();
+        }
+
+        private void CaptureRewindFrame(float deltaSeconds)
+        {
+            rewindCaptureTimer -= deltaSeconds;
+            if (rewindCaptureTimer > 0f || (state != GameFlowState.Playing && state != GameFlowState.Tutorial))
+                return;
+
+            rewindCaptureTimer = RewindSnapshotInterval;
+            rewindFrames.Add(CaptureRunSaveData(0, false));
+
+            int maxFrames = (int)MathF.Ceiling(RewindCapacitySeconds / RewindSnapshotInterval);
+            while (rewindFrames.Count > maxFrames)
+                rewindFrames.RemoveAt(0);
+        }
+
+        private void UpdateRewind(float deltaSeconds)
+        {
+            if (rewindFrames.Count <= 1 || rewindMeterSeconds <= 0f)
+            {
+                rewindHoldSeconds = 0f;
+                return;
+            }
+
+            PlayerStatus.RunProgress.MarkMedalIneligible();
+            rewindHoldSeconds += deltaSeconds;
+            float rewindSpeed = GetRewindSpeedMultiplier(rewindHoldSeconds);
+            float drainRate = MathHelper.Lerp(0.22f, 1.35f, MathHelper.Clamp(rewindSpeed / 2.5f, 0f, 1f));
+            drainRate *= 1f - MathHelper.Clamp(PlayerStatus.RunProgress.RewindEfficiency, 0f, 0.75f);
+            rewindMeterSeconds = Math.Max(0f, rewindMeterSeconds - deltaSeconds * drainRate);
+
+            rewindStepAccumulator += deltaSeconds * rewindSpeed;
+            while (rewindStepAccumulator >= RewindSnapshotInterval && rewindFrames.Count > 1)
+            {
+                rewindStepAccumulator -= RewindSnapshotInterval;
+                rewindFrames.RemoveAt(rewindFrames.Count - 1);
+            }
+
+            RestoreRunSaveData(rewindFrames[rewindFrames.Count - 1], false, true);
+            if (state == GameFlowState.Tutorial && tutorialStep == TutorialStep.Rewind && rewindHoldSeconds >= 0.18f)
+                AdvanceTutorialStep(TutorialStep.CollectPower);
+        }
+
+        private void ResetRewindBuffer()
+        {
+            rewindFrames.Clear();
+            rewindCaptureTimer = 0f;
+            rewindMeterSeconds = RewindCapacitySeconds;
+            rewindHoldSeconds = 0f;
+            rewindStepAccumulator = 0f;
+        }
+
+        private float GetTransitionProgress()
+        {
+            float duration = transitionToBoss ? BossApproachSeconds : StageTransitionSeconds;
+            if (duration <= 0f)
+                return 1f;
+
+            return 1f - MathHelper.Clamp(stateTimer / duration, 0f, 1f);
+        }
+
+        private float GetTransitionScrollSpeed()
+        {
+            float progress = GetTransitionProgress();
+            if (transitionToBoss)
+                return MathHelper.SmoothStep(transitionScrollFrom, transitionScrollTo, progress);
+
+            if (progress < 0.24f)
+                return MathHelper.Lerp(transitionScrollFrom, transitionScrollFrom * 0.78f, progress / 0.24f);
+
+            if (progress < 0.72f)
+            {
+                float phase = (progress - 0.24f) / 0.48f;
+                return MathHelper.SmoothStep(transitionScrollFrom * 0.78f, Math.Min(transitionScrollTo * 2.35f, 420f), phase);
+            }
+
+            return MathHelper.SmoothStep(Math.Min(transitionScrollTo * 2.35f, 420f), transitionScrollTo, (progress - 0.72f) / 0.28f);
+        }
+
+        private static float GetRewindSpeedMultiplier(float holdSeconds)
+        {
+            if (holdSeconds <= 0.35f)
+                return 0.2f;
+
+            if (holdSeconds >= 1.25f)
+                return 2.5f;
+
+            float t = (holdSeconds - 0.35f) / 0.9f;
+            return MathHelper.SmoothStep(0.2f, 2.5f, t);
+        }
+
+        private void UpdateTutorialStep(float deltaSeconds)
+        {
+            switch (tutorialStep)
+            {
+                case TutorialStep.Move:
+                    tutorialProgressSeconds = Input.GetMovementDirection().LengthSquared() > 0.01f ? tutorialProgressSeconds + deltaSeconds : 0f;
+                    if (tutorialProgressSeconds >= 0.25f)
+                        AdvanceTutorialStep(TutorialStep.Aim);
+                    break;
+
+                case TutorialStep.Aim:
+                    EnsureTutorialTarget(false);
+                    tutorialProgressSeconds = Input.GetAimDirection() != Vector2.Zero ? tutorialProgressSeconds + deltaSeconds : 0f;
+                    if (tutorialProgressSeconds >= 0.2f)
+                        AdvanceTutorialStep(TutorialStep.Fire);
+                    break;
+
+                case TutorialStep.Fire:
+                    EnsureTutorialTarget(false);
+                    if (!EntityManager.HasHostiles)
+                        AdvanceTutorialStep(TutorialStep.Rewind);
+                    break;
+
+                case TutorialStep.CollectPower:
+                    EnsureTutorialPickup();
+                    if (PlayerStatus.RunProgress.StoredUpgradeCharges > 0)
+                        AdvanceTutorialStep(TutorialStep.UpgradeDraft);
+                    break;
+
+                case TutorialStep.UpgradeDraft:
+                    if (state != GameFlowState.UpgradeDraft && PlayerStatus.RunProgress.StoredUpgradeCharges > 0)
+                        OpenUpgradeDraft(GameFlowState.Tutorial, true);
+                    break;
+
+                case TutorialStep.SwitchStyle:
+                    if (PlayerStatus.RunProgress.Weapons.OwnedStyles.Count > 1 && (Input.WasPreviousStylePressed() || Input.WasNextStylePressed()))
+                        AdvanceTutorialStep(TutorialStep.ShipsAndLives);
+                    break;
+
+                case TutorialStep.ShipsAndLives:
+                    if (Input.WasConfirmPressed() || Input.WasPrimaryActionPressed())
+                        AdvanceTutorialStep(TutorialStep.Complete);
+                    break;
+
+                case TutorialStep.Complete:
+                    options.TutorialCompleted = true;
+                    PersistentStorage.SaveOptions(options);
+                    if (tutorialReplayMode)
+                        EnterTitle(false);
+                    else
+                        BeginFreshCampaign();
+                    break;
+            }
+        }
+
+        private void AdvanceTutorialStep(TutorialStep nextStep)
+        {
+            tutorialStep = nextStep;
+            tutorialProgressSeconds = 0f;
+
+            if (nextStep == TutorialStep.Rewind)
+            {
+                EnsureTutorialTarget(true);
+                Player1.Instance.Position += new Vector2(80f, 0f);
+                Player1.Instance.ApplyKnockback(Vector2.Zero, 0f);
+            }
+        }
+
+        private void EnsureTutorialTarget(bool moving)
+        {
+            if (EntityManager.HasHostiles || currentStage == null || !repository.ArchetypesById.TryGetValue("Walker", out EnemyArchetypeDefinition archetype))
+                return;
+
+            Vector2 spawn = new Vector2(Game1.ScreenSize.X * 0.78f, Game1.ScreenSize.Y * 0.48f);
+            EntityManager.Add(new Enemy(
+                archetype,
+                spawn,
+                spawn.Y,
+                moving ? MovePattern.SineWave : MovePattern.TurretCarrier,
+                FirePattern.None,
+                moving ? 0.28f : 0.14f,
+                moving ? 28f : 8f,
+                moving ? 0.55f : 0.22f));
+        }
+
+        private void EnsureTutorialPickup()
+        {
+            if (EntityManager.Powerups.Any())
+                return;
+
+            EntityManager.Add(new PowerupPickup(Player1.Instance.Position + new Vector2(150f, -32f)));
+        }
+
+        private void OpenUpgradeDraft(GameFlowState returnState, bool tutorialMode)
+        {
+            if (PlayerStatus.RunProgress.StoredUpgradeCharges <= 0)
+                return;
+
+            draftCards.Clear();
+            draftCards.Add(BuildWeaponDraftCard());
+            if (tutorialMode)
+            {
+                draftCards.Add(CreateDraftCard(UpgradeCardType.MobilityTuning, "THRUSTER TUNE", "MOVE FASTER THROUGH THE FIELD", "#6EC1FF"));
+                draftCards.Add(CreateDraftCard(UpgradeCardType.RewindBattery, "REWIND CELL", "LOWER REWIND METER DRAIN", "#56F0FF"));
+            }
+            else
+            {
+                var pool = new List<UpgradeCardType>
+                {
+                    UpgradeCardType.MobilityTuning,
+                    UpgradeCardType.EmergencyReserve,
+                    UpgradeCardType.RewindBattery,
+                    UpgradeCardType.LuckyCore,
+                };
+
+                while (draftCards.Count < 3 && pool.Count > 0)
+                {
+                    int index = gameplayRandom.NextInt(0, pool.Count);
+                    UpgradeCardType type = pool[index];
+                    pool.RemoveAt(index);
+                    draftCards.Add(CreateDraftCard(type));
+                }
+            }
+
+            draftSelection = 0;
+            draftTimer = 3f;
+            draftReturnState = returnState;
+            draftFromTutorial = tutorialMode;
+            state = GameFlowState.UpgradeDraft;
+        }
+
+        private UpgradeDraftCard BuildWeaponDraftCard()
+        {
+            WeaponInventoryState inventory = PlayerStatus.RunProgress.Weapons;
+            WeaponStyleDefinition activeStyle = WeaponCatalog.GetStyle(inventory.ActiveStyle);
+            string description;
+            if (inventory.ActiveLevel < 3)
+            {
+                description = string.Concat("BOOST ", activeStyle.DisplayName, " TO LEVEL ", (inventory.ActiveLevel + 1).ToString());
+            }
+            else
+            {
+                WeaponStyleId nextStyle = WeaponCatalog.StyleOrder.FirstOrDefault(style => !inventory.OwnsStyle(style));
+                if (nextStyle != 0 && !inventory.OwnsStyle(nextStyle))
+                    description = string.Concat("UNLOCK ", WeaponCatalog.GetStyle(nextStyle).DisplayName, " AND AUTO-EQUIP IT");
+                else
+                    description = string.Concat("RAISE ", activeStyle.DisplayName, " TO RANK ", (inventory.ActiveRank + 1).ToString());
+            }
+
+            return new UpgradeDraftCard
+            {
+                Type = UpgradeCardType.WeaponSurge,
+                StyleId = inventory.ActiveStyle,
+                Title = string.Concat(activeStyle.DisplayName, " SURGE"),
+                Description = description,
+                AccentColor = activeStyle.AccentColor,
+            };
+        }
+
+        private UpgradeDraftCard CreateDraftCard(UpgradeCardType type)
+        {
+            switch (type)
+            {
+                case UpgradeCardType.MobilityTuning:
+                    return CreateDraftCard(type, "THRUSTER TUNE", "INCREASE SHIP MOVE SPEED FOR THE RUN", "#6EC1FF");
+                case UpgradeCardType.EmergencyReserve:
+                    return CreateDraftCard(type, "EMERGENCY RESERVE", "GAIN +1 SHIP NOW AND ON EACH NEW LIFE", "#FFB347");
+                case UpgradeCardType.RewindBattery:
+                    return CreateDraftCard(type, "REWIND CELL", "LOWER REWIND METER DRAIN AND REFILL IT", "#56F0FF");
+                case UpgradeCardType.LuckyCore:
+                    return CreateDraftCard(type, "LUCKY CORE", "IMPROVE DROP MOMENTUM AND EARN SCORE", "#7AE582");
+                default:
+                    return BuildWeaponDraftCard();
+            }
+        }
+
+        private static UpgradeDraftCard CreateDraftCard(UpgradeCardType type, string title, string description, string accent)
+        {
+            return new UpgradeDraftCard
+            {
+                Type = type,
+                Title = title,
+                Description = description,
+                AccentColor = accent,
+            };
+        }
+
+        private void ApplyDraftSelection(int selection)
+        {
+            if (draftCards.Count == 0)
+            {
+                FinishUpgradeDraft();
+                return;
+            }
+
+            int safeSelection = Math.Clamp(selection, 0, draftCards.Count - 1);
+            UpgradeDraftCard card = draftCards[safeSelection];
+            if (!PlayerStatus.RunProgress.TryConsumeUpgradeCharge())
+            {
+                FinishUpgradeDraft();
+                return;
+            }
+
+            switch (card.Type)
+            {
+                case UpgradeCardType.WeaponSurge:
+                    PlayerStatus.RunProgress.ApplyWeaponUpgrade();
+                    Player1.Instance.RefreshLoadout();
+                    break;
+                case UpgradeCardType.MobilityTuning:
+                    PlayerStatus.RunProgress.ApplyMobilityUpgrade();
+                    break;
+                case UpgradeCardType.EmergencyReserve:
+                    PlayerStatus.RunProgress.ApplyEmergencyReserveUpgrade();
+                    PlayerStatus.GrantShips(1);
+                    break;
+                case UpgradeCardType.RewindBattery:
+                    PlayerStatus.RunProgress.ApplyRewindUpgrade();
+                    rewindMeterSeconds = RewindCapacitySeconds;
+                    break;
+                case UpgradeCardType.LuckyCore:
+                    PlayerStatus.RunProgress.ApplyEconomyUpgrade();
+                    PlayerStatus.AddPoints(250);
+                    break;
+            }
+
+            if (draftFromTutorial && PlayerStatus.RunProgress.Weapons.OwnedStyles.Count < 2)
+            {
+                PlayerStatus.RunProgress.ApplyWeaponUpgrade();
+                Player1.Instance.RefreshLoadout();
+            }
+
+            Sound.Spawn.Play(0.18f, 0.15f, 0f);
+            EntityManager.SpawnShockwave(Player1.Instance.Position, ColorUtil.ParseHex(card.AccentColor, Color.Orange) * 0.16f, 14f, 72f, 0.22f);
+
+            if (draftFromTutorial && tutorialStep == TutorialStep.UpgradeDraft)
+                AdvanceTutorialStep(TutorialStep.SwitchStyle);
+
+            if (PlayerStatus.RunProgress.StoredUpgradeCharges > 0)
+            {
+                OpenUpgradeDraft(draftReturnState, false);
+                return;
+            }
+
+            FinishUpgradeDraft();
+        }
+
+        private void FinishUpgradeDraft()
+        {
+            draftCards.Clear();
+            draftSelection = 0;
+            draftTimer = 0f;
+            bool returnToTutorial = draftFromTutorial;
+            draftFromTutorial = false;
+            state = draftReturnState;
+            if (returnToTutorial && tutorialStep == TutorialStep.UpgradeDraft)
+                AdvanceTutorialStep(TutorialStep.SwitchStyle);
         }
         private void ScheduleDueSections()
         {
@@ -461,7 +1317,7 @@ namespace SpaceBurst
         private void ScheduleSection(SectionDefinition section)
         {
             for (int groupIndex = 0; groupIndex < section.Groups.Count; groupIndex++)
-                ScheduleGroup(section.StartSeconds, section.Groups[groupIndex]);
+                ScheduleGroup(section.StartSeconds, section, section.Groups[groupIndex]);
 
             if (section.EventWindows == null)
                 return;
@@ -469,7 +1325,7 @@ namespace SpaceBurst
             for (int i = 0; i < section.EventWindows.Count; i++)
             {
                 RandomEventWindowDefinition window = section.EventWindows[i];
-                float triggerOffset = window.StartSeconds + (float)random.NextDouble() * Math.Max(0f, window.DurationSeconds * 0.7f);
+                float triggerOffset = window.StartSeconds + gameplayRandom.NextFloat(0f, Math.Max(0f, window.DurationSeconds * 0.7f));
                 scheduledEvents.Add(new ScheduledEvent
                 {
                     TriggerAtSeconds = section.StartSeconds + triggerOffset,
@@ -480,10 +1336,14 @@ namespace SpaceBurst
             scheduledEvents.Sort((left, right) => left.TriggerAtSeconds.CompareTo(right.TriggerAtSeconds));
         }
 
-        private void ScheduleGroup(float stageStartSeconds, SpawnGroupDefinition group)
+        private void ScheduleGroup(float stageStartSeconds, SectionDefinition section, SpawnGroupDefinition group)
         {
             EnemyArchetypeDefinition archetype = repository.ArchetypesById[group.ArchetypeId];
             float targetY = LevelMath.ResolveTargetY(Game1.ScreenSize.ToSystemNumerics(), group);
+            float sectionSpeedMultiplier = section != null && section.EnemySpeedMultiplier > 0f
+                ? section.EnemySpeedMultiplier
+                : GetDefaultEnemySpeedMultiplier(currentSectionIndex);
+            float runPressureMultiplier = 1f + MathHelper.Clamp(PlayerStatus.RunProgress.PowerBudget * 0.02f, 0f, 0.32f);
 
             for (int index = 0; index < group.Count; index++)
             {
@@ -497,6 +1357,7 @@ namespace SpaceBurst
                     FirePattern = group.FirePatternOverride ?? archetype.FirePattern,
                     Amplitude = group.Amplitude > 0f ? group.Amplitude : archetype.MovementAmplitude,
                     Frequency = group.Frequency > 0f ? group.Frequency : archetype.MovementFrequency,
+                    SpeedMultiplier = group.SpeedMultiplier * sectionSpeedMultiplier * runPressureMultiplier,
                 });
             }
 
@@ -517,7 +1378,7 @@ namespace SpaceBurst
                     scheduledSpawn.TargetY,
                     scheduledSpawn.MovePattern,
                     scheduledSpawn.FirePattern,
-                    scheduledSpawn.Group.SpeedMultiplier,
+                    scheduledSpawn.SpeedMultiplier,
                     scheduledSpawn.Amplitude,
                     scheduledSpawn.Frequency));
             }
@@ -581,24 +1442,24 @@ namespace SpaceBurst
             switch (eventType)
             {
                 case RandomEventType.MeteorShower:
-                    position = new Vector2(Game1.ScreenSize.X + 40f + random.Next(0, 160), random.Next(0, Game1.VirtualHeight / 2));
-                    velocity = new Vector2(-320f - 60f * intensity, 180f + random.Next(-40, 80));
+                    position = new Vector2(Game1.ScreenSize.X + 40f + gameplayRandom.NextInt(0, 160), gameplayRandom.NextInt(0, Game1.VirtualHeight / 2));
+                    velocity = new Vector2(-320f - 60f * intensity, 180f + gameplayRandom.NextInt(-40, 80));
                     sprite = CreateEventProjectileDefinition("#B56A46", "#EABF8F", "#FFF1C9", new[] { ".#.", "###", ".#." });
                     impact = new ImpactProfileDefinition { Name = "Meteor", Kernel = ImpactKernelShape.Blast5, BaseCellsRemoved = 5, BonusCellsPerDamage = 1, SplashRadius = 1, SplashPercent = 35, DebrisBurstCount = 10, DebrisSpeed = 150f };
                     damage = 2;
                     scale = 1.4f;
                     break;
                 case RandomEventType.CometSwarm:
-                    position = new Vector2(Game1.ScreenSize.X + 40f + random.Next(0, 180), random.Next(40, Game1.VirtualHeight - 40));
-                    velocity = new Vector2(-420f - 100f * intensity, random.Next(-80, 81));
+                    position = new Vector2(Game1.ScreenSize.X + 40f + gameplayRandom.NextInt(0, 180), gameplayRandom.NextInt(40, Game1.VirtualHeight - 40));
+                    velocity = new Vector2(-420f - 100f * intensity, gameplayRandom.NextInt(-80, 81));
                     sprite = CreateEventProjectileDefinition("#DFF4FF", "#8FD3FF", "#FFF0AF", new[] { "##", "##" });
                     impact = new ImpactProfileDefinition { Name = "Comet", Kernel = ImpactKernelShape.Diamond3, BaseCellsRemoved = 4, BonusCellsPerDamage = 1, SplashRadius = 0, SplashPercent = 0, DebrisBurstCount = 8, DebrisSpeed = 180f };
                     damage = 2;
                     scale = 1.1f;
                     break;
                 default:
-                    position = new Vector2(Game1.ScreenSize.X + 30f + random.Next(0, 120), random.Next(0, Game1.VirtualHeight));
-                    velocity = new Vector2(-210f - 40f * intensity, random.Next(-30, 31));
+                    position = new Vector2(Game1.ScreenSize.X + 30f + gameplayRandom.NextInt(0, 120), gameplayRandom.NextInt(0, Game1.VirtualHeight));
+                    velocity = new Vector2(-210f - 40f * intensity, gameplayRandom.NextInt(-30, 31));
                     sprite = CreateEventProjectileDefinition("#B7C6D8", "#6D859A", "#EAF6FF", new[] { "##.", ".##" });
                     impact = new ImpactProfileDefinition { Name = "Debris", Kernel = ImpactKernelShape.Cross3, BaseCellsRemoved = 3, BonusCellsPerDamage = 1, SplashRadius = 0, SplashPercent = 0, DebrisBurstCount = 6, DebrisSpeed = 110f };
                     damage = 1;
@@ -620,11 +1481,14 @@ namespace SpaceBurst
         private void DrainBossSupportQueue()
         {
             while (activeBoss != null && activeBoss.TryConsumeSupportGroup(out SpawnGroupDefinition group))
-                ScheduleGroup(stageElapsedSeconds + 0.35f, group);
+                ScheduleGroup(stageElapsedSeconds + 0.35f, null, group);
         }
 
         private void UnlockStageMedals()
         {
+            if (!PlayerStatus.RunProgress.MedalEligible)
+                return;
+
             medals.UnlockStageClear(currentStageNumber);
             if (!stageHadDeath)
                 medals.UnlockNoDeath(currentStageNumber);
@@ -638,10 +1502,20 @@ namespace SpaceBurst
             switch (selection)
             {
                 case 1:
+                    slotReturnState = GameFlowState.Title;
+                    slotSelection = 0;
+                    state = GameFlowState.LoadSlots;
+                    break;
+                case 2:
+                    slotReturnState = GameFlowState.Title;
+                    optionsSelection = 0;
+                    state = GameFlowState.Options;
+                    break;
+                case 3:
                     helpReturnState = GameFlowState.Title;
                     state = GameFlowState.Help;
                     break;
-                case 2:
+                case 4:
                     Game1.Instance.Exit();
                     break;
                 default:
@@ -678,45 +1552,119 @@ namespace SpaceBurst
         {
             return new List<UiButton>
             {
-                CreateButton("START CAMPAIGN", 0, 3),
-                CreateButton("HELP", 1, 3),
-                CreateButton("QUIT", 2, 3),
+                CreateButton("START CAMPAIGN", 0, 5),
+                CreateButton("LOAD GAME", 1, 5),
+                CreateButton("OPTIONS", 2, 5),
+                CreateButton("HELP", 3, 5),
+                CreateButton("QUIT", 4, 5),
             };
         }
 
         private List<UiButton> GetPauseButtons()
         {
-            return new List<UiButton>
+            bool tutorialPause = pauseReturnState == GameFlowState.Tutorial;
+            int total = tutorialPause ? 7 : 6;
+            var buttons = new List<UiButton>
             {
-                CreateButton("RESUME", 0, 3),
-                CreateButton("HELP", 1, 3),
-                CreateButton("QUIT TO TITLE", 2, 3),
+                CreateButton("RESUME", 0, total),
+                CreateButton("SAVE GAME", 1, total),
+                CreateButton("LOAD GAME", 2, total),
+                CreateButton("OPTIONS", 3, total),
+                CreateButton("HELP", 4, total),
             };
+
+            if (tutorialPause)
+                buttons.Add(CreateButton("SKIP TUTORIAL", 5, total));
+
+            buttons.Add(CreateButton("QUIT TO TITLE", total - 1, total));
+            return buttons;
         }
 
         private UiButton CreateButton(string text, int index, int total)
         {
             Vector2 center = Game1.ScreenSize / 2f;
-            int width = 430;
-            int height = 58;
+            int width = 440;
+            int height = total > 6 ? 48 : 54;
+            int spacing = total > 6 ? 12 : 18;
             int x = (int)center.X - width / 2;
-            int y = (int)center.Y - 12 + index * 78 - (total - 1) * 39;
+            int totalHeight = total * height + (total - 1) * spacing;
+            int top = (Game1.VirtualHeight - totalHeight) / 2 + 34;
+            int y = top + index * (height + spacing);
             return new UiButton(new Rectangle(x, y, width, height), text);
+        }
+
+        private string[] GetOptionRows()
+        {
+            return new[]
+            {
+                string.Concat("DISPLAY MODE  ", options.DisplayMode == DesktopDisplayMode.BorderlessFullscreen ? "BORDERLESS FULLSCREEN" : "WINDOWED"),
+                string.Concat("VISUAL PRESET  ", options.VisualPreset.ToString().ToUpperInvariant()),
+                string.Concat("BLOOM  ", options.EnableBloom ? "ON" : "OFF"),
+                string.Concat("SHOCKWAVES  ", options.EnableShockwaves ? "ON" : "OFF"),
+                string.Concat("NEON OUTLINES  ", options.EnableNeonOutlines ? "ON" : "OFF"),
+                string.Concat("AUTO DRAFT  ", options.AutoUpgradeDraft ? "ON" : "OFF"),
+                string.Concat("HELP HINTS  ", options.ShowHelpHints ? "ON" : "OFF"),
+            };
+        }
+
+        private void DrawBackdrop(SpriteBatch spriteBatch, Texture2D pixel, float strength, string headline = "")
+        {
+            Rectangle full = new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight);
+            Color baseColor = Color.Lerp(new Color(4, 8, 18), new Color(10, 18, 36), MathHelper.Clamp(strength, 0f, 1f));
+            spriteBatch.Draw(pixel, full, baseColor);
+
+            float time = (float)Game1.GameTime.TotalGameTime.TotalSeconds;
+            int streakCount = 28 + (int)(strength * 18f);
+            for (int i = 0; i < 84; i++)
+            {
+                float xSeed = MathF.Abs(MathF.Sin(i * 12.913f + 0.71f));
+                float ySeed = MathF.Abs(MathF.Sin(i * 31.137f + 2.31f));
+                float twinkle = 0.4f + 0.6f * MathF.Abs(MathF.Sin(time * (0.8f + i * 0.03f) + i));
+                int x = (int)(xSeed * (Game1.VirtualWidth - 8));
+                int y = (int)(18f + ySeed * (Game1.VirtualHeight - 36f));
+                int size = i % 9 == 0 ? 3 : 2;
+                spriteBatch.Draw(pixel, new Rectangle(x, y, size, size), Color.White * (0.18f + twinkle * 0.24f * strength));
+            }
+
+            for (int i = 0; i < streakCount; i++)
+            {
+                float ySeed = MathF.Abs(MathF.Sin(i * 23.87f + 0.42f));
+                float xSeed = MathF.Abs(MathF.Sin(i * 8.27f + 0.19f));
+                float width = 38f + xSeed * 108f;
+                float x = Game1.VirtualWidth - ((time * (40f + strength * 120f) + xSeed * (Game1.VirtualWidth + width)) % (Game1.VirtualWidth + width));
+                float y = 40f + ySeed * (Game1.VirtualHeight - 80f);
+                spriteBatch.Draw(pixel, new Rectangle((int)x, (int)y, (int)width, 2), new Color(110, 193, 255) * (0.08f + 0.12f * strength));
+            }
+
+            spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight / 2), Color.White * 0.025f);
+            spriteBatch.Draw(pixel, new Rectangle(0, (int)(Game1.VirtualHeight * 0.58f), Game1.VirtualWidth, (int)(Game1.VirtualHeight * 0.42f)), new Color(49, 88, 132) * 0.18f);
+
+            if (!string.IsNullOrEmpty(headline))
+                DrawCenteredText(spriteBatch, pixel, headline, Game1.ScreenSize.X / 2f, 26f, Color.White * 0.2f, 1.1f);
         }
         private void DrawTitle(SpriteBatch spriteBatch, Texture2D pixel)
         {
-            DrawCenteredText(spriteBatch, pixel, "SPACEBURST", Game1.ScreenSize.X / 2f, 120f, Color.White, 4f);
-            DrawCenteredText(spriteBatch, pixel, "PROCEDURAL SIDE SCROLLER", Game1.ScreenSize.X / 2f, 182f, Color.White * 0.68f, 2f);
-            DrawCenteredText(spriteBatch, pixel, string.Concat("HIGH ", PlayerStatus.HighScore.ToString()), Game1.ScreenSize.X / 2f, 230f, Color.White * 0.85f, 2f);
+            DrawBackdrop(spriteBatch, pixel, 0.92f, "SEAMLESS CAMPAIGN WITH REWIND");
+
+            Rectangle shell = new Rectangle(150, 62, Game1.VirtualWidth - 300, Game1.VirtualHeight - 124);
+            DrawPanel(spriteBatch, pixel, shell, Color.Black * 0.18f, Color.White * 0.15f);
+
+            DrawCenteredText(spriteBatch, pixel, "SPACEBURST", Game1.ScreenSize.X / 2f, 88f, Color.White, 4f);
+            DrawCenteredText(spriteBatch, pixel, "PROCEDURAL SIDE SCROLLER", Game1.ScreenSize.X / 2f, 148f, Color.White * 0.7f, 1.9f);
+            DrawCenteredText(spriteBatch, pixel, string.Concat("HIGH ", PlayerStatus.HighScore.ToString()), Game1.ScreenSize.X / 2f, 186f, Color.White * 0.84f, 1.7f);
 
             List<UiButton> buttons = GetTitleButtons();
             for (int i = 0; i < buttons.Count; i++)
                 DrawButton(spriteBatch, pixel, buttons[i], i == titleSelection);
 
+            if (!options.TutorialCompleted)
+                DrawCenteredText(spriteBatch, pixel, "FIRST LAUNCH STARTS THE TUTORIAL PROLOGUE", Game1.ScreenSize.X / 2f, 230f, Color.Orange * 0.9f, 1.25f);
+
             string medalText = medals.CampaignClear
                 ? (medals.PerfectCampaign ? "PERFECT CAMPAIGN MEDAL UNLOCKED" : "CAMPAIGN CLEAR MEDAL UNLOCKED")
                 : "NO CAMPAIGN MEDALS YET";
-            DrawCenteredText(spriteBatch, pixel, medalText, Game1.ScreenSize.X / 2f, 520f, Color.White * 0.65f, 1.5f);
+            DrawCenteredText(spriteBatch, pixel, medalText, Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 116f, Color.White * 0.65f, 1.35f);
+            DrawCenteredText(spriteBatch, pixel, "ENTER CONFIRM  F1 HELP  ARROWS OR POINTER NAVIGATE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 82f, Color.White * 0.58f, 1.15f);
         }
 
         private void DrawPause(SpriteBatch spriteBatch, Texture2D pixel)
@@ -726,33 +1674,96 @@ namespace SpaceBurst
             List<UiButton> buttons = GetPauseButtons();
             for (int i = 0; i < buttons.Count; i++)
                 DrawButton(spriteBatch, pixel, buttons[i], i == pauseSelection);
+            if (pauseReturnState == GameFlowState.Tutorial)
+                DrawCenteredText(spriteBatch, pixel, "SKIP TUTORIAL STARTS THE REAL CAMPAIGN", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 92f, Color.Orange * 0.8f, 1.2f);
+        }
+
+        private void DrawOptions(SpriteBatch spriteBatch, Texture2D pixel)
+        {
+            if (slotReturnState == GameFlowState.Title)
+                DrawBackdrop(spriteBatch, pixel, 0.8f, "CONFIGURE VISUALS AND DISPLAY");
+            else
+                spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), Color.Black * 0.55f);
+
+            spriteBatch.Draw(pixel, new Rectangle(90, 90, Game1.VirtualWidth - 180, Game1.VirtualHeight - 180), Color.Black * 0.75f);
+            DrawCenteredText(spriteBatch, pixel, "OPTIONS", Game1.ScreenSize.X / 2f, 112f, Color.White, 3f);
+
+            string[] rows = GetOptionRows();
+
+            for (int i = 0; i < rows.Length; i++)
+            {
+                Rectangle rowBounds = new Rectangle(180, 182 + i * 56, 920, 42);
+                DrawPanel(spriteBatch, pixel, rowBounds, i == optionsSelection ? Color.White * 0.12f : Color.White * 0.05f, i == optionsSelection ? Color.Orange : Color.White * 0.2f);
+                BitmapFontRenderer.Draw(spriteBatch, pixel, rows[i], new Vector2(rowBounds.X + 18f, rowBounds.Y + 8f), Color.White, 1.45f);
+            }
+
+            DrawCenteredText(spriteBatch, pixel, "LEFT RIGHT OR ENTER TO CHANGE  ESC TO CLOSE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 120f, Color.White * 0.75f, 1.3f);
+        }
+
+        private void DrawSaveSlots(SpriteBatch spriteBatch, Texture2D pixel, bool saving)
+        {
+            if (slotReturnState == GameFlowState.Title)
+                DrawBackdrop(spriteBatch, pixel, 0.74f, saving ? "STORE A RUN SNAPSHOT" : "RESTORE A RUN SNAPSHOT");
+            else
+                spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), Color.Black * 0.55f);
+
+            spriteBatch.Draw(pixel, new Rectangle(90, 90, Game1.VirtualWidth - 180, Game1.VirtualHeight - 180), Color.Black * 0.75f);
+            DrawCenteredText(spriteBatch, pixel, saving ? "SAVE SLOTS" : "LOAD SLOTS", Game1.ScreenSize.X / 2f, 112f, Color.White, 3f);
+
+            SaveSlotSummary[] summaries = PersistentStorage.LoadSaveSlotSummaries();
+            for (int i = 0; i < 3; i++)
+            {
+                SaveSlotSummary summary = summaries[i];
+                Rectangle rowBounds = new Rectangle(180, 180 + i * 88, 920, 68);
+                DrawPanel(spriteBatch, pixel, rowBounds, i == slotSelection ? Color.White * 0.12f : Color.White * 0.05f, i == slotSelection ? Color.Orange : Color.White * 0.2f);
+                string line = summary.HasData
+                    ? string.Concat("SLOT ", (i + 1).ToString(), "  STAGE ", summary.StageNumber.ToString("00"), "  SCORE ", summary.Score.ToString(), "  ", summary.ActiveStyle)
+                    : string.Concat("SLOT ", (i + 1).ToString(), "  EMPTY");
+                BitmapFontRenderer.Draw(spriteBatch, pixel, line, new Vector2(rowBounds.X + 16f, rowBounds.Y + 10f), Color.White, 1.5f);
+                if (summary.HasData && !string.IsNullOrWhiteSpace(summary.SavedAtUtc))
+                    BitmapFontRenderer.Draw(spriteBatch, pixel, summary.SavedAtUtc, new Vector2(rowBounds.X + 16f, rowBounds.Y + 38f), Color.White * 0.65f, 1.1f);
+            }
+
+            Rectangle backBounds = new Rectangle(180, 180 + 3 * 88, 920, 58);
+            DrawPanel(spriteBatch, pixel, backBounds, slotSelection == 3 ? Color.White * 0.12f : Color.White * 0.05f, slotSelection == 3 ? Color.Orange : Color.White * 0.2f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, "BACK", new Vector2(backBounds.X + 16f, backBounds.Y + 12f), Color.White, 1.5f);
+
+            DrawCenteredText(spriteBatch, pixel, saving ? "ENTER TO OVERWRITE SLOT" : "ENTER TO LOAD SLOT", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 120f, Color.White * 0.75f, 1.4f);
         }
 
         private void DrawHelp(SpriteBatch spriteBatch, Texture2D pixel)
         {
+            if (helpReturnState == GameFlowState.Title)
+                DrawBackdrop(spriteBatch, pixel, 0.78f, "RUN THE TUTORIAL AGAIN FROM PAGE 1");
+            else
+                spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), Color.Black * 0.55f);
+
             spriteBatch.Draw(pixel, new Rectangle(90, 90, Game1.VirtualWidth - 180, Game1.VirtualHeight - 180), Color.Black * 0.75f);
             DrawCenteredText(spriteBatch, pixel, "HELP", Game1.ScreenSize.X / 2f, 112f, Color.White, 3f);
-            DrawCenteredText(spriteBatch, pixel, string.Concat("PAGE ", (helpPageIndex + 1).ToString(), " / 4"), Game1.ScreenSize.X / 2f, 152f, Color.White * 0.7f, 1.5f);
+            DrawCenteredText(spriteBatch, pixel, string.Concat("PAGE ", (helpPageIndex + 1).ToString(), " / 5"), Game1.ScreenSize.X / 2f, 152f, Color.White * 0.7f, 1.5f);
 
             switch (helpPageIndex)
             {
                 case 0:
-                    DrawHelpPage(spriteBatch, pixel, "CONTROLS\nWASD MOVE  ARROWS AIM  SPACE FIRE\nQ E SWITCH STYLE  ESC PAUSE  F1 HELP\nANDROID LEFT PAD MOVE  RIGHT PAD AIM FIRE", 186f);
+                    DrawHelpPage(spriteBatch, pixel, "CONTROLS\nWASD MOVE  ARROWS AIM  SPACE FIRE\nQ E SWITCH STYLE  R REWIND  ESC PAUSE  F1 HELP\nPRESS ENTER HERE TO REPLAY THE TUTORIAL", 186f);
                     break;
                 case 1:
-                    DrawHelpPage(spriteBatch, pixel, "POWERUPS\nP DROPS FROM ELIGIBLE ENEMIES\nLEVELS 0 TO 3 UPGRADE THE ACTIVE STYLE\nAFTER LEVEL 3 THE NEXT P UNLOCKS THE NEXT STYLE\nPOWERUPS PERSIST ACROSS STAGES IN THE RUN", 186f);
+                    DrawHelpPage(spriteBatch, pixel, "POWER CORES\nP DROPS BECOME STORED UPGRADE CHARGES\nCHARGES ARE SPENT DURING STAGE TRANSITIONS\nIF TIME RUNS OUT THE HIGHLIGHTED CARD IS AUTO PICKED\nCHARGES PERSIST ACROSS STAGES IN THE RUN", 186f);
                     DrawWeaponIcons(spriteBatch, pixel, 410f, 0, 5);
                     break;
                 case 2:
-                    DrawHelpPage(spriteBatch, pixel, "LIVES AND SHIPS\nSHIPS GIVE IN PLACE RESPAWNS\nWHEN SHIPS HIT ZERO THE NEXT DEATH COSTS A LIFE\nLOSING A LIFE RESTARTS THE WHOLE STAGE\nDEATH ALSO WEAKENS YOUR CURRENT WEAPON STYLE", 186f);
+                    DrawHelpPage(spriteBatch, pixel, "STYLE LADDER\nLEVELS 0 TO 3 IMPROVE THE CURRENT STYLE\nAFTER LEVEL 3 NEW SURGES UNLOCK MORE STYLES\nFURTHER SURGES RAISE STYLE RANKS WITH DIMINISHING RETURNS\nSWAP OWNED STYLES ANY TIME WITH Q AND E", 186f);
                     DrawWeaponIcons(spriteBatch, pixel, 410f, 5, 5);
                     break;
+                case 3:
+                    DrawHelpPage(spriteBatch, pixel, "LIVES AND SHIPS\nSHIPS ARE YOUR IN PLACE RESPAWNS\nIF SHIPS HIT ZERO THE NEXT DEATH COSTS A LIFE\nLOSING A LIFE RESTARTS THE WHOLE STAGE\nDEATH ALSO WEAKENS YOUR CURRENT LOADOUT", 186f);
+                    break;
                 default:
-                    DrawHelpPage(spriteBatch, pixel, "RANDOM EVENTS\nMETEOR SHOWER  DEBRIS DRIFT  COMET SWARM  SOLAR FLARE\nWATCH THE HUD ALERTS AND COLOR SHIFTS\nTHE PITY BAR SHOWS POWERUP DROP MOMENTUM", 186f);
+                    DrawHelpPage(spriteBatch, pixel, "FX AND REWIND\nHOLD R TO REWIND 8 SECONDS OF GAMEPLAY\nREWIND STARTS SLOW AND ACCELERATES THE LONGER YOU HOLD\nLOADS AND REWINDS DISABLE MEDALS FOR THE RUN\nLOW STANDARD AND NEON VISUAL PRESETS ARE IN OPTIONS", 186f);
                     break;
             }
 
-            DrawCenteredText(spriteBatch, pixel, "LEFT RIGHT TO CHANGE PAGE  ENTER ESC F1 TO CLOSE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 120f, Color.White * 0.75f, 1.5f);
+            DrawCenteredText(spriteBatch, pixel, helpPageIndex == 0 ? "LEFT RIGHT TO CHANGE PAGE  ENTER TO REPLAY TUTORIAL  ESC TO CLOSE" : "LEFT RIGHT TO CHANGE PAGE  ENTER ESC F1 TO CLOSE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 120f, Color.White * 0.75f, 1.35f);
         }
 
         private void DrawWeaponIcons(SpriteBatch spriteBatch, Texture2D pixel, float y, int startIndex, int count)
@@ -778,52 +1789,92 @@ namespace SpaceBurst
 
         private void DrawHud(SpriteBatch spriteBatch, Texture2D pixel)
         {
-            DrawPanel(spriteBatch, pixel, new Rectangle(12, 10, 320, 88), Color.Black * 0.22f, Color.White * 0.18f);
-            DrawPanel(spriteBatch, pixel, new Rectangle(Game1.VirtualWidth - 356, 10, 344, 88), Color.Black * 0.22f, Color.White * 0.18f);
-            DrawPanel(spriteBatch, pixel, new Rectangle(344, 10, Game1.VirtualWidth - 688, 88), Color.Black * 0.18f, Color.White * 0.14f);
+            const int margin = 12;
+            const int gap = 10;
+            const int top = 10;
+            const int height = 88;
+            const int leftWidth = 206;
+            const int styleWidth = 340;
+            const int stageWidth = 172;
+            const int pityWidth = 164;
+            int rightWidth = Game1.VirtualWidth - margin * 2 - gap * 4 - leftWidth - styleWidth - stageWidth - pityWidth;
 
-            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("LIVES ", PlayerStatus.Lives.ToString()), new Vector2(24f, 20f), Color.White, 2f);
-            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("SHIPS ", PlayerStatus.Ships.ToString()), new Vector2(24f, 46f), Color.White, 2f);
-            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("SCORE ", PlayerStatus.Score.ToString()), new Vector2(Game1.VirtualWidth - 338f, 20f), Color.White, 2f);
-            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("MULTI ", PlayerStatus.Multiplier.ToString()), new Vector2(Game1.VirtualWidth - 338f, 46f), Color.White, 2f);
+            Rectangle livesBounds = new Rectangle(margin, top, leftWidth, height);
+            Rectangle styleBounds = new Rectangle(livesBounds.Right + gap, top, styleWidth, height);
+            Rectangle stageBounds = new Rectangle(styleBounds.Right + gap, top, stageWidth, height);
+            Rectangle pityBounds = new Rectangle(stageBounds.Right + gap, top, pityWidth, height);
+            Rectangle scoreBounds = new Rectangle(pityBounds.Right + gap, top, rightWidth, height);
 
-            DrawCenteredText(spriteBatch, pixel, string.Concat("STAGE ", currentStageNumber.ToString("00")), Game1.ScreenSize.X / 2f, 18f, Color.White, 1.8f);
-            DrawStyleHud(spriteBatch, pixel);
+            DrawPanel(spriteBatch, pixel, livesBounds, Color.Black * 0.22f, Color.White * 0.18f);
+            DrawPanel(spriteBatch, pixel, styleBounds, Color.Black * 0.18f, Color.White * 0.14f);
+            DrawPanel(spriteBatch, pixel, stageBounds, Color.Black * 0.18f, Color.White * 0.14f);
+            DrawPanel(spriteBatch, pixel, pityBounds, Color.Black * 0.18f, Color.White * 0.14f);
+            DrawPanel(spriteBatch, pixel, scoreBounds, Color.Black * 0.22f, Color.White * 0.18f);
 
-            if (!string.IsNullOrEmpty(activeEventWarning))
-                DrawCenteredText(spriteBatch, pixel, activeEventWarning, Game1.ScreenSize.X / 2f, 70f, Color.Orange, 1.4f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("LIVES ", PlayerStatus.Lives.ToString()), new Vector2(livesBounds.X + 12f, livesBounds.Y + 12f), Color.White, 2f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("SHIPS ", PlayerStatus.Ships.ToString()), new Vector2(livesBounds.X + 12f, livesBounds.Y + 38f), Color.White, 2f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("SAFE ", Math.Max(0f, Player1.Instance.HullRatio * 100f).ToString("0"), "%"), new Vector2(livesBounds.X + 12f, livesBounds.Bottom - 22f), Color.White * 0.55f, 1.15f);
+
+            DrawStyleHud(spriteBatch, pixel, styleBounds);
+
+            string stageLabel = state switch
+            {
+                GameFlowState.Tutorial => "TUTORIAL",
+                GameFlowState.UpgradeDraft => "UPGRADE",
+                _ when state == GameFlowState.StageTransition && transitionToBoss => "BOSS RUN",
+                _ when state == GameFlowState.StageTransition && transitionTargetStageNumber > currentStageNumber => string.Concat("JUMP ", transitionTargetStageNumber.ToString("00")),
+                _ => string.Concat("STAGE ", currentStageNumber.ToString("00")),
+            };
+
+            DrawCenteredText(spriteBatch, pixel, stageLabel, stageBounds.Center.X, stageBounds.Y + 14f, Color.White, 1.7f);
+            string stageSubLabel = state == GameFlowState.StageTransition
+                ? (transitionToBoss ? "THREAT LOCK" : "FTL TRANSIT")
+                : (!string.IsNullOrEmpty(activeEventWarning) ? activeEventWarning : (state == GameFlowState.Tutorial ? tutorialStep.ToString().ToUpperInvariant() : currentStage?.Name?.ToUpperInvariant() ?? "RUN"));
+            DrawCenteredText(spriteBatch, pixel, stageSubLabel, stageBounds.Center.X, stageBounds.Y + 46f, !string.IsNullOrEmpty(activeEventWarning) ? Color.Orange : Color.White * 0.7f, 1.08f);
+
+            BitmapFontRenderer.Draw(spriteBatch, pixel, "PITY", new Vector2(pityBounds.X + 12f, pityBounds.Y + 10f), Color.White, 1.25f);
+            DrawBar(spriteBatch, pixel, new Rectangle(pityBounds.X + 12, pityBounds.Y + 34, pityBounds.Width - 24, 12), PlayerStatus.RunProgress.Powerups.PityMeter, Color.Orange);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("CHARGES ", PlayerStatus.RunProgress.StoredUpgradeCharges.ToString()), new Vector2(pityBounds.X + 12f, pityBounds.Y + 54f), Color.White * 0.78f, 1.08f);
+
+            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("SCORE ", PlayerStatus.Score.ToString()), new Vector2(scoreBounds.X + 12f, scoreBounds.Y + 10f), Color.White, 1.65f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("MULTI ", PlayerStatus.Multiplier.ToString()), new Vector2(scoreBounds.X + 12f, scoreBounds.Y + 34f), Color.White, 1.45f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, "REWIND", new Vector2(scoreBounds.X + 12f, scoreBounds.Y + 56f), Color.White * 0.85f, 1.08f);
+            DrawBar(spriteBatch, pixel, new Rectangle(scoreBounds.X + 92, scoreBounds.Y + 58, scoreBounds.Width - 104, 10), rewindMeterSeconds / RewindCapacitySeconds, Color.Cyan * 0.9f);
 
             if (activeBoss != null && !activeBoss.IsExpired)
                 DrawBossHealthBar(spriteBatch, pixel, activeBoss);
         }
 
-        private void DrawStyleHud(SpriteBatch spriteBatch, Texture2D pixel)
+        private void DrawStyleHud(SpriteBatch spriteBatch, Texture2D pixel, Rectangle bounds)
         {
             WeaponInventoryState inventory = PlayerStatus.RunProgress.Weapons;
             WeaponStyleDefinition activeStyle = WeaponCatalog.GetStyle(inventory.ActiveStyle);
-            PixelArtRenderer.DrawRows(spriteBatch, pixel, activeStyle.IconRows, new Vector2(388f, 54f), 5f, ColorUtil.ParseHex(activeStyle.PrimaryColor, Color.White), ColorUtil.ParseHex(activeStyle.SecondaryColor, Color.LightBlue), ColorUtil.ParseHex(activeStyle.AccentColor, Color.Orange), true);
-            BitmapFontRenderer.Draw(spriteBatch, pixel, activeStyle.DisplayName, new Vector2(420f, 20f), Color.White, 2f);
+            Color primary = ColorUtil.ParseHex(activeStyle.PrimaryColor, Color.White);
+            Color secondary = ColorUtil.ParseHex(activeStyle.SecondaryColor, Color.LightBlue);
+            Color accent = ColorUtil.ParseHex(activeStyle.AccentColor, Color.Orange);
+
+            PixelArtRenderer.DrawRows(spriteBatch, pixel, activeStyle.IconRows, new Vector2(bounds.X + 22f, bounds.Y + 46f), 4.5f, primary, secondary, accent, true);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, activeStyle.DisplayName, new Vector2(bounds.X + 60f, bounds.Y + 10f), Color.White, 1.8f);
+            string levelLabel = string.Concat("LV ", inventory.ActiveLevel.ToString(), inventory.ActiveRank > 0 ? string.Concat("  RK ", inventory.ActiveRank.ToString()) : string.Empty);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, levelLabel, new Vector2(bounds.X + 60f, bounds.Y + 34f), Color.White * 0.72f, 1.18f);
 
             for (int i = 0; i < 4; i++)
             {
-                Color pip = i <= inventory.ActiveLevel ? ColorUtil.ParseHex(activeStyle.AccentColor, Color.Orange) : Color.White * 0.18f;
-                spriteBatch.Draw(pixel, new Rectangle(422 + i * 20, 52, 14, 14), pip);
+                Color pip = i <= inventory.ActiveLevel ? accent : Color.White * 0.14f;
+                spriteBatch.Draw(pixel, new Rectangle(bounds.X + 62 + i * 18, bounds.Y + 58, 12, 12), pip);
             }
 
             IReadOnlyList<WeaponStyleId> ownedStyles = inventory.OwnedStyles;
+            float iconStartX = bounds.Right - 34f - Math.Max(0, ownedStyles.Count - 1) * 28f;
             for (int i = 0; i < ownedStyles.Count; i++)
             {
                 WeaponStyleDefinition style = WeaponCatalog.GetStyle(ownedStyles[i]);
-                float x = 550f + i * 56f;
-                PixelArtRenderer.DrawRows(spriteBatch, pixel, style.IconRows, new Vector2(x, 42f), 2.8f, ColorUtil.ParseHex(style.PrimaryColor, Color.White), ColorUtil.ParseHex(style.SecondaryColor, Color.LightBlue), ColorUtil.ParseHex(style.AccentColor, Color.Orange), true);
+                float x = iconStartX + i * 28f;
+                Color iconAccent = ColorUtil.ParseHex(style.AccentColor, Color.Orange);
+                PixelArtRenderer.DrawRows(spriteBatch, pixel, style.IconRows, new Vector2(x, bounds.Y + 62f), 1.95f, ColorUtil.ParseHex(style.PrimaryColor, Color.White), ColorUtil.ParseHex(style.SecondaryColor, Color.LightBlue), iconAccent, true);
                 if (ownedStyles[i] == inventory.ActiveStyle)
-                    spriteBatch.Draw(pixel, new Rectangle((int)x - 16, 64, 32, 3), ColorUtil.ParseHex(style.AccentColor, Color.Orange));
+                    spriteBatch.Draw(pixel, new Rectangle((int)x - 8, bounds.Bottom - 10, 18, 3), iconAccent);
             }
-
-            Rectangle pityBounds = new Rectangle(876, 52, 160, 10);
-            spriteBatch.Draw(pixel, pityBounds, Color.White * 0.12f);
-            spriteBatch.Draw(pixel, new Rectangle(pityBounds.X, pityBounds.Y, (int)(pityBounds.Width * PlayerStatus.RunProgress.Powerups.PityMeter), pityBounds.Height), Color.Orange);
-            BitmapFontRenderer.Draw(spriteBatch, pixel, "PITY", new Vector2(876f, 20f), Color.White, 1.4f);
         }
 
         private void DrawBossHealthBar(SpriteBatch spriteBatch, Texture2D pixel, BossEnemy boss)
@@ -831,7 +1882,185 @@ namespace SpaceBurst
             Rectangle bounds = new Rectangle(320, 94, 640, 18);
             spriteBatch.Draw(pixel, bounds, Color.White * 0.12f);
             spriteBatch.Draw(pixel, new Rectangle(bounds.X, bounds.Y, (int)(bounds.Width * boss.HealthRatio), bounds.Height), Color.OrangeRed);
+            for (int i = 0; i < boss.PhaseThresholds.Count; i++)
+            {
+                int tickX = bounds.X + (int)MathF.Round(bounds.Width * boss.PhaseThresholds[i]);
+                spriteBatch.Draw(pixel, new Rectangle(tickX, bounds.Y - 2, 2, bounds.Height + 4), Color.White * 0.28f);
+            }
             DrawCenteredText(spriteBatch, pixel, boss.DisplayName, Game1.ScreenSize.X / 2f, 118f, Color.White, 1.5f);
+        }
+
+        private void DrawTransitionOverlay(SpriteBatch spriteBatch, Texture2D pixel)
+        {
+            float warp = TransitionWarpStrength;
+            if (warp <= 0f)
+                return;
+
+            float time = (float)Game1.GameTime.TotalGameTime.TotalSeconds;
+            spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), Color.Lerp(Color.Transparent, new Color(180, 230, 255), 0.08f + 0.12f * warp));
+
+            int streaks = 18 + (int)(warp * 34f);
+            for (int i = 0; i < streaks; i++)
+            {
+                float ySeed = MathF.Abs(MathF.Sin(i * 17.137f + 0.52f));
+                float xSeed = MathF.Abs(MathF.Sin(i * 8.913f + 0.17f + time));
+                float width = 120f + warp * (180f + xSeed * 260f);
+                float x = Game1.VirtualWidth - ((time * (180f + 360f * warp) + xSeed * (Game1.VirtualWidth + width)) % (Game1.VirtualWidth + width));
+                float y = 94f + ySeed * (Game1.VirtualHeight - 188f);
+                spriteBatch.Draw(pixel, new Rectangle((int)x, (int)y, (int)width, 2 + (int)(warp * 3f)), new Color(170, 240, 255) * (0.06f + 0.1f * warp));
+            }
+
+            Rectangle chip = new Rectangle(Game1.VirtualWidth / 2 - 180, 118, 360, 44);
+            DrawPanel(spriteBatch, pixel, chip, Color.Black * 0.24f, Color.White * 0.2f);
+            string header = transitionToBoss ? "BOSS APPROACH" : "FTL TRANSIT";
+            string detail = transitionToBoss
+                ? currentStage?.Boss?.DisplayName?.ToUpperInvariant() ?? "THREAT LOCK"
+                : string.Concat("JUMPING TO STAGE ", transitionTargetStageNumber.ToString("00"));
+            DrawCenteredText(spriteBatch, pixel, header, chip.Center.X, chip.Y + 6f, Color.White * 0.85f, 1.15f);
+            DrawCenteredText(spriteBatch, pixel, detail, chip.Center.X, chip.Y + 24f, Color.Orange * (0.78f + warp * 0.22f), 1.15f);
+
+            if (PlayerStatus.RunProgress.StoredUpgradeCharges > 0 && !transitionToBoss)
+                DrawCenteredText(spriteBatch, pixel, "UPGRADE DRAFT CHARGED", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 64f, Color.White * 0.72f, 1.15f);
+        }
+
+        private void DrawRewindOverlay(SpriteBatch spriteBatch, Texture2D pixel)
+        {
+            float strength = RewindVisualStrength;
+            if (strength <= 0.01f)
+                return;
+
+            float speed = GetRewindSpeedMultiplier(rewindHoldSeconds);
+            float time = (float)Game1.GameTime.TotalGameTime.TotalSeconds;
+            spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), Color.Cyan * (0.025f + 0.1f * strength));
+
+            int streaks = 12 + (int)(strength * 20f);
+            for (int i = 0; i < streaks; i++)
+            {
+                float ySeed = MathF.Abs(MathF.Sin(i * 22.177f + 0.48f));
+                float width = 48f + strength * 160f + (i % 5) * 18f;
+                float x = (time * (140f + strength * 320f) + i * 92f) % (Game1.VirtualWidth + width) - width;
+                float y = 92f + ySeed * (Game1.VirtualHeight - 184f);
+                spriteBatch.Draw(pixel, new Rectangle((int)x, (int)y, (int)width, 2), Color.White * (0.05f + 0.08f * strength));
+            }
+
+            Rectangle panel = new Rectangle(Game1.VirtualWidth - 230, Game1.VirtualHeight - 86, 210, 50);
+            DrawPanel(spriteBatch, pixel, panel, Color.Black * 0.22f, Color.Cyan * 0.3f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("REWIND x", speed.ToString("0.0")), new Vector2(panel.X + 12f, panel.Y + 8f), Color.White, 1.3f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, speed < 1f ? "HOLD TO ACCELERATE" : "RELEASING RESTORES FLOW", new Vector2(panel.X + 12f, panel.Y + 28f), Color.White * 0.65f, 0.95f);
+        }
+
+        private void DrawTutorialOverlay(SpriteBatch spriteBatch, Texture2D pixel)
+        {
+            Rectangle panel = new Rectangle(160, Game1.VirtualHeight - 156, Game1.VirtualWidth - 320, 118);
+            DrawPanel(spriteBatch, pixel, panel, Color.Black * 0.34f, Color.Orange * 0.28f);
+
+            string title;
+            string body;
+            int stepIndex;
+            GetTutorialPrompt(out title, out body, out stepIndex);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("TUTORIAL ", stepIndex.ToString(), " / 8  ", title), new Vector2(panel.X + 16f, panel.Y + 12f), Color.White, 1.35f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, body, new Vector2(panel.X + 16f, panel.Y + 38f), Color.White * 0.82f, 1.15f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, "ESC PAUSE  F1 HELP", new Vector2(panel.X + 16f, panel.Bottom - 24f), Color.White * 0.6f, 0.95f);
+        }
+
+        private void DrawUpgradeDraft(SpriteBatch spriteBatch, Texture2D pixel)
+        {
+            spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), Color.Black * 0.58f);
+
+            DrawCenteredText(spriteBatch, pixel, "UPGRADE DRAFT", Game1.ScreenSize.X / 2f, 108f, Color.White, 2.6f);
+            DrawCenteredText(spriteBatch, pixel, options.AutoUpgradeDraft ? "AUTO DRAFT ENABLED" : string.Concat("CHOOSE IN ", Math.Max(0f, draftTimer).ToString("0.0"), "s"), Game1.ScreenSize.X / 2f, 146f, Color.White * 0.72f, 1.18f);
+
+            int cardWidth = 300;
+            int cardHeight = 220;
+            int gap = 24;
+            int totalWidth = cardWidth * 3 + gap * 2;
+            int startX = (Game1.VirtualWidth - totalWidth) / 2;
+            int y = 214;
+
+            for (int i = 0; i < draftCards.Count; i++)
+            {
+                UpgradeDraftCard card = draftCards[i];
+                Rectangle bounds = new Rectangle(startX + i * (cardWidth + gap), y, cardWidth, cardHeight);
+                Color accent = ColorUtil.ParseHex(card.AccentColor, Color.Orange);
+                DrawPanel(spriteBatch, pixel, bounds, i == draftSelection ? accent * 0.16f : Color.Black * 0.45f, i == draftSelection ? accent : Color.White * 0.2f);
+                BitmapFontRenderer.Draw(spriteBatch, pixel, card.Title, new Vector2(bounds.X + 18f, bounds.Y + 16f), Color.White, 1.45f);
+                BitmapFontRenderer.Draw(spriteBatch, pixel, card.Description, new Vector2(bounds.X + 18f, bounds.Y + 52f), Color.White * 0.8f, 1.05f);
+
+                if (card.Type == UpgradeCardType.WeaponSurge)
+                {
+                    WeaponStyleDefinition style = WeaponCatalog.GetStyle(card.StyleId);
+                    PixelArtRenderer.DrawRows(spriteBatch, pixel, style.IconRows, new Vector2(bounds.Center.X, bounds.Bottom - 56f), 5f, ColorUtil.ParseHex(style.PrimaryColor, Color.White), ColorUtil.ParseHex(style.SecondaryColor, Color.LightBlue), accent, true);
+                }
+                else
+                {
+                    spriteBatch.Draw(pixel, new Rectangle(bounds.X + 18, bounds.Bottom - 58, bounds.Width - 36, 14), accent * 0.18f);
+                    spriteBatch.Draw(pixel, new Rectangle(bounds.X + 18, bounds.Bottom - 58, Math.Max(10, (bounds.Width - 36) * (i == draftSelection ? 3 : 2) / 5), 14), accent * 0.7f);
+                }
+            }
+
+            DrawCenteredText(spriteBatch, pixel, string.Concat("STORED CHARGES ", PlayerStatus.RunProgress.StoredUpgradeCharges.ToString()), Game1.ScreenSize.X / 2f, 480f, Color.White * 0.75f, 1.15f);
+            DrawCenteredText(spriteBatch, pixel, "LEFT RIGHT SELECT  ENTER PICK  ESC AUTO PICK", Game1.ScreenSize.X / 2f, 520f, Color.White * 0.62f, 1.05f);
+        }
+
+        private void GetTutorialPrompt(out string title, out string body, out int stepIndex)
+        {
+            switch (tutorialStep)
+            {
+                case TutorialStep.Move:
+                    stepIndex = 1;
+                    title = "MOVE";
+                    body = "USE WASD TO ROAM THE FIELD. KEEP MOVING FOR A MOMENT TO CONTINUE.";
+                    break;
+                case TutorialStep.Aim:
+                    stepIndex = 2;
+                    title = "AIM";
+                    body = "USE THE ARROW KEYS TO SWING THE CANNON. KEEP IT OFF CENTER FOR A MOMENT.";
+                    break;
+                case TutorialStep.Fire:
+                    stepIndex = 3;
+                    title = "FIRE";
+                    body = "PRESS SPACE TO FIRE FORWARD. BREAK THE TRAINING TARGET TO ADVANCE.";
+                    break;
+                case TutorialStep.Rewind:
+                    stepIndex = 4;
+                    title = "REWIND";
+                    body = "HOLD R. REWIND STARTS VERY SLOW AND SPEEDS UP THE LONGER YOU HOLD IT.";
+                    break;
+                case TutorialStep.CollectPower:
+                    stepIndex = 5;
+                    title = "COLLECT";
+                    body = "PICK UP THE P CORE. IT STORES A CHARGE FOR THE NEXT DRAFT, NOT AN INSTANT UPGRADE.";
+                    break;
+                case TutorialStep.UpgradeDraft:
+                    stepIndex = 6;
+                    title = "UPGRADE DRAFT";
+                    body = "PICK A CARD. TRANSITIONS SPEND STORED CHARGES THIS WAY BETWEEN STAGES.";
+                    break;
+                case TutorialStep.SwitchStyle:
+                    stepIndex = 7;
+                    title = "STYLE SWAP";
+                    body = "PRESS Q OR E TO ROTATE BETWEEN OWNED STYLES. THE HUD CAROUSEL SHOWS WHAT YOU HAVE.";
+                    break;
+                case TutorialStep.ShipsAndLives:
+                    stepIndex = 8;
+                    title = "SHIPS AND LIVES";
+                    body = "SHIPS RESPAWN YOU IN PLACE. RUN OUT OF SHIPS AND THE NEXT DEATH SPENDS A LIFE TO RESTART THE STAGE. PRESS ENTER.";
+                    break;
+                default:
+                    stepIndex = 8;
+                    title = "COMPLETE";
+                    body = "TUTORIAL COMPLETE.";
+                    break;
+            }
+        }
+
+        private void DrawBar(SpriteBatch spriteBatch, Texture2D pixel, Rectangle bounds, float ratio, Color fill)
+        {
+            float clamped = MathHelper.Clamp(ratio, 0f, 1f);
+            spriteBatch.Draw(pixel, bounds, Color.White * 0.12f);
+            int width = Math.Max(0, (int)MathF.Round(bounds.Width * clamped));
+            if (width > 0)
+                spriteBatch.Draw(pixel, new Rectangle(bounds.X, bounds.Y, width, bounds.Height), fill);
         }
 
         private void DrawCenteredBanner(SpriteBatch spriteBatch, Texture2D pixel, string text, Color color, float scale)
@@ -878,6 +2107,260 @@ namespace SpaceBurst
             }
 
             return currentStage.Sections[0];
+        }
+
+        private RunSaveData CaptureRunSaveData(int slotIndex, bool includeSummary)
+        {
+            var save = new RunSaveData
+            {
+                CurrentStageNumber = currentStageNumber,
+                CurrentSectionIndex = currentSectionIndex,
+                State = state == GameFlowState.SaveSlots || state == GameFlowState.LoadSlots || state == GameFlowState.Options ? GameFlowState.Paused : state,
+                HelpReturnState = helpReturnState,
+                DraftReturnState = draftReturnState,
+                StageElapsedSeconds = stageElapsedSeconds,
+                StateTimer = stateTimer,
+                ActiveEventTimer = activeEventTimer,
+                ActiveEventSpawnTimer = activeEventSpawnTimer,
+                RewindMeterSeconds = rewindMeterSeconds,
+                RewindHoldSeconds = rewindHoldSeconds,
+                RewindAccumulatorSeconds = rewindStepAccumulator,
+                StageHadDeath = stageHadDeath,
+                CampaignHadDeath = campaignHadDeath,
+                BannerText = bannerText,
+                ActiveEventWarning = activeEventWarning,
+                ActiveEventType = activeEventType,
+                ActiveEventIntensity = activeEventIntensity,
+                HasActiveBoss = activeBoss != null && !activeBoss.IsExpired,
+                PendingBossSpawn = transitionToBoss,
+                TransitionTargetStageNumber = transitionTargetStageNumber,
+                TransitionToBoss = transitionToBoss,
+                TransitionScrollFrom = transitionScrollFrom,
+                TransitionScrollTo = transitionScrollTo,
+                TransitionHudBlend = transitionHudBlend,
+                BossApproachTimer = bossApproachTimer,
+                DraftTimer = draftTimer,
+                DraftSelection = draftSelection,
+                DraftFromTutorial = draftFromTutorial,
+                TutorialReplayMode = tutorialReplayMode,
+                TutorialStep = tutorialStep,
+                TutorialProgressSeconds = tutorialProgressSeconds,
+                DraftCards = new List<UpgradeDraftCard>(draftCards),
+                PlayerStatus = PlayerStatus.CaptureSnapshot(),
+                Player = Player1.Instance.CaptureSnapshot(),
+                Enemies = EntityManager.CaptureEnemies(),
+                Bullets = EntityManager.CaptureBullets(),
+                Beams = EntityManager.CaptureBeams(),
+                Powerups = EntityManager.CapturePowerups(),
+                ScheduledSpawns = CaptureScheduledSpawns(),
+                ScheduledEvents = CaptureScheduledEvents(),
+                GameplayRngState = gameplayRandom.State,
+            };
+
+            if (includeSummary)
+            {
+                save.Summary = new SaveSlotSummary
+                {
+                    SlotIndex = slotIndex,
+                    HasData = true,
+                    StageNumber = currentStageNumber,
+                    StageName = currentStage?.Name ?? string.Empty,
+                    Score = PlayerStatus.Score,
+                    SavedAtUtc = System.DateTime.UtcNow.ToString("u"),
+                    ActiveStyle = PlayerStatus.RunProgress.Weapons.ActiveStyle.ToString().ToUpperInvariant(),
+                };
+            }
+
+            return save;
+        }
+
+        private void RestoreRunSaveData(RunSaveData save, bool invalidateMedals, bool fromRewind)
+        {
+            if (save == null)
+                return;
+
+            currentStageNumber = Math.Max(1, save.CurrentStageNumber);
+            currentStage = repository.GetStage(currentStageNumber);
+            currentSectionIndex = save.CurrentSectionIndex;
+            helpReturnState = save.HelpReturnState;
+            draftReturnState = save.DraftReturnState;
+            stageElapsedSeconds = save.StageElapsedSeconds;
+            stateTimer = save.StateTimer;
+            activeEventTimer = save.ActiveEventTimer;
+            activeEventSpawnTimer = save.ActiveEventSpawnTimer;
+            rewindMeterSeconds = save.RewindMeterSeconds > 0f ? save.RewindMeterSeconds : RewindCapacitySeconds;
+            rewindHoldSeconds = save.RewindHoldSeconds;
+            rewindStepAccumulator = save.RewindAccumulatorSeconds;
+            stageHadDeath = save.StageHadDeath;
+            campaignHadDeath = save.CampaignHadDeath;
+            bannerText = save.BannerText ?? string.Empty;
+            activeEventWarning = save.ActiveEventWarning ?? string.Empty;
+            activeEventType = save.ActiveEventType;
+            activeEventIntensity = save.ActiveEventIntensity;
+            transitionTargetStageNumber = save.TransitionTargetStageNumber;
+            transitionToBoss = save.TransitionToBoss;
+            transitionScrollFrom = save.TransitionScrollFrom;
+            transitionScrollTo = save.TransitionScrollTo;
+            transitionHudBlend = save.TransitionHudBlend;
+            bossApproachTimer = save.BossApproachTimer;
+            draftTimer = save.DraftTimer;
+            draftSelection = save.DraftSelection;
+            draftFromTutorial = save.DraftFromTutorial;
+            tutorialReplayMode = save.TutorialReplayMode;
+            tutorialStep = save.TutorialStep;
+            tutorialProgressSeconds = save.TutorialProgressSeconds;
+            draftCards.Clear();
+            if (save.DraftCards != null)
+                draftCards.AddRange(save.DraftCards);
+
+            gameplayRandom.Restore(save.GameplayRngState == 0 ? 1u : save.GameplayRngState);
+            PlayerStatus.RestoreSnapshot(save.PlayerStatus);
+            if (invalidateMedals)
+                PlayerStatus.RunProgress.MarkMedalIneligible();
+
+            scheduledSpawns.Clear();
+            if (save.ScheduledSpawns != null)
+            {
+                for (int i = 0; i < save.ScheduledSpawns.Count; i++)
+                {
+                    ScheduledSpawnSnapshotData snapshot = save.ScheduledSpawns[i];
+                    scheduledSpawns.Add(new ScheduledSpawn
+                    {
+                        SpawnAtSeconds = snapshot.SpawnAtSeconds,
+                        Group = snapshot.Group,
+                        SpawnPoint = new Vector2(snapshot.SpawnPoint.X, snapshot.SpawnPoint.Y),
+                        TargetY = snapshot.TargetY,
+                        MovePattern = snapshot.MovePattern,
+                        FirePattern = snapshot.FirePattern,
+                        Amplitude = snapshot.Amplitude,
+                        Frequency = snapshot.Frequency,
+                        SpeedMultiplier = snapshot.SpeedMultiplier > 0f ? snapshot.SpeedMultiplier : snapshot.Group?.SpeedMultiplier ?? 1f,
+                    });
+                }
+            }
+
+            scheduledEvents.Clear();
+            if (save.ScheduledEvents != null)
+            {
+                for (int i = 0; i < save.ScheduledEvents.Count; i++)
+                {
+                    ScheduledEventSnapshotData snapshot = save.ScheduledEvents[i];
+                    scheduledEvents.Add(new ScheduledEvent
+                    {
+                        TriggerAtSeconds = snapshot.TriggerAtSeconds,
+                        Window = snapshot.Window,
+                    });
+                }
+            }
+
+            EntityManager.Reset();
+            Player1.Instance.RestoreSnapshot(save.Player);
+            EntityManager.Add(Player1.Instance);
+            EntityManager.RestoreEnemies(save.Enemies, repository, currentStage?.Boss);
+            EntityManager.RestoreBullets(save.Bullets);
+            EntityManager.RestoreBeams(save.Beams);
+            EntityManager.RestorePowerups(save.Powerups);
+            activeBoss = EntityManager.Enemies.OfType<BossEnemy>().FirstOrDefault(enemy => !enemy.IsExpired);
+
+            if (!fromRewind)
+            {
+                state = save.State == GameFlowState.Playing || save.State == GameFlowState.Tutorial ? GameFlowState.Paused : save.State;
+                float restoredMeter = rewindMeterSeconds;
+                ResetRewindBuffer();
+                rewindMeterSeconds = restoredMeter;
+                rewindFrames.Add(CaptureRunSaveData(0, false));
+            }
+            else
+            {
+                state = save.State == GameFlowState.Tutorial ? GameFlowState.Tutorial : GameFlowState.Playing;
+            }
+        }
+
+        private List<ScheduledSpawnSnapshotData> CaptureScheduledSpawns()
+        {
+            var snapshots = new List<ScheduledSpawnSnapshotData>(scheduledSpawns.Count);
+            for (int i = 0; i < scheduledSpawns.Count; i++)
+            {
+                ScheduledSpawn spawn = scheduledSpawns[i];
+                snapshots.Add(new ScheduledSpawnSnapshotData
+                {
+                    SpawnAtSeconds = spawn.SpawnAtSeconds,
+                    Group = spawn.Group,
+                    SpawnPoint = new Vector2Data(spawn.SpawnPoint.X, spawn.SpawnPoint.Y),
+                    TargetY = spawn.TargetY,
+                    MovePattern = spawn.MovePattern,
+                    FirePattern = spawn.FirePattern,
+                    Amplitude = spawn.Amplitude,
+                    Frequency = spawn.Frequency,
+                    SpeedMultiplier = spawn.SpeedMultiplier,
+                });
+            }
+
+            return snapshots;
+        }
+
+        private List<ScheduledEventSnapshotData> CaptureScheduledEvents()
+        {
+            var snapshots = new List<ScheduledEventSnapshotData>(scheduledEvents.Count);
+            for (int i = 0; i < scheduledEvents.Count; i++)
+            {
+                ScheduledEvent scheduledEvent = scheduledEvents[i];
+                snapshots.Add(new ScheduledEventSnapshotData
+                {
+                    TriggerAtSeconds = scheduledEvent.TriggerAtSeconds,
+                    Window = scheduledEvent.Window,
+                });
+            }
+
+            return snapshots;
+        }
+
+        private float GetCurrentStageScrollSpeed()
+        {
+            if (currentStage == null)
+                return 0f;
+
+            float baseSpeed = GetStageBaseScrollSpeed(currentStageNumber, currentStage);
+            SectionDefinition section = GetActiveSection();
+            float sectionMultiplier = section != null && section.ScrollMultiplier > 0f
+                ? section.ScrollMultiplier
+                : GetDefaultSectionScrollMultiplier(GetActiveSectionIndex());
+
+            return baseSpeed * sectionMultiplier;
+        }
+
+        private static float GetStageBaseScrollSpeed(int stageNumber, StageDefinition stage)
+        {
+            if (stage != null && stage.BaseScrollSpeed > 0f)
+                return stage.BaseScrollSpeed;
+
+            return MathHelper.Clamp(118f + (stageNumber - 1) * 1.4f, 118f, 186f);
+        }
+
+        private int GetActiveSectionIndex()
+        {
+            if (currentStage?.Sections == null || currentStage.Sections.Count == 0)
+                return 0;
+
+            for (int i = currentStage.Sections.Count - 1; i >= 0; i--)
+            {
+                if (currentStage.Sections[i].StartSeconds <= stageElapsedSeconds)
+                    return i;
+            }
+
+            return 0;
+        }
+
+        private static float GetDefaultSectionScrollMultiplier(int sectionIndex)
+        {
+            float[] multipliers = { 0.90f, 0.98f, 1.06f, 1.12f, 1.18f };
+            return multipliers[Math.Clamp(sectionIndex, 0, multipliers.Length - 1)];
+        }
+
+        private static float GetDefaultEnemySpeedMultiplier(int sectionIndex)
+        {
+            float[] multipliers = { 0.82f, 0.94f, 1.0f, 1.12f, 1.18f };
+            return multipliers[Math.Clamp(sectionIndex, 0, multipliers.Length - 1)];
         }
 
         private static string GetEventLabel(RandomEventType eventType)
@@ -948,6 +2431,7 @@ namespace SpaceBurst
             public FirePattern FirePattern { get; set; }
             public float Amplitude { get; set; }
             public float Frequency { get; set; }
+            public float SpeedMultiplier { get; set; } = 1f;
         }
 
         private sealed class ScheduledEvent

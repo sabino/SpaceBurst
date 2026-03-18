@@ -35,7 +35,20 @@ namespace SpaceBurst
         {
             float deltaSeconds = (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
             ageSeconds += deltaSeconds;
-            Position += new Vector2(Velocity.X - Game1.Instance.CurrentScrollSpeed * 0.18f, MathF.Sin(ageSeconds * 3.4f + bobSeed) * 18f) * deltaSeconds;
+            Vector2 drift = new Vector2(Velocity.X - Game1.Instance.CurrentScrollSpeed * 0.18f, MathF.Sin(ageSeconds * 3.4f + bobSeed) * 18f);
+
+            if (Game1.Instance.PowerupMagnetStrength > 0f && !Player1.Instance.IsDead)
+            {
+                Vector2 delta = Player1.Instance.Position - Position;
+                if (delta != Vector2.Zero)
+                {
+                    float distance = delta.Length();
+                    delta /= distance;
+                    drift += delta * Game1.Instance.PowerupMagnetStrength * MathHelper.Clamp(1f - distance / 420f, 0.15f, 1f);
+                }
+            }
+
+            Position += drift * deltaSeconds;
 
             if (ageSeconds > 12f || Position.X < -40f)
                 IsExpired = true;
@@ -51,6 +64,27 @@ namespace SpaceBurst
         public bool OverlapsPlayer()
         {
             return Vector2.DistanceSquared(Position, Player1.Instance.Position) <= 42f * 42f;
+        }
+
+        public PowerupSnapshotData CaptureSnapshot()
+        {
+            return new PowerupSnapshotData
+            {
+                Position = new Vector2Data(Position.X, Position.Y),
+                Velocity = new Vector2Data(Velocity.X, Velocity.Y),
+                AgeSeconds = ageSeconds,
+            };
+        }
+
+        public static PowerupPickup FromSnapshot(PowerupSnapshotData snapshot)
+        {
+            if (snapshot == null)
+                return null;
+
+            var pickup = new PowerupPickup(new Vector2(snapshot.Position.X, snapshot.Position.Y));
+            pickup.Velocity = new Vector2(snapshot.Velocity.X, snapshot.Velocity.Y);
+            pickup.ageSeconds = snapshot.AgeSeconds;
+            return pickup;
         }
     }
 }

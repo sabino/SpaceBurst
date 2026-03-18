@@ -77,13 +77,15 @@ namespace SpaceBurst.RuntimeData
     public readonly struct DamageResult
     {
         public int CellsRemoved { get; }
+        public int CoreCellsRemoved { get; }
         public int RemainingOccupied { get; }
         public int RemainingCore { get; }
         public bool Destroyed { get; }
 
-        public DamageResult(int cellsRemoved, int remainingOccupied, int remainingCore, bool destroyed)
+        public DamageResult(int cellsRemoved, int coreCellsRemoved, int remainingOccupied, int remainingCore, bool destroyed)
         {
             CellsRemoved = cellsRemoved;
+            CoreCellsRemoved = coreCellsRemoved;
             RemainingOccupied = remainingOccupied;
             RemainingCore = remainingCore;
             Destroyed = destroyed;
@@ -142,10 +144,11 @@ namespace SpaceBurst.RuntimeData
         public static DamageResult ApplyPointDamage(MaskGrid grid, int centerX, int centerY, int radius, int cellsToRemove, int integrityThresholdPercent)
         {
             if (grid == null || cellsToRemove <= 0)
-                return new DamageResult(0, grid?.OccupiedCount ?? 0, grid?.RemainingCoreCount ?? 0, false);
+                return new DamageResult(0, 0, grid?.OccupiedCount ?? 0, grid?.RemainingCoreCount ?? 0, false);
 
             int searchRadius = Math.Max(0, radius);
             int removed = 0;
+            int coreRemoved = 0;
 
             while (removed < cellsToRemove)
             {
@@ -153,20 +156,23 @@ namespace SpaceBurst.RuntimeData
                 if (!candidate.HasValue)
                     break;
 
+                if (grid.IsCore(candidate.Value.X, candidate.Value.Y))
+                    coreRemoved++;
                 grid.RemoveCell(candidate.Value.X, candidate.Value.Y);
                 removed++;
             }
 
             bool destroyed = IsDestroyed(grid, integrityThresholdPercent);
-            return new DamageResult(removed, grid.OccupiedCount, grid.RemainingCoreCount, destroyed);
+            return new DamageResult(removed, coreRemoved, grid.OccupiedCount, grid.RemainingCoreCount, destroyed);
         }
 
         public static DamageResult ApplyImpactDamage(MaskGrid grid, int centerX, int centerY, ImpactProfileDefinition impact, int damageAmount, int integrityThresholdPercent)
         {
             if (grid == null || impact == null || damageAmount <= 0)
-                return new DamageResult(0, grid?.OccupiedCount ?? 0, grid?.RemainingCoreCount ?? 0, false);
+                return new DamageResult(0, 0, grid?.OccupiedCount ?? 0, grid?.RemainingCoreCount ?? 0, false);
 
             int removed = 0;
+            int coreRemoved = 0;
             int targetCells = Math.Max(1, impact.BaseCellsRemoved + Math.Max(0, damageAmount - 1) * impact.BonusCellsPerDamage);
             int kernelRadius = GetKernelRadius(impact.Kernel);
             var kernelCandidates = CollectKernelCandidates(grid, centerX, centerY, impact.Kernel);
@@ -177,16 +183,22 @@ namespace SpaceBurst.RuntimeData
                 if (!grid.IsOccupied(candidate.X, candidate.Y))
                     continue;
 
+                if (grid.IsCore(candidate.X, candidate.Y))
+                    coreRemoved++;
                 grid.RemoveCell(candidate.X, candidate.Y);
                 removed++;
             }
 
             while (removed < targetCells)
             {
-                CellCandidate? candidate = FindNearestOccupiedCell(grid, centerX, centerY, kernelRadius + 1);
+                CellCandidate? candidate = FindPenetratingOccupiedCell(grid, centerX, centerY, kernelRadius + 1);
+                if (!candidate.HasValue)
+                    candidate = FindNearestOccupiedCell(grid, centerX, centerY, kernelRadius + 1);
                 if (!candidate.HasValue)
                     break;
 
+                if (grid.IsCore(candidate.Value.X, candidate.Value.Y))
+                    coreRemoved++;
                 grid.RemoveCell(candidate.Value.X, candidate.Value.Y);
                 removed++;
             }
@@ -206,6 +218,8 @@ namespace SpaceBurst.RuntimeData
                     if (!splashCandidate.HasValue)
                         break;
 
+                    if (grid.IsCore(splashCandidate.Value.X, splashCandidate.Value.Y))
+                        coreRemoved++;
                     grid.RemoveCell(splashCandidate.Value.X, splashCandidate.Value.Y);
                     splashRemoved++;
                     removed++;
@@ -213,7 +227,7 @@ namespace SpaceBurst.RuntimeData
             }
 
             bool destroyed = IsDestroyed(grid, integrityThresholdPercent);
-            return new DamageResult(removed, grid.OccupiedCount, grid.RemainingCoreCount, destroyed);
+            return new DamageResult(removed, coreRemoved, grid.OccupiedCount, grid.RemainingCoreCount, destroyed);
         }
 
         public static bool Overlaps(MaskGrid left, int leftX, int leftY, MaskGrid right, int rightX, int rightY)
@@ -261,6 +275,11 @@ namespace SpaceBurst.RuntimeData
             return grid.OccupiedCount <= thresholdCount;
         }
 
+        public static bool ShouldDestroyOnImpact(DamageResult result, bool destroyOnCoreBreach)
+        {
+            return result.Destroyed || (destroyOnCoreBreach && result.CoreCellsRemoved > 0);
+        }
+
         private static CellCandidate? FindNearestOccupiedCell(MaskGrid grid, int centerX, int centerY, int radius)
         {
             var candidates = new List<CellCandidate>();
@@ -280,7 +299,7 @@ namespace SpaceBurst.RuntimeData
                         if (distanceSquared > expandedRadius * expandedRadius)
                             continue;
 
-                        candidates.Add(new CellCandidate(x, y, distanceSquared, grid.IsCore(x, y)));
+                        candidates.Add(new CellCandidate(x, y, distanceSquared, grid.IsCore(x, y), GetNearestCoreDistanceSquared(grid, x, y)));
                     }
                 }
 
@@ -288,6 +307,57 @@ namespace SpaceBurst.RuntimeData
                 {
                     candidates.Sort((left, right) =>
                     {
+                        int distanceComparison = left.DistanceSquared.CompareTo(right.DistanceSquared);
+                        if (distanceComparison != 0)
+                            return distanceComparison;
+
+                        return left.IsCore.CompareTo(right.IsCore);
+                    });
+
+                    return candidates[0];
+                }
+
+                expandedRadius++;
+            }
+
+            return null;
+        }
+
+        private static CellCandidate? FindPenetratingOccupiedCell(MaskGrid grid, int centerX, int centerY, int radius)
+        {
+            var candidates = new List<CellCandidate>();
+            int expandedRadius = radius;
+
+            while (expandedRadius <= Math.Max(grid.Width, grid.Height))
+            {
+                candidates.Clear();
+                for (int y = centerY - expandedRadius; y <= centerY + expandedRadius; y++)
+                {
+                    for (int x = centerX - expandedRadius; x <= centerX + expandedRadius; x++)
+                    {
+                        if (!grid.IsOccupied(x, y))
+                            continue;
+
+                        int distanceSquared = (x - centerX) * (x - centerX) + (y - centerY) * (y - centerY);
+                        if (distanceSquared > expandedRadius * expandedRadius)
+                            continue;
+
+                        int coreDistanceSquared = GetNearestCoreDistanceSquared(grid, x, y);
+                        if (coreDistanceSquared == int.MaxValue)
+                            continue;
+
+                        candidates.Add(new CellCandidate(x, y, distanceSquared, grid.IsCore(x, y), coreDistanceSquared));
+                    }
+                }
+
+                if (candidates.Count > 0)
+                {
+                    candidates.Sort((left, right) =>
+                    {
+                        int coreDistanceComparison = left.CoreDistanceSquared.CompareTo(right.CoreDistanceSquared);
+                        if (coreDistanceComparison != 0)
+                            return coreDistanceComparison;
+
                         int distanceComparison = left.DistanceSquared.CompareTo(right.DistanceSquared);
                         if (distanceComparison != 0)
                             return distanceComparison;
@@ -320,7 +390,7 @@ namespace SpaceBurst.RuntimeData
                     if (filter != null && !filter(x, y))
                         continue;
 
-                    candidates.Add(new CellCandidate(x, y, distanceSquared, grid.IsCore(x, y)));
+                    candidates.Add(new CellCandidate(x, y, distanceSquared, grid.IsCore(x, y), GetNearestCoreDistanceSquared(grid, x, y)));
                 }
             }
 
@@ -351,19 +421,38 @@ namespace SpaceBurst.RuntimeData
                         continue;
 
                     int distanceSquared = (x - centerX) * (x - centerX) + (y - centerY) * (y - centerY);
-                    candidates.Add(new CellCandidate(x, y, distanceSquared, grid.IsCore(x, y)));
+                    candidates.Add(new CellCandidate(x, y, distanceSquared, grid.IsCore(x, y), GetNearestCoreDistanceSquared(grid, x, y)));
                 }
             }
 
             candidates.Sort((left, right) =>
             {
-                int coreComparison = left.IsCore.CompareTo(right.IsCore);
-                if (coreComparison != 0)
-                    return coreComparison;
+                int coreDistanceComparison = left.CoreDistanceSquared.CompareTo(right.CoreDistanceSquared);
+                if (coreDistanceComparison != 0)
+                    return coreDistanceComparison;
 
                 return left.DistanceSquared.CompareTo(right.DistanceSquared);
             });
             return candidates;
+        }
+
+        private static int GetNearestCoreDistanceSquared(MaskGrid grid, int x, int y)
+        {
+            int best = int.MaxValue;
+            for (int coreY = 0; coreY < grid.Height; coreY++)
+            {
+                for (int coreX = 0; coreX < grid.Width; coreX++)
+                {
+                    if (!grid.IsCore(coreX, coreY))
+                        continue;
+
+                    int distanceSquared = (coreX - x) * (coreX - x) + (coreY - y) * (coreY - y);
+                    if (distanceSquared < best)
+                        best = distanceSquared;
+                }
+            }
+
+            return best;
         }
 
         private static bool IsInKernel(ImpactKernelShape kernel, int centerX, int centerY, int x, int y)
@@ -405,13 +494,15 @@ namespace SpaceBurst.RuntimeData
             public int Y { get; }
             public int DistanceSquared { get; }
             public bool IsCore { get; }
+            public int CoreDistanceSquared { get; }
 
-            public CellCandidate(int x, int y, int distanceSquared, bool isCore)
+            public CellCandidate(int x, int y, int distanceSquared, bool isCore, int coreDistanceSquared)
             {
                 X = x;
                 Y = y;
                 DistanceSquared = distanceSquared;
                 IsCore = isCore;
+                CoreDistanceSquared = coreDistanceSquared;
             }
         }
     }

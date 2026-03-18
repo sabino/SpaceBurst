@@ -29,6 +29,11 @@ namespace SpaceBurst
             get { return Path.Combine(BaseDirectory, "medals.json"); }
         }
 
+        private static string GetRunSlotPath(int slotIndex)
+        {
+            return Path.Combine(BaseDirectory, string.Concat("slot-", Math.Clamp(slotIndex, 1, 3).ToString(), ".json"));
+        }
+
         public static OptionsData LoadOptions()
         {
             return LoadFile(OptionsPath, new OptionsData());
@@ -47,6 +52,35 @@ namespace SpaceBurst
         public static void SaveMedals(MedalProgress medals)
         {
             SaveFile(MedalsPath, medals);
+        }
+
+        public static RunSaveData LoadRunSlot(int slotIndex)
+        {
+            return LoadFile<RunSaveData>(GetRunSlotPath(slotIndex), null);
+        }
+
+        public static void SaveRunSlot(int slotIndex, RunSaveData data)
+        {
+            if (data == null)
+                return;
+
+            SaveFile(GetRunSlotPath(slotIndex), data);
+        }
+
+        public static SaveSlotSummary[] LoadSaveSlotSummaries()
+        {
+            var summaries = new SaveSlotSummary[3];
+            for (int slotIndex = 1; slotIndex <= 3; slotIndex++)
+            {
+                RunSaveData save = LoadRunSlot(slotIndex);
+                summaries[slotIndex - 1] = save?.Summary ?? new SaveSlotSummary
+                {
+                    SlotIndex = slotIndex,
+                    HasData = false,
+                };
+            }
+
+            return summaries;
         }
 
         private static T LoadFile<T>(string path, T fallback) where T : class

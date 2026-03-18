@@ -72,6 +72,75 @@ namespace SpaceBurst.RuntimeData
         Fortress,
     }
 
+    public enum FireMode
+    {
+        PulseBurst,
+        SpreadShotgun,
+        BeamBurst,
+        PlasmaOrb,
+        MissileLauncher,
+        RailBurst,
+        ArcChain,
+        BladeWave,
+        DroneCommand,
+        FortressPulse,
+    }
+
+    public enum ProjectileBehavior
+    {
+        Bolt,
+        Beam,
+        PlasmaOrb,
+        Missile,
+        RailSlug,
+        ArcBolt,
+        BladeWave,
+        DroneBolt,
+        ShieldPulse,
+    }
+
+    public enum MuzzleFxStyle
+    {
+        None,
+        Pulse,
+        Spread,
+        Laser,
+        Plasma,
+        Missile,
+        Rail,
+        Arc,
+        Blade,
+        Drone,
+        Fortress,
+    }
+
+    public enum TrailFxStyle
+    {
+        None,
+        Streak,
+        Beam,
+        Plasma,
+        Smoke,
+        Neon,
+        Electric,
+        Shield,
+    }
+
+    public enum ImpactFxStyle
+    {
+        Standard,
+        Pulse,
+        Spread,
+        Beam,
+        Plasma,
+        Missile,
+        Rail,
+        Arc,
+        Blade,
+        Drone,
+        Fortress,
+    }
+
     public sealed class EnemyArchetypeCatalogDefinition
     {
         public List<EnemyArchetypeDefinition> Archetypes { get; set; } = new List<EnemyArchetypeDefinition>();
@@ -91,6 +160,8 @@ namespace SpaceBurst.RuntimeData
         public float MovementFrequency { get; set; } = 1f;
         public float PowerupWeight { get; set; } = 1f;
         public bool PowerupEligible { get; set; } = true;
+        public bool DestroyOnCoreBreach { get; set; } = true;
+        public bool ShowDurabilityBar { get; set; }
         public MovePattern MovePattern { get; set; } = MovePattern.StraightFlyIn;
         public FirePattern FirePattern { get; set; } = FirePattern.None;
         public ProceduralSpriteDefinition Sprite { get; set; } = new ProceduralSpriteDefinition();
@@ -189,6 +260,8 @@ namespace SpaceBurst.RuntimeData
         public float DurationSeconds { get; set; } = 12f;
         public bool Checkpoint { get; set; }
         public float PowerDropBonusChance { get; set; }
+        public float ScrollMultiplier { get; set; } = 1f;
+        public float EnemySpeedMultiplier { get; set; } = 1f;
         public BackgroundMoodDefinition Mood { get; set; } = new BackgroundMoodDefinition();
         public List<RandomEventWindowDefinition> EventWindows { get; set; } = new List<RandomEventWindowDefinition>();
         public List<SpawnGroupDefinition> Groups { get; set; } = new List<SpawnGroupDefinition>();
@@ -217,6 +290,7 @@ namespace SpaceBurst.RuntimeData
         public string Name { get; set; }
         public float IntroSeconds { get; set; } = 1.25f;
         public float ScrollSpeed { get; set; } = 180f;
+        public float BaseScrollSpeed { get; set; }
         public string Theme { get; set; } = "Nebula";
         public int BackgroundSeed { get; set; } = 1;
         public int StartingLives { get; set; } = 3;
@@ -236,6 +310,21 @@ namespace SpaceBurst.RuntimeData
         public float SpreadDegrees { get; set; }
         public bool Pierce { get; set; }
         public int PierceCount { get; set; }
+        public float ProjectileLifetimeSeconds { get; set; } = 2.4f;
+        public float ProjectileScale { get; set; } = 1f;
+        public float HomingDelaySeconds { get; set; }
+        public float ExplosionRadius { get; set; }
+        public int ChainCount { get; set; }
+        public int DroneCount { get; set; }
+        public float DroneIntervalSeconds { get; set; } = 0.45f;
+        public float BeamDurationSeconds { get; set; }
+        public float BeamThickness { get; set; } = 12f;
+        public int BeamTickDamage { get; set; } = 1;
+        public FireMode FireMode { get; set; } = FireMode.PulseBurst;
+        public ProjectileBehavior ProjectileBehavior { get; set; } = ProjectileBehavior.Bolt;
+        public MuzzleFxStyle MuzzleFxStyle { get; set; } = MuzzleFxStyle.Pulse;
+        public TrailFxStyle TrailFxStyle { get; set; } = TrailFxStyle.Streak;
+        public ImpactFxStyle ImpactFxStyle { get; set; } = ImpactFxStyle.Standard;
         public ImpactProfileDefinition Impact { get; set; } = new ImpactProfileDefinition();
     }
 

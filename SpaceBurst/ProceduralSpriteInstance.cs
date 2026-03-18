@@ -32,6 +32,21 @@ namespace SpaceBurst
             get { return texture; }
         }
 
+        public string PrimaryColorHex
+        {
+            get { return definition.PrimaryColor; }
+        }
+
+        public string SecondaryColorHex
+        {
+            get { return definition.SecondaryColor; }
+        }
+
+        public string AccentColorHex
+        {
+            get { return definition.AccentColor; }
+        }
+
         public int PixelScale
         {
             get { return Math.Max(1, definition.PixelScale); }
@@ -145,7 +160,7 @@ namespace SpaceBurst
         public DamageResult ApplyDamage(Vector2 position, Vector2 worldPoint, float extraScale, DamageMaskDefinition damageMask, ImpactProfileDefinition impact, int damageAmount)
         {
             if (!TryGetCell(position, worldPoint, extraScale, out int cellX, out int cellY))
-                return new DamageResult(0, mask.OccupiedCount, mask.RemainingCoreCount, false);
+                return new DamageResult(0, 0, mask.OccupiedCount, mask.RemainingCoreCount, false);
 
             var result = DamageMaskMath.ApplyImpactDamage(
                 mask,
@@ -169,6 +184,53 @@ namespace SpaceBurst
 
             delta.Normalize();
             return delta;
+        }
+
+        public MaskSnapshotData CaptureMaskSnapshot()
+        {
+            var snapshot = new MaskSnapshotData();
+            for (int y = 0; y < mask.Height; y++)
+            {
+                char[] occupiedRow = new char[mask.Width];
+                char[] coreRow = new char[mask.Width];
+                for (int x = 0; x < mask.Width; x++)
+                {
+                    occupiedRow[x] = mask.IsOccupied(x, y) ? '#' : '.';
+                    coreRow[x] = mask.IsCore(x, y) ? 'X' : '.';
+                }
+
+                snapshot.OccupiedRows.Add(new string(occupiedRow));
+                snapshot.CoreRows.Add(new string(coreRow));
+            }
+
+            return snapshot;
+        }
+
+        public void RestoreMaskSnapshot(MaskSnapshotData snapshot)
+        {
+            if (snapshot == null || snapshot.OccupiedRows == null || snapshot.OccupiedRows.Count == 0)
+                return;
+
+            int width = mask.Width;
+            int height = mask.Height;
+            bool[] occupied = new bool[width * height];
+            bool[] core = new bool[width * height];
+
+            for (int y = 0; y < height; y++)
+            {
+                string occupiedRow = y < snapshot.OccupiedRows.Count ? snapshot.OccupiedRows[y] ?? string.Empty : string.Empty;
+                string coreRow = y < snapshot.CoreRows.Count ? snapshot.CoreRows[y] ?? string.Empty : string.Empty;
+                for (int x = 0; x < width; x++)
+                {
+                    bool isOccupied = x < occupiedRow.Length && occupiedRow[x] != '.';
+                    bool isCore = x < coreRow.Length && coreRow[x] != '.';
+                    occupied[y * width + x] = isOccupied;
+                    core[y * width + x] = isOccupied && isCore;
+                }
+            }
+
+            mask = new MaskGrid(width, height, occupied, core);
+            RebuildTexture();
         }
 
         private bool TryGetCell(Vector2 position, Vector2 worldPoint, float extraScale, out int cellX, out int cellY)

@@ -13,6 +13,8 @@
       "MovementFrequency": 1,
       "PowerupWeight": 0.85,
       "PowerupEligible": true,
+      "DestroyOnCoreBreach": true,
+      "ShowDurabilityBar": false,
       "MovePattern": "StraightFlyIn",
       "FirePattern": "None",
       "Sprite": {
@@ -50,7 +52,7 @@
         "ContactDamage": 2,
         "ProjectileDamage": 1,
         "DamageRadius": 1,
-        "IntegrityThresholdPercent": 45,
+        "IntegrityThresholdPercent": 55,
         "ContactImpulse": 150,
         "ContactImpact": {
           "Name": "Contact",
@@ -77,6 +79,8 @@
       "MovementFrequency": 1.2,
       "PowerupWeight": 0.85,
       "PowerupEligible": true,
+      "DestroyOnCoreBreach": true,
+      "ShowDurabilityBar": false,
       "MovePattern": "SineWave",
       "FirePattern": "None",
       "Sprite": {
@@ -110,7 +114,7 @@
         "ContactDamage": 2,
         "ProjectileDamage": 1,
         "DamageRadius": 1,
-        "IntegrityThresholdPercent": 45,
+        "IntegrityThresholdPercent": 55,
         "ContactImpulse": 150,
         "ContactImpact": {
           "Name": "Contact",
@@ -137,6 +141,8 @@
       "MovementFrequency": 0.9,
       "PowerupWeight": 1,
       "PowerupEligible": true,
+      "DestroyOnCoreBreach": true,
+      "ShowDurabilityBar": true,
       "MovePattern": "Dive",
       "FirePattern": "ForwardPulse",
       "Sprite": {
@@ -174,7 +180,7 @@
         "ContactDamage": 3,
         "ProjectileDamage": 1,
         "DamageRadius": 1,
-        "IntegrityThresholdPercent": 35,
+        "IntegrityThresholdPercent": 45,
         "ContactImpulse": 180,
         "ContactImpact": {
           "Name": "Contact",
@@ -201,6 +207,8 @@
       "MovementFrequency": 0.8,
       "PowerupWeight": 1,
       "PowerupEligible": true,
+      "DestroyOnCoreBreach": true,
+      "ShowDurabilityBar": true,
       "MovePattern": "TurretCarrier",
       "FirePattern": "SpreadPulse",
       "Sprite": {
@@ -242,7 +250,7 @@
         "ContactDamage": 3,
         "ProjectileDamage": 1,
         "DamageRadius": 1,
-        "IntegrityThresholdPercent": 35,
+        "IntegrityThresholdPercent": 45,
         "ContactImpulse": 180,
         "ContactImpact": {
           "Name": "Contact",
@@ -269,6 +277,8 @@
       "MovementFrequency": 0.7,
       "PowerupWeight": 1.2,
       "PowerupEligible": true,
+      "DestroyOnCoreBreach": true,
+      "ShowDurabilityBar": true,
       "MovePattern": "RetreatBackfire",
       "FirePattern": "ForwardPulse",
       "Sprite": {
@@ -308,7 +318,7 @@
         "ContactDamage": 4,
         "ProjectileDamage": 2,
         "DamageRadius": 1,
-        "IntegrityThresholdPercent": 28,
+        "IntegrityThresholdPercent": 38,
         "ContactImpulse": 210,
         "ContactImpact": {
           "Name": "Contact",
@@ -335,6 +345,8 @@
       "MovementFrequency": 0.8,
       "PowerupWeight": 1.4,
       "PowerupEligible": true,
+      "DestroyOnCoreBreach": false,
+      "ShowDurabilityBar": false,
       "MovePattern": "BossCharge",
       "FirePattern": "BossFan",
       "Sprite": {
@@ -405,6 +417,8 @@
       "MovementFrequency": 0.75,
       "PowerupWeight": 1.4,
       "PowerupEligible": true,
+      "DestroyOnCoreBreach": false,
+      "ShowDurabilityBar": false,
       "MovePattern": "BossOrbit",
       "FirePattern": "BossFan",
       "Sprite": {
@@ -475,6 +489,8 @@
       "MovementFrequency": 0.7,
       "PowerupWeight": 1.4,
       "PowerupEligible": true,
+      "DestroyOnCoreBreach": false,
+      "ShowDurabilityBar": false,
       "MovePattern": "BossOrbit",
       "FirePattern": "BossFan",
       "Sprite": {

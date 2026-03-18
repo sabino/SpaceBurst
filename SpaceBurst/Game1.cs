@@ -13,6 +13,7 @@ namespace SpaceBurst
 
         public static Game1 Instance { get; private set; }
         public static Texture2D UiPixel { get { return Instance != null ? Instance.uiPixel : null; } }
+        public static Texture2D RadialTexture { get { return Instance != null ? Instance.radialTexture : null; } }
         public static int VirtualWidth { get { return Instance != null ? Instance.virtualWidth : VirtualBaseWidth; } }
         public static int VirtualHeight { get { return Instance != null ? Instance.virtualHeight : VirtualBaseHeight; } }
         public static Viewport Viewport { get { return new Viewport(0, 0, VirtualWidth, VirtualHeight); } }
@@ -21,12 +22,14 @@ namespace SpaceBurst
         public static GameTime GameTime { get; private set; }
 
         private readonly GraphicsDeviceManager graphics;
+        private readonly OptionsData startupOptions;
         private SpriteBatch spriteBatch;
         private Rectangle renderViewport;
         private Matrix scaleMatrix;
         private CampaignDirector campaignDirector;
         private Texture2D uiPixel;
         private Texture2D radialTexture;
+        private RenderTarget2D worldRenderTarget;
         private int virtualWidth = VirtualBaseWidth;
         private int virtualHeight = VirtualBaseHeight;
 
@@ -74,9 +77,40 @@ namespace SpaceBurst
             get { return campaignDirector != null ? campaignDirector.CurrentPowerDropBonusChance : 0f; }
         }
 
+        public DeterministicRngState GameplayRandom
+        {
+            get { return campaignDirector != null ? campaignDirector.GameplayRandom : null; }
+        }
+
+        public float PowerupMagnetStrength
+        {
+            get { return campaignDirector != null ? campaignDirector.PowerupMagnetStrength : 0f; }
+        }
+
+        public bool EnableBloom
+        {
+            get { return campaignDirector != null && campaignDirector.EnableBloom; }
+        }
+
+        public bool EnableShockwaves
+        {
+            get { return campaignDirector != null && campaignDirector.EnableShockwaves; }
+        }
+
+        public bool EnableNeonOutlines
+        {
+            get { return campaignDirector != null && campaignDirector.EnableNeonOutlines; }
+        }
+
+        public VisualPreset VisualPreset
+        {
+            get { return campaignDirector != null ? campaignDirector.VisualPreset : VisualPreset.Standard; }
+        }
+
         public Game1()
         {
             Instance = this;
+            startupOptions = PersistentStorage.LoadOptions();
             graphics = new GraphicsDeviceManager(this);
             Content.RootDirectory = "Content";
 
@@ -84,14 +118,17 @@ namespace SpaceBurst
             graphics.IsFullScreen = true;
             graphics.SupportedOrientations = DisplayOrientation.LandscapeLeft | DisplayOrientation.LandscapeRight;
 #else
-            graphics.PreferredBackBufferWidth = VirtualBaseWidth;
-            graphics.PreferredBackBufferHeight = VirtualBaseHeight;
-            graphics.IsFullScreen = false;
+            graphics.HardwareModeSwitch = false;
+            Window.AllowUserResizing = true;
+            ConfigureDesktopDisplayMode(startupOptions.DisplayMode, false);
 #endif
         }
 
         protected override void Initialize()
         {
+#if !ANDROID
+            ConfigureDesktopDisplayMode(startupOptions.DisplayMode, true);
+#endif
             UpdateVirtualResolution();
             RecalculateScaleMatrix();
             base.Initialize();
@@ -133,10 +170,27 @@ namespace SpaceBurst
 
             if (campaignDirector.ShouldDrawWorld)
             {
-                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, scaleMatrix);
-                DrawBackground(spriteBatch, uiPixel);
-                EntityManager.Draw(spriteBatch);
-                spriteBatch.End();
+                if (VisualPreset == VisualPreset.Low)
+                {
+                    spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, scaleMatrix);
+                    DrawBackground(spriteBatch, uiPixel);
+                    EntityManager.Draw(spriteBatch);
+                    spriteBatch.End();
+                }
+                else
+                {
+                    EnsureRenderTargets();
+                    GraphicsDevice.SetRenderTarget(worldRenderTarget);
+                    GraphicsDevice.Clear(Color.Transparent);
+
+                    spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
+                    DrawBackground(spriteBatch, uiPixel);
+                    EntityManager.Draw(spriteBatch);
+                    spriteBatch.End();
+
+                    GraphicsDevice.SetRenderTarget(null);
+                    DrawWorldComposite();
+                }
             }
 
             spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, scaleMatrix);
@@ -177,6 +231,28 @@ namespace SpaceBurst
                 ActiveEventIntensity);
         }
 
+        private void DrawWorldComposite()
+        {
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
+            spriteBatch.Draw(worldRenderTarget, renderViewport, Color.White);
+            spriteBatch.End();
+
+            if (!EnableBloom)
+                return;
+
+            float glowStrength = VisualPreset == VisualPreset.Neon ? 0.14f : 0.08f;
+            int offset = VisualPreset == VisualPreset.Neon ? 4 : 2;
+
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.Additive, SamplerState.PointClamp);
+            spriteBatch.Draw(worldRenderTarget, new Rectangle(renderViewport.X - offset, renderViewport.Y, renderViewport.Width, renderViewport.Height), Color.White * glowStrength);
+            spriteBatch.Draw(worldRenderTarget, new Rectangle(renderViewport.X + offset, renderViewport.Y, renderViewport.Width, renderViewport.Height), Color.White * glowStrength);
+            spriteBatch.Draw(worldRenderTarget, new Rectangle(renderViewport.X, renderViewport.Y - offset, renderViewport.Width, renderViewport.Height), Color.White * glowStrength);
+            spriteBatch.Draw(worldRenderTarget, new Rectangle(renderViewport.X, renderViewport.Y + offset, renderViewport.Width, renderViewport.Height), Color.White * glowStrength);
+            if (VisualPreset == VisualPreset.Neon)
+                spriteBatch.Draw(worldRenderTarget, new Rectangle(renderViewport.X - 2, renderViewport.Y - 2, renderViewport.Width + 4, renderViewport.Height + 4), Color.White * 0.06f);
+            spriteBatch.End();
+        }
+
         private void RecalculateScaleMatrix()
         {
             UpdateVirtualResolution();
@@ -200,6 +276,49 @@ namespace SpaceBurst
             virtualWidth = VirtualBaseWidth;
             virtualHeight = VirtualBaseHeight;
         }
+
+        private void EnsureRenderTargets()
+        {
+            if (worldRenderTarget != null && (worldRenderTarget.Width != virtualWidth || worldRenderTarget.Height != virtualHeight))
+            {
+                worldRenderTarget.Dispose();
+                worldRenderTarget = null;
+            }
+
+            if (worldRenderTarget == null)
+                worldRenderTarget = new RenderTarget2D(GraphicsDevice, virtualWidth, virtualHeight, false, SurfaceFormat.Color, DepthFormat.None, 0, RenderTargetUsage.DiscardContents);
+        }
+
+        public void ApplyDisplayMode(DesktopDisplayMode mode)
+        {
+#if !ANDROID
+            ConfigureDesktopDisplayMode(mode, true);
+#endif
+        }
+
+#if !ANDROID
+        private void ConfigureDesktopDisplayMode(DesktopDisplayMode mode, bool applyChanges)
+        {
+            if (mode == DesktopDisplayMode.BorderlessFullscreen)
+            {
+                Microsoft.Xna.Framework.Graphics.DisplayMode displayMode = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode;
+                Window.IsBorderless = true;
+                graphics.IsFullScreen = true;
+                graphics.PreferredBackBufferWidth = displayMode.Width;
+                graphics.PreferredBackBufferHeight = displayMode.Height;
+            }
+            else
+            {
+                Window.IsBorderless = false;
+                graphics.IsFullScreen = false;
+                graphics.PreferredBackBufferWidth = VirtualBaseWidth;
+                graphics.PreferredBackBufferHeight = VirtualBaseHeight;
+            }
+
+            if (applyChanges)
+                graphics.ApplyChanges();
+        }
+#endif
 
 #if ANDROID
         private Texture2D CreateRadialTexture(int size)

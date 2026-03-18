@@ -59,7 +59,18 @@ namespace SpaceBurst
         public virtual void Draw(SpriteBatch spriteBatch)
         {
             if (sprite != null)
+            {
+                if (Game1.Instance != null && Game1.Instance.EnableNeonOutlines)
+                {
+                    Color outline = ColorUtil.ParseHex(sprite.AccentColorHex, color) * 0.16f;
+                    sprite.Draw(spriteBatch, Position + new Vector2(-2f, 0f), outline, Orientation, RenderScale);
+                    sprite.Draw(spriteBatch, Position + new Vector2(2f, 0f), outline, Orientation, RenderScale);
+                    sprite.Draw(spriteBatch, Position + new Vector2(0f, -2f), outline, Orientation, RenderScale);
+                    sprite.Draw(spriteBatch, Position + new Vector2(0f, 2f), outline, Orientation, RenderScale);
+                }
+
                 sprite.Draw(spriteBatch, Position, color, Orientation, RenderScale);
+            }
         }
 
         public virtual bool ContainsPoint(Vector2 worldPoint)

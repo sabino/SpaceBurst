@@ -114,73 +114,73 @@ namespace SpaceBurst
             {
                 [WeaponStyleId.Pulse] = CreateStyle(WeaponStyleId.Pulse, "PULSE", "#D7F5FF", "#5AAFCB", "#FFB347", new[] { ".#...", "###..", ".#...", ".#...", "###.." }, new[]
                 {
-                    Level(0.12f, 760f, 1, 1, 0f, false, 0, Impact("Pulse", ImpactKernelShape.Diamond3, 3, 1, 0, 0, 8)),
-                    Level(0.11f, 780f, 1, 2, 12f, false, 0, Impact("PulseTwin", ImpactKernelShape.Diamond3, 3, 1, 0, 0, 8)),
-                    Level(0.10f, 800f, 1, 3, 18f, false, 0, Impact("PulseTriple", ImpactKernelShape.Diamond3, 4, 1, 0, 0, 10)),
-                    Level(0.09f, 840f, 2, 1, 0f, true, 2, Impact("PulsePierce", ImpactKernelShape.Diamond3, 4, 2, 1, 15, 12)),
+                    Level(0.12f, 820f, 1, 1, 0f, false, 0, Impact("Pulse", ImpactKernelShape.Diamond3, 3, 1, 0, 0, 8), FireMode.PulseBurst, ProjectileBehavior.Bolt, MuzzleFxStyle.Pulse, TrailFxStyle.Neon, ImpactFxStyle.Pulse, 2.5f, 1f),
+                    Level(0.11f, 860f, 1, 2, 10f, false, 0, Impact("PulseTwin", ImpactKernelShape.Diamond3, 3, 1, 0, 0, 8), FireMode.PulseBurst, ProjectileBehavior.Bolt, MuzzleFxStyle.Pulse, TrailFxStyle.Neon, ImpactFxStyle.Pulse, 2.5f, 1f),
+                    Level(0.10f, 900f, 1, 3, 16f, false, 0, Impact("PulseTriple", ImpactKernelShape.Diamond3, 4, 1, 0, 0, 10), FireMode.PulseBurst, ProjectileBehavior.Bolt, MuzzleFxStyle.Pulse, TrailFxStyle.Neon, ImpactFxStyle.Pulse, 2.6f, 1.05f),
+                    Level(0.09f, 980f, 2, 4, 12f, true, 2, Impact("PulsePierce", ImpactKernelShape.Diamond5, 5, 2, 1, 20, 12), FireMode.PulseBurst, ProjectileBehavior.RailSlug, MuzzleFxStyle.Rail, TrailFxStyle.Neon, ImpactFxStyle.Rail, 2.8f, 1.1f),
                 }),
                 [WeaponStyleId.Spread] = CreateStyle(WeaponStyleId.Spread, "SPREAD", "#FFF2D6", "#F2AE49", "#FF7A59", new[] { "#...#", ".#.#.", "..#..", ".#.#.", "#...#" }, new[]
                 {
-                    Level(0.16f, 700f, 1, 3, 24f, false, 0, Impact("Spread", ImpactKernelShape.Diamond3, 3, 1, 0, 0, 8)),
-                    Level(0.14f, 710f, 1, 5, 34f, false, 0, Impact("WideSpread", ImpactKernelShape.Diamond3, 3, 1, 0, 0, 9)),
-                    Level(0.13f, 720f, 2, 5, 30f, false, 0, Impact("HeavyCenter", ImpactKernelShape.Diamond3, 4, 1, 0, 0, 10)),
-                    Level(0.12f, 740f, 2, 7, 42f, false, 0, Impact("SevenWay", ImpactKernelShape.Diamond5, 4, 1, 1, 20, 12)),
+                    Level(0.17f, 700f, 1, 4, 38f, false, 0, Impact("Spread", ImpactKernelShape.Diamond3, 3, 1, 0, 0, 8), FireMode.SpreadShotgun, ProjectileBehavior.Bolt, MuzzleFxStyle.Spread, TrailFxStyle.Streak, ImpactFxStyle.Spread, 0.95f, 0.9f),
+                    Level(0.15f, 710f, 1, 6, 50f, false, 0, Impact("WideSpread", ImpactKernelShape.Diamond3, 3, 1, 0, 0, 9), FireMode.SpreadShotgun, ProjectileBehavior.Bolt, MuzzleFxStyle.Spread, TrailFxStyle.Streak, ImpactFxStyle.Spread, 0.9f, 0.9f),
+                    Level(0.14f, 730f, 2, 6, 54f, false, 0, Impact("HeavyCenter", ImpactKernelShape.Diamond5, 4, 1, 0, 0, 10), FireMode.SpreadShotgun, ProjectileBehavior.Bolt, MuzzleFxStyle.Spread, TrailFxStyle.Streak, ImpactFxStyle.Spread, 1.0f, 1f),
+                    Level(0.12f, 760f, 2, 8, 68f, false, 0, Impact("SevenWay", ImpactKernelShape.Diamond5, 4, 1, 1, 24, 12), FireMode.SpreadShotgun, ProjectileBehavior.Bolt, MuzzleFxStyle.Spread, TrailFxStyle.Streak, ImpactFxStyle.Spread, 1.05f, 1.05f),
                 }),
                 [WeaponStyleId.Laser] = CreateStyle(WeaponStyleId.Laser, "LASER", "#E9F4FF", "#A4D2FF", "#6EC1FF", new[] { "####.", "...#.", "..#..", ".#...", "####." }, new[]
                 {
-                    Level(0.13f, 980f, 2, 1, 0f, true, 1, Impact("Laser", ImpactKernelShape.Point, 4, 1, 0, 0, 8)),
-                    Level(0.11f, 1040f, 2, 1, 0f, true, 2, Impact("LongLaser", ImpactKernelShape.Point, 5, 1, 0, 0, 8)),
-                    Level(0.10f, 1080f, 2, 2, 8f, true, 2, Impact("DualPulse", ImpactKernelShape.Point, 5, 1, 0, 0, 9)),
-                    Level(0.08f, 1120f, 3, 2, 8f, true, 4, Impact("Carve", ImpactKernelShape.Point, 6, 1, 0, 0, 10)),
+                    Level(0.18f, 1200f, 1, 1, 0f, true, 2, Impact("Laser", ImpactKernelShape.Point, 4, 1, 0, 0, 8), FireMode.BeamBurst, ProjectileBehavior.Beam, MuzzleFxStyle.Laser, TrailFxStyle.Beam, ImpactFxStyle.Beam, 0.2f, 1f, 0f, 0f, 0, 0, 0.45f, 0.12f, 14f, 1),
+                    Level(0.14f, 1240f, 2, 1, 0f, true, 3, Impact("LongLaser", ImpactKernelShape.Point, 5, 1, 0, 0, 9), FireMode.BeamBurst, ProjectileBehavior.Beam, MuzzleFxStyle.Laser, TrailFxStyle.Beam, ImpactFxStyle.Beam, 0.2f, 1f, 0f, 0f, 0, 0, 0.18f, 16f, 2),
+                    Level(0.13f, 1260f, 2, 2, 10f, true, 3, Impact("DualPulse", ImpactKernelShape.Point, 5, 1, 0, 0, 10), FireMode.BeamBurst, ProjectileBehavior.Beam, MuzzleFxStyle.Laser, TrailFxStyle.Beam, ImpactFxStyle.Beam, 0.2f, 1f, 0f, 0f, 0, 0, 0.22f, 18f, 2),
+                    Level(0.08f, 1280f, 3, 1, 0f, true, 4, Impact("Carve", ImpactKernelShape.Point, 6, 1, 0, 0, 12), FireMode.BeamBurst, ProjectileBehavior.Beam, MuzzleFxStyle.Laser, TrailFxStyle.Beam, ImpactFxStyle.Beam, 0.2f, 1f, 0f, 0f, 0, 0, 0.45f, 22f, 3),
                 }),
                 [WeaponStyleId.Plasma] = CreateStyle(WeaponStyleId.Plasma, "PLASMA", "#F4E0FF", "#B57CFF", "#FF8BD7", new[] { ".###.", "##.##", "..#..", ".#.#.", "#...#" }, new[]
                 {
-                    Level(0.20f, 520f, 2, 1, 0f, false, 0, Impact("Plasma", ImpactKernelShape.Blast5, 4, 1, 1, 35, 12)),
-                    Level(0.18f, 540f, 3, 1, 0f, false, 0, Impact("PlasmaHeavy", ImpactKernelShape.Blast5, 5, 1, 1, 45, 14)),
-                    Level(0.17f, 560f, 3, 2, 10f, false, 0, Impact("PlasmaDual", ImpactKernelShape.Blast5, 5, 2, 1, 50, 16)),
-                    Level(0.15f, 580f, 4, 3, 18f, false, 0, Impact("PlasmaBurst", ImpactKernelShape.Blast5, 6, 2, 2, 55, 18)),
+                    Level(0.22f, 420f, 2, 1, 0f, false, 0, Impact("Plasma", ImpactKernelShape.Blast5, 4, 1, 1, 35, 12), FireMode.PlasmaOrb, ProjectileBehavior.PlasmaOrb, MuzzleFxStyle.Plasma, TrailFxStyle.Plasma, ImpactFxStyle.Plasma, 2.8f, 1.35f, 0f, 56f),
+                    Level(0.19f, 440f, 3, 1, 0f, false, 0, Impact("PlasmaHeavy", ImpactKernelShape.Blast5, 5, 1, 1, 45, 14), FireMode.PlasmaOrb, ProjectileBehavior.PlasmaOrb, MuzzleFxStyle.Plasma, TrailFxStyle.Plasma, ImpactFxStyle.Plasma, 3f, 1.45f, 0f, 64f),
+                    Level(0.17f, 460f, 3, 2, 12f, false, 0, Impact("PlasmaDual", ImpactKernelShape.Blast5, 5, 2, 1, 50, 16), FireMode.PlasmaOrb, ProjectileBehavior.PlasmaOrb, MuzzleFxStyle.Plasma, TrailFxStyle.Plasma, ImpactFxStyle.Plasma, 3f, 1.4f, 0f, 68f),
+                    Level(0.14f, 500f, 4, 3, 20f, false, 0, Impact("PlasmaBurst", ImpactKernelShape.Blast5, 6, 2, 2, 55, 18), FireMode.PlasmaOrb, ProjectileBehavior.PlasmaOrb, MuzzleFxStyle.Plasma, TrailFxStyle.Plasma, ImpactFxStyle.Plasma, 3.2f, 1.55f, 0f, 76f),
                 }),
                 [WeaponStyleId.Missile] = CreateStyle(WeaponStyleId.Missile, "MISSILE", "#FFE1D6", "#FF925C", "#FFD166", new[] { ".#...", "###..", ".##..", "..##.", "..#.." }, new[]
                 {
-                    Level(0.24f, 460f, 3, 1, 0f, false, 0, Impact("Missile", ImpactKernelShape.Blast5, 6, 2, 2, 55, 16)),
-                    Level(0.22f, 470f, 3, 2, 10f, false, 0, Impact("TwinMissile", ImpactKernelShape.Blast5, 6, 2, 2, 60, 18)),
-                    Level(0.21f, 480f, 4, 3, 16f, false, 0, Impact("Cluster", ImpactKernelShape.Blast5, 7, 2, 2, 65, 20)),
-                    Level(0.19f, 500f, 4, 4, 20f, false, 0, Impact("HeavyCluster", ImpactKernelShape.Blast5, 8, 2, 2, 70, 22)),
+                    Level(0.24f, 430f, 3, 1, 0f, false, 0, Impact("Missile", ImpactKernelShape.Blast5, 6, 2, 2, 55, 16), FireMode.MissileLauncher, ProjectileBehavior.Missile, MuzzleFxStyle.Missile, TrailFxStyle.Smoke, ImpactFxStyle.Missile, 3.4f, 1.2f, 0.18f, 72f),
+                    Level(0.22f, 440f, 3, 2, 10f, false, 0, Impact("TwinMissile", ImpactKernelShape.Blast5, 6, 2, 2, 60, 18), FireMode.MissileLauncher, ProjectileBehavior.Missile, MuzzleFxStyle.Missile, TrailFxStyle.Smoke, ImpactFxStyle.Missile, 3.4f, 1.2f, 0.16f, 80f),
+                    Level(0.20f, 450f, 4, 3, 16f, false, 0, Impact("Cluster", ImpactKernelShape.Blast5, 7, 2, 2, 65, 20), FireMode.MissileLauncher, ProjectileBehavior.Missile, MuzzleFxStyle.Missile, TrailFxStyle.Smoke, ImpactFxStyle.Missile, 3.6f, 1.25f, 0.14f, 88f),
+                    Level(0.18f, 470f, 4, 4, 22f, false, 0, Impact("HeavyCluster", ImpactKernelShape.Blast5, 8, 2, 2, 70, 22), FireMode.MissileLauncher, ProjectileBehavior.Missile, MuzzleFxStyle.Missile, TrailFxStyle.Smoke, ImpactFxStyle.Missile, 3.8f, 1.28f, 0.12f, 96f),
                 }),
                 [WeaponStyleId.Rail] = CreateStyle(WeaponStyleId.Rail, "RAIL", "#EEF6FF", "#7DA4D9", "#F4B860", new[] { "####.", "...#.", "####.", "...#.", "####." }, new[]
                 {
-                    Level(0.18f, 1060f, 3, 1, 0f, true, 3, Impact("Rail", ImpactKernelShape.Cross3, 6, 2, 0, 0, 10)),
-                    Level(0.16f, 1080f, 3, 2, 6f, true, 4, Impact("DualRail", ImpactKernelShape.Cross3, 6, 2, 0, 0, 12)),
-                    Level(0.17f, 1120f, 5, 1, 0f, true, 5, Impact("ChargedRail", ImpactKernelShape.Cross3, 8, 2, 1, 20, 14)),
-                    Level(0.14f, 1150f, 5, 2, 4f, true, 6, Impact("CarveLine", ImpactKernelShape.Cross3, 9, 2, 1, 25, 16)),
+                    Level(0.18f, 1240f, 3, 1, 0f, true, 3, Impact("Rail", ImpactKernelShape.Cross3, 6, 2, 0, 0, 10), FireMode.RailBurst, ProjectileBehavior.RailSlug, MuzzleFxStyle.Rail, TrailFxStyle.Neon, ImpactFxStyle.Rail, 1.6f, 0.9f),
+                    Level(0.16f, 1280f, 3, 2, 6f, true, 4, Impact("DualRail", ImpactKernelShape.Cross3, 6, 2, 0, 0, 12), FireMode.RailBurst, ProjectileBehavior.RailSlug, MuzzleFxStyle.Rail, TrailFxStyle.Neon, ImpactFxStyle.Rail, 1.6f, 0.9f),
+                    Level(0.16f, 1360f, 5, 1, 0f, true, 5, Impact("ChargedRail", ImpactKernelShape.Cross3, 8, 2, 1, 20, 14), FireMode.RailBurst, ProjectileBehavior.RailSlug, MuzzleFxStyle.Rail, TrailFxStyle.Neon, ImpactFxStyle.Rail, 1.8f, 1f),
+                    Level(0.13f, 1420f, 5, 2, 4f, true, 6, Impact("CarveLine", ImpactKernelShape.Cross3, 9, 2, 1, 25, 16), FireMode.RailBurst, ProjectileBehavior.RailSlug, MuzzleFxStyle.Rail, TrailFxStyle.Neon, ImpactFxStyle.Rail, 1.8f, 1.05f),
                 }),
                 [WeaponStyleId.Arc] = CreateStyle(WeaponStyleId.Arc, "ARC", "#D8FFF2", "#59C9A5", "#6EC1FF", new[] { "#.#..", ".#.#.", "..#..", ".#.#.", "#.#.." }, new[]
                 {
-                    Level(0.15f, 720f, 1, 2, 18f, false, 0, Impact("Fork", ImpactKernelShape.Diamond3, 4, 1, 1, 25, 12)),
-                    Level(0.13f, 740f, 1, 3, 24f, false, 0, Impact("Chain1", ImpactKernelShape.Diamond3, 4, 1, 1, 30, 14)),
-                    Level(0.12f, 760f, 2, 4, 28f, false, 0, Impact("Chain2", ImpactKernelShape.Diamond5, 5, 1, 1, 35, 16)),
-                    Level(0.11f, 780f, 2, 5, 34f, false, 0, Impact("StunChain", ImpactKernelShape.Diamond5, 5, 2, 1, 40, 18)),
+                    Level(0.15f, 760f, 1, 2, 18f, false, 0, Impact("Fork", ImpactKernelShape.Diamond3, 4, 1, 1, 25, 12), FireMode.ArcChain, ProjectileBehavior.ArcBolt, MuzzleFxStyle.Arc, TrailFxStyle.Electric, ImpactFxStyle.Arc, 1.9f, 1f, 0f, 0f, 1),
+                    Level(0.13f, 780f, 1, 3, 24f, false, 0, Impact("Chain1", ImpactKernelShape.Diamond3, 4, 1, 1, 30, 14), FireMode.ArcChain, ProjectileBehavior.ArcBolt, MuzzleFxStyle.Arc, TrailFxStyle.Electric, ImpactFxStyle.Arc, 1.95f, 1f, 0f, 0f, 2),
+                    Level(0.12f, 800f, 2, 4, 28f, false, 0, Impact("Chain2", ImpactKernelShape.Diamond5, 5, 1, 1, 35, 16), FireMode.ArcChain, ProjectileBehavior.ArcBolt, MuzzleFxStyle.Arc, TrailFxStyle.Electric, ImpactFxStyle.Arc, 2f, 1.05f, 0f, 0f, 3),
+                    Level(0.11f, 820f, 2, 5, 34f, false, 0, Impact("StunChain", ImpactKernelShape.Diamond5, 5, 2, 1, 40, 18), FireMode.ArcChain, ProjectileBehavior.ArcBolt, MuzzleFxStyle.Arc, TrailFxStyle.Electric, ImpactFxStyle.Arc, 2.05f, 1.1f, 0f, 0f, 4),
                 }),
                 [WeaponStyleId.Blade] = CreateStyle(WeaponStyleId.Blade, "BLADE", "#FFF0F5", "#E58AB0", "#FFD166", new[] { "#...#", ".###.", "..#..", ".###.", "#...#" }, new[]
                 {
-                    Level(0.14f, 620f, 2, 2, 30f, false, 0, Impact("Crescent", ImpactKernelShape.Diamond5, 5, 1, 0, 0, 12)),
-                    Level(0.13f, 640f, 2, 3, 36f, false, 0, Impact("DualBlade", ImpactKernelShape.Diamond5, 5, 1, 0, 0, 12)),
-                    Level(0.12f, 660f, 3, 4, 42f, false, 0, Impact("GuardShard", ImpactKernelShape.Diamond5, 6, 1, 1, 20, 14)),
-                    Level(0.10f, 680f, 3, 5, 48f, false, 0, Impact("ContactGuard", ImpactKernelShape.Diamond5, 6, 2, 1, 25, 16)),
+                    Level(0.16f, 620f, 2, 2, 34f, false, 0, Impact("Crescent", ImpactKernelShape.Diamond5, 5, 1, 0, 0, 12), FireMode.BladeWave, ProjectileBehavior.BladeWave, MuzzleFxStyle.Blade, TrailFxStyle.Neon, ImpactFxStyle.Blade, 0.65f, 1.35f),
+                    Level(0.14f, 640f, 2, 3, 40f, false, 0, Impact("DualBlade", ImpactKernelShape.Diamond5, 5, 1, 0, 0, 12), FireMode.BladeWave, ProjectileBehavior.BladeWave, MuzzleFxStyle.Blade, TrailFxStyle.Neon, ImpactFxStyle.Blade, 0.7f, 1.4f),
+                    Level(0.12f, 660f, 3, 4, 46f, false, 0, Impact("GuardShard", ImpactKernelShape.Diamond5, 6, 1, 1, 20, 14), FireMode.BladeWave, ProjectileBehavior.BladeWave, MuzzleFxStyle.Blade, TrailFxStyle.Neon, ImpactFxStyle.Blade, 0.75f, 1.45f),
+                    Level(0.10f, 690f, 3, 5, 52f, false, 0, Impact("ContactGuard", ImpactKernelShape.Diamond5, 6, 2, 1, 25, 16), FireMode.BladeWave, ProjectileBehavior.BladeWave, MuzzleFxStyle.Blade, TrailFxStyle.Neon, ImpactFxStyle.Blade, 0.8f, 1.5f),
                 }),
                 [WeaponStyleId.Drone] = CreateStyle(WeaponStyleId.Drone, "DRONE", "#E5FBDD", "#7AAA6E", "#F4B860", new[] { ".#.#.", "#####", ".###.", "#####", ".#.#." }, new[]
                 {
-                    Level(0.13f, 760f, 1, 1, 0f, false, 0, Impact("Drone", ImpactKernelShape.Diamond3, 3, 1, 0, 0, 8)),
-                    Level(0.12f, 780f, 1, 1, 0f, false, 0, Impact("TwinDrone", ImpactKernelShape.Diamond3, 4, 1, 0, 0, 10)),
-                    Level(0.11f, 800f, 2, 1, 0f, false, 0, Impact("MirrorDrone", ImpactKernelShape.Diamond3, 4, 1, 0, 0, 10)),
-                    Level(0.10f, 820f, 2, 1, 0f, false, 0, Impact("Intercept", ImpactKernelShape.Diamond5, 5, 1, 1, 15, 12)),
+                    Level(0.15f, 760f, 1, 1, 0f, false, 0, Impact("Drone", ImpactKernelShape.Diamond3, 3, 1, 0, 0, 8), FireMode.DroneCommand, ProjectileBehavior.DroneBolt, MuzzleFxStyle.Drone, TrailFxStyle.Streak, ImpactFxStyle.Drone, 1.9f, 1f, 0f, 0f, 0, 1, 0.46f),
+                    Level(0.14f, 780f, 1, 1, 0f, false, 0, Impact("TwinDrone", ImpactKernelShape.Diamond3, 4, 1, 0, 0, 10), FireMode.DroneCommand, ProjectileBehavior.DroneBolt, MuzzleFxStyle.Drone, TrailFxStyle.Streak, ImpactFxStyle.Drone, 1.9f, 1f, 0f, 0f, 0, 2, 0.42f),
+                    Level(0.12f, 800f, 2, 1, 0f, false, 0, Impact("MirrorDrone", ImpactKernelShape.Diamond3, 4, 1, 0, 0, 10), FireMode.DroneCommand, ProjectileBehavior.DroneBolt, MuzzleFxStyle.Drone, TrailFxStyle.Streak, ImpactFxStyle.Drone, 2f, 1.05f, 0f, 0f, 0, 3, 0.38f),
+                    Level(0.10f, 820f, 2, 1, 0f, false, 0, Impact("Intercept", ImpactKernelShape.Diamond5, 5, 1, 1, 15, 12), FireMode.DroneCommand, ProjectileBehavior.DroneBolt, MuzzleFxStyle.Drone, TrailFxStyle.Streak, ImpactFxStyle.Drone, 2f, 1.05f, 0f, 0f, 0, 4, 0.34f),
                 }),
                 [WeaponStyleId.Fortress] = CreateStyle(WeaponStyleId.Fortress, "FORTRESS", "#E9E3D2", "#A98F6C", "#FFB347", new[] { "#####", "#...#", "#####", "#...#", "#####"}, new[]
                 {
-                    Level(0.18f, 620f, 2, 1, 0f, false, 0, Impact("ShieldPulse", ImpactKernelShape.Cross3, 5, 1, 1, 20, 12)),
-                    Level(0.17f, 640f, 2, 2, 10f, false, 0, Impact("ShieldPulse2", ImpactKernelShape.Cross3, 5, 1, 1, 25, 14)),
-                    Level(0.16f, 660f, 3, 3, 14f, false, 0, Impact("GuardPlate", ImpactKernelShape.Cross3, 6, 1, 1, 30, 16)),
-                    Level(0.14f, 680f, 4, 3, 18f, false, 0, Impact("ShieldBurst", ImpactKernelShape.Blast5, 7, 2, 2, 45, 20)),
+                    Level(0.20f, 620f, 2, 1, 0f, false, 0, Impact("ShieldPulse", ImpactKernelShape.Cross3, 5, 1, 1, 20, 12), FireMode.FortressPulse, ProjectileBehavior.ShieldPulse, MuzzleFxStyle.Fortress, TrailFxStyle.Shield, ImpactFxStyle.Fortress, 1.4f, 1.15f, 0f, 38f),
+                    Level(0.18f, 640f, 2, 2, 12f, false, 0, Impact("ShieldPulse2", ImpactKernelShape.Cross3, 5, 1, 1, 25, 14), FireMode.FortressPulse, ProjectileBehavior.ShieldPulse, MuzzleFxStyle.Fortress, TrailFxStyle.Shield, ImpactFxStyle.Fortress, 1.45f, 1.18f, 0f, 42f),
+                    Level(0.16f, 660f, 3, 3, 16f, false, 0, Impact("GuardPlate", ImpactKernelShape.Cross3, 6, 1, 1, 30, 16), FireMode.FortressPulse, ProjectileBehavior.ShieldPulse, MuzzleFxStyle.Fortress, TrailFxStyle.Shield, ImpactFxStyle.Fortress, 1.5f, 1.22f, 0f, 48f),
+                    Level(0.14f, 680f, 4, 4, 20f, false, 0, Impact("ShieldBurst", ImpactKernelShape.Blast5, 7, 2, 2, 45, 20), FireMode.FortressPulse, ProjectileBehavior.ShieldPulse, MuzzleFxStyle.Fortress, TrailFxStyle.Shield, ImpactFxStyle.Fortress, 1.55f, 1.25f, 0f, 56f),
                 }),
             };
         }
@@ -199,7 +199,30 @@ namespace SpaceBurst
             };
         }
 
-        private static WeaponLevelDefinition Level(float interval, float speed, int damage, int count, float spread, bool pierce, int pierceCount, ImpactProfileDefinition impact)
+        private static WeaponLevelDefinition Level(
+            float interval,
+            float speed,
+            int damage,
+            int count,
+            float spread,
+            bool pierce,
+            int pierceCount,
+            ImpactProfileDefinition impact,
+            FireMode fireMode,
+            ProjectileBehavior projectileBehavior,
+            MuzzleFxStyle muzzleFxStyle,
+            TrailFxStyle trailFxStyle,
+            ImpactFxStyle impactFxStyle,
+            float projectileLifetimeSeconds = 2.4f,
+            float projectileScale = 1f,
+            float homingDelaySeconds = 0f,
+            float explosionRadius = 0f,
+            int chainCount = 0,
+            int droneCount = 0,
+            float droneIntervalSeconds = 0.45f,
+            float beamDurationSeconds = 0f,
+            float beamThickness = 12f,
+            int beamTickDamage = 1)
         {
             return new WeaponLevelDefinition
             {
@@ -210,6 +233,21 @@ namespace SpaceBurst
                 SpreadDegrees = spread,
                 Pierce = pierce,
                 PierceCount = pierceCount,
+                ProjectileLifetimeSeconds = projectileLifetimeSeconds,
+                ProjectileScale = projectileScale,
+                HomingDelaySeconds = homingDelaySeconds,
+                ExplosionRadius = explosionRadius,
+                ChainCount = chainCount,
+                DroneCount = droneCount,
+                DroneIntervalSeconds = droneIntervalSeconds,
+                BeamDurationSeconds = beamDurationSeconds,
+                BeamThickness = beamThickness,
+                BeamTickDamage = beamTickDamage,
+                FireMode = fireMode,
+                ProjectileBehavior = projectileBehavior,
+                MuzzleFxStyle = muzzleFxStyle,
+                TrailFxStyle = trailFxStyle,
+                ImpactFxStyle = impactFxStyle,
                 Impact = impact,
             };
         }

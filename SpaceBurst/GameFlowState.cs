@@ -3,12 +3,16 @@ namespace SpaceBurst
     enum GameFlowState
     {
         Title,
+        Options,
         Help,
         Paused,
+        SaveSlots,
+        LoadSlots,
         LevelIntro,
+        Tutorial,
         Playing,
-        BossWarning,
-        LevelClear,
+        StageTransition,
+        UpgradeDraft,
         GameOver,
         CampaignComplete,
     }

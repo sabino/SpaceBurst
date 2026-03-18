@@ -79,6 +79,8 @@ namespace SpaceBurst.RuntimeData
                 issues.Add(new ValidationIssue("IntroSeconds", "IntroSeconds cannot be negative."));
             if (stage.ScrollSpeed <= 0f)
                 issues.Add(new ValidationIssue("ScrollSpeed", "ScrollSpeed must be greater than zero."));
+            if (stage.BaseScrollSpeed < 0f)
+                issues.Add(new ValidationIssue("BaseScrollSpeed", "BaseScrollSpeed cannot be negative."));
             if (string.IsNullOrWhiteSpace(stage.Theme))
                 issues.Add(new ValidationIssue("Theme", "Theme is required."));
             if (stage.StartingLives <= 0)
@@ -129,6 +131,10 @@ namespace SpaceBurst.RuntimeData
                         issues.Add(new ValidationIssue(sectionPath, "DurationSeconds must be greater than 0.25."));
                     if (section.PowerDropBonusChance < 0f || section.PowerDropBonusChance > 1f)
                         issues.Add(new ValidationIssue(sectionPath, "PowerDropBonusChance must be between 0 and 1."));
+                    if (section.ScrollMultiplier <= 0f)
+                        issues.Add(new ValidationIssue(sectionPath, "ScrollMultiplier must be greater than zero."));
+                    if (section.EnemySpeedMultiplier <= 0f)
+                        issues.Add(new ValidationIssue(sectionPath, "EnemySpeedMultiplier must be greater than zero."));
                     if (section.Groups == null || section.Groups.Count == 0)
                         issues.Add(new ValidationIssue(sectionPath, "Each section requires at least one spawn group."));
 

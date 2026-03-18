@@ -65,6 +65,7 @@ namespace SpaceBurst.Runtime.Tests
             DamageResult result = DamageMaskMath.ApplyPointDamage(mask, 2, 2, 0, 1, 15);
 
             Assert.Equal(1, result.CellsRemoved);
+            Assert.Equal(1, result.CoreCellsRemoved);
             Assert.True(result.Destroyed);
             Assert.Equal(8, result.RemainingOccupied);
         }
@@ -116,7 +117,133 @@ namespace SpaceBurst.Runtime.Tests
                 25);
 
             Assert.True(result.CellsRemoved >= 5);
+            Assert.True(result.CoreCellsRemoved >= 0);
             Assert.True(result.RemainingOccupied < mask.InitialOccupiedCount);
+        }
+
+        [Fact]
+        public void CoreBreachCanDestroyNonBossWithoutDestroyingBoss()
+        {
+            var sprite = new ProceduralSpriteDefinition
+            {
+                Rows = new List<string>
+                {
+                    ".......",
+                    "..###..",
+                    ".##C##.",
+                    ".##C##.",
+                    "..###..",
+                    ".......",
+                },
+                VitalCore = new VitalCoreMaskDefinition
+                {
+                    Rows = new List<string>
+                    {
+                        ".......",
+                        ".......",
+                        "..XX...",
+                        "..XX...",
+                        ".......",
+                        ".......",
+                    }
+                }
+            };
+
+            MaskGrid mask = DamageMaskMath.CreateGrid(sprite);
+            DamageResult result = DamageMaskMath.ApplyImpactDamage(
+                mask,
+                2,
+                2,
+                new ImpactProfileDefinition
+                {
+                    Kernel = ImpactKernelShape.Point,
+                    BaseCellsRemoved = 1,
+                    BonusCellsPerDamage = 0,
+                },
+                1,
+                10);
+
+            Assert.Equal(1, result.CoreCellsRemoved);
+            Assert.False(result.Destroyed);
+            Assert.True(DamageMaskMath.ShouldDestroyOnImpact(result, true));
+            Assert.False(DamageMaskMath.ShouldDestroyOnImpact(result, false));
+        }
+
+        [Fact]
+        public void IntegrityThresholdFallbackStillDestroysWithoutCoreHit()
+        {
+            var sprite = new ProceduralSpriteDefinition
+            {
+                Rows = new List<string>
+                {
+                    ".#########.",
+                },
+                VitalCore = new VitalCoreMaskDefinition
+                {
+                    Rows = new List<string>
+                    {
+                        "........X..",
+                    }
+                }
+            };
+
+            MaskGrid mask = DamageMaskMath.CreateGrid(sprite);
+            DamageResult result = DamageMaskMath.ApplyPointDamage(
+                mask,
+                1,
+                0,
+                0,
+                5,
+                60);
+
+            Assert.Equal(0, result.CoreCellsRemoved);
+            Assert.True(result.Destroyed);
+            Assert.True(DamageMaskMath.ShouldDestroyOnImpact(result, true));
+        }
+
+        [Fact]
+        public void InwardTargetingPrefersCellsCloserToCore()
+        {
+            var sprite = new ProceduralSpriteDefinition
+            {
+                Rows = new List<string>
+                {
+                    "#####",
+                    "#####",
+                    "##C##",
+                    "#####",
+                    "#####",
+                },
+                VitalCore = new VitalCoreMaskDefinition
+                {
+                    Rows = new List<string>
+                    {
+                        ".....",
+                        ".....",
+                        "..X..",
+                        ".....",
+                        ".....",
+                    }
+                }
+            };
+
+            MaskGrid mask = DamageMaskMath.CreateGrid(sprite);
+            DamageResult result = DamageMaskMath.ApplyImpactDamage(
+                mask,
+                0,
+                2,
+                new ImpactProfileDefinition
+                {
+                    Kernel = ImpactKernelShape.Point,
+                    BaseCellsRemoved = 2,
+                    BonusCellsPerDamage = 0,
+                },
+                1,
+                20);
+
+            Assert.Equal(2, result.CellsRemoved);
+            Assert.False(mask.IsOccupied(0, 2));
+            Assert.False(mask.IsOccupied(1, 2));
         }
 
         private static string FindRepositoryRoot()

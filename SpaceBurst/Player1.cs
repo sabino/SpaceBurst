@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using SpaceBurst.RuntimeData;
 using System;
+using System.Linq;
 
 namespace SpaceBurst
 {
@@ -32,6 +33,7 @@ namespace SpaceBurst
         private float respawnTimer;
         private float invulnerabilityTimer;
         private float fireCooldown;
+        private float droneSupportTimer;
         private bool hullDestroyedQueued;
 
         public bool IsDead
@@ -64,6 +66,22 @@ namespace SpaceBurst
             get { return PlayerStatus.RunProgress.Weapons.ActiveLevel; }
         }
 
+        public int ActiveWeaponRank
+        {
+            get { return PlayerStatus.RunProgress.Weapons.ActiveRank; }
+        }
+
+        public float HullRatio
+        {
+            get
+            {
+                if (sprite?.Mask == null || sprite.Mask.InitialOccupiedCount <= 0)
+                    return 1f;
+
+                return sprite.Mask.OccupiedCount / (float)sprite.Mask.InitialOccupiedCount;
+            }
+        }
+
         private Player1()
         {
             ResetForStage();
@@ -88,6 +106,8 @@ namespace SpaceBurst
                 invulnerabilityTimer -= deltaSeconds;
             if (fireCooldown > 0f)
                 fireCooldown -= deltaSeconds;
+            if (droneSupportTimer > 0f)
+                droneSupportTimer -= deltaSeconds;
 
             if (Input.WasPreviousStylePressed())
                 CycleStyle(-1);
@@ -104,11 +124,14 @@ namespace SpaceBurst
             cannonDirection = aimDirection;
             Orientation = 0f;
 
-            Vector2 movementVelocity = moveDirection * MoveSpeed;
+            Vector2 movementVelocity = moveDirection * (MoveSpeed * PlayerStatus.RunProgress.MoveSpeedMultiplier);
             knockbackVelocity = Vector2.Lerp(knockbackVelocity, Vector2.Zero, MathHelper.Clamp(6f * deltaSeconds, 0f, 1f));
             Velocity = movementVelocity + knockbackVelocity;
             Position += Velocity * deltaSeconds;
             ClampToArena();
+
+            if (ActiveStyle == WeaponStyleId.Drone)
+                UpdateDrones();
 
             if (Input.IsFireHeld())
                 TryFire();
@@ -134,6 +157,7 @@ namespace SpaceBurst
             Velocity = Vector2.Zero;
             knockbackVelocity = Vector2.Zero;
             fireCooldown = 0f;
+            droneSupportTimer = 0f;
             respawnTimer = 0f;
             invulnerabilityTimer = InvulnerabilitySeconds;
             hullDestroyedQueued = false;
@@ -148,6 +172,7 @@ namespace SpaceBurst
             Velocity = Vector2.Zero;
             knockbackVelocity = Vector2.Zero;
             fireCooldown = 0f;
+            droneSupportTimer = 0f;
         }
 
         public void MakeInvulnerable(float durationSeconds)
@@ -202,81 +227,216 @@ namespace SpaceBurst
 
         public void CollectPowerup()
         {
-            PowerupCollectOutcome outcome = PlayerStatus.RunProgress.Weapons.ApplyPowerup();
-            switch (outcome)
-            {
-                case PowerupCollectOutcome.LevelUp:
-                case PowerupCollectOutcome.UnlockedStyle:
-                    RefreshLoadoutVisuals();
-                    break;
-
-                case PowerupCollectOutcome.OverflowReward:
-                    PlayerStatus.AddPoints(200);
-                    RefreshLoadoutVisuals();
-                    break;
-            }
+            PlayerStatus.RunProgress.AddUpgradeCharge();
 
             Sound.Spawn.Play(0.15f, 0.2f, 0.1f);
             invulnerabilityTimer = Math.Max(invulnerabilityTimer, 0.2f);
+            EntityManager.SpawnShockwave(Position, ColorUtil.ParseHex(WeaponCatalog.GetStyle(ActiveStyle).AccentColor, Color.Orange) * 0.2f, 10f, 52f, 0.18f);
+            EntityManager.SpawnFlash(Position, Color.Gold * 0.18f, 14f, 54f, 0.14f);
+        }
+
+        public void RefreshLoadout()
+        {
+            RefreshLoadoutVisuals();
+        }
+
+        public PlayerSnapshotData CaptureSnapshot()
+        {
+            return new PlayerSnapshotData
+            {
+                Position = new Vector2Data(Position.X, Position.Y),
+                Velocity = new Vector2Data(Velocity.X, Velocity.Y),
+                CannonDirection = new Vector2Data(cannonDirection.X, cannonDirection.Y),
+                KnockbackVelocity = new Vector2Data(knockbackVelocity.X, knockbackVelocity.Y),
+                PendingRespawnPosition = new Vector2Data(pendingRespawnPosition.X, pendingRespawnPosition.Y),
+                RespawnTimer = respawnTimer,
+                InvulnerabilityTimer = invulnerabilityTimer,
+                FireCooldown = fireCooldown,
+                DroneSupportTimer = droneSupportTimer,
+                HullDestroyedQueued = hullDestroyedQueued,
+                HullMask = sprite?.CaptureMaskSnapshot() ?? new MaskSnapshotData(),
+            };
+        }
+
+        public void RestoreSnapshot(PlayerSnapshotData snapshot)
+        {
+            if (snapshot == null)
+                return;
+
+            RefreshLoadoutVisuals();
+            Position = new Vector2(snapshot.Position.X, snapshot.Position.Y);
+            Velocity = new Vector2(snapshot.Velocity.X, snapshot.Velocity.Y);
+            cannonDirection = new Vector2(snapshot.CannonDirection.X, snapshot.CannonDirection.Y);
+            knockbackVelocity = new Vector2(snapshot.KnockbackVelocity.X, snapshot.KnockbackVelocity.Y);
+            pendingRespawnPosition = new Vector2(snapshot.PendingRespawnPosition.X, snapshot.PendingRespawnPosition.Y);
+            respawnTimer = snapshot.RespawnTimer;
+            invulnerabilityTimer = snapshot.InvulnerabilityTimer;
+            fireCooldown = snapshot.FireCooldown;
+            droneSupportTimer = snapshot.DroneSupportTimer;
+            hullDestroyedQueued = snapshot.HullDestroyedQueued;
+            sprite?.RestoreMaskSnapshot(snapshot.HullMask);
+            ClampToArena();
         }
 
         private void TryFire()
         {
-            WeaponLevelDefinition level = WeaponCatalog.GetLevel(ActiveStyle, ActiveWeaponLevel);
+            WeaponLevelDefinition level = ResolveWeaponLevel();
             if (fireCooldown > 0f)
                 return;
 
             fireCooldown = level.FireIntervalSeconds;
-            switch (ActiveStyle)
+
+            switch (level.FireMode)
             {
-                case WeaponStyleId.Missile:
-                    FireSpread(level, 0f, 4f + ActiveWeaponLevel * 2f);
+                case FireMode.SpreadShotgun:
+                    FireShotgun(level);
                     break;
 
-                case WeaponStyleId.Blade:
-                    FireSpread(level, 0.45f, 0f, 0.7f);
+                case FireMode.BeamBurst:
+                    FireBeam(level);
                     break;
 
-                case WeaponStyleId.Drone:
-                    FirePrimary(level, 0f, 0f, 0f);
-                    FireDroneSupport(level);
+                case FireMode.PlasmaOrb:
+                    FirePlasma(level);
                     break;
 
-                case WeaponStyleId.Fortress:
-                    FireSpread(level, 0.12f, 0f, 1.2f);
+                case FireMode.MissileLauncher:
+                    FireMissiles(level);
+                    break;
+
+                case FireMode.RailBurst:
+                    FireRail(level);
+                    break;
+
+                case FireMode.ArcChain:
+                    FireArc(level);
+                    break;
+
+                case FireMode.BladeWave:
+                    FireBlade(level);
+                    break;
+
+                case FireMode.DroneCommand:
+                    FirePulseLike(level);
+                    break;
+
+                case FireMode.FortressPulse:
+                    FireFortress(level);
                     break;
 
                 default:
-                    FireSpread(level, 0f, 0f);
+                    FirePulseLike(level);
                     break;
             }
         }
 
-        private void FireSpread(WeaponLevelDefinition level, float homingStrength, float extraLifetime, float scale = 1f)
+        private void FirePulseLike(WeaponLevelDefinition level)
+        {
+            SpawnVolley(level, level.ProjectileCount, level.SpreadDegrees, 0f, 0f, 1f);
+            SpawnMuzzleFx(level, Position + cannonDirection * 30f);
+        }
+
+        private void FireShotgun(WeaponLevelDefinition level)
+        {
+            SpawnVolley(level, Math.Max(3, level.ProjectileCount), Math.Max(36f, level.SpreadDegrees), 0f, 0f, 0.95f);
+            SpawnMuzzleFx(level, Position + cannonDirection * 28f);
+        }
+
+        private void FireBeam(WeaponLevelDefinition level)
         {
             int count = Math.Max(1, level.ProjectileCount);
-            float totalSpread = MathHelper.ToRadians(level.SpreadDegrees);
+            float spread = MathHelper.ToRadians(Math.Max(0f, level.SpreadDegrees));
+            float step = count <= 1 ? 0f : spread / (count - 1);
+            float start = -spread * 0.5f;
+
+            for (int i = 0; i < count; i++)
+            {
+                float angle = start + step * i;
+                Vector2 direction = Vector2.Transform(cannonDirection, Matrix.CreateRotationZ(angle));
+                if (direction == Vector2.Zero)
+                    direction = Vector2.UnitX;
+                else
+                    direction.Normalize();
+
+                Vector2 origin = Position + direction * 26f;
+                EntityManager.Add(new BeamShot(
+                    origin,
+                    direction,
+                    520f + ActiveWeaponLevel * 40f + ActiveWeaponRank * 20f,
+                    level.BeamThickness,
+                    level.BeamDurationSeconds,
+                    level.BeamTickDamage,
+                    true,
+                    level.Impact,
+                    WeaponCatalog.GetStyle(ActiveStyle).PrimaryColor,
+                    WeaponCatalog.GetStyle(ActiveStyle).AccentColor));
+            }
+
+            SpawnMuzzleFx(level, Position + cannonDirection * 30f);
+        }
+
+        private void FirePlasma(WeaponLevelDefinition level)
+        {
+            SpawnVolley(level, Math.Max(1, level.ProjectileCount), Math.Max(0f, level.SpreadDegrees), 0f, 0f, level.ProjectileScale);
+            SpawnMuzzleFx(level, Position + cannonDirection * 28f);
+        }
+
+        private void FireMissiles(WeaponLevelDefinition level)
+        {
+            SpawnVolley(level, Math.Max(1, level.ProjectileCount), Math.Max(0f, level.SpreadDegrees), 0f, 2.2f, level.ProjectileScale);
+            SpawnMuzzleFx(level, Position + cannonDirection * 28f);
+        }
+
+        private void FireRail(WeaponLevelDefinition level)
+        {
+            SpawnVolley(level, Math.Max(1, level.ProjectileCount), Math.Max(0f, level.SpreadDegrees), 0f, 0f, level.ProjectileScale);
+            SpawnMuzzleFx(level, Position + cannonDirection * 34f);
+        }
+
+        private void FireArc(WeaponLevelDefinition level)
+        {
+            SpawnVolley(level, Math.Max(1, level.ProjectileCount), Math.Max(18f, level.SpreadDegrees), 0f, 0f, level.ProjectileScale);
+            SpawnMuzzleFx(level, Position + cannonDirection * 26f);
+        }
+
+        private void FireBlade(WeaponLevelDefinition level)
+        {
+            SpawnVolley(level, Math.Max(2, level.ProjectileCount), Math.Max(32f, level.SpreadDegrees), 0f, 0f, level.ProjectileScale);
+            SpawnMuzzleFx(level, Position + cannonDirection * 22f);
+        }
+
+        private void FireFortress(WeaponLevelDefinition level)
+        {
+            SpawnVolley(level, Math.Max(1, level.ProjectileCount), Math.Max(0f, level.SpreadDegrees), 0f, 0f, level.ProjectileScale);
+            if (ActiveWeaponLevel >= 2)
+                SpawnVolley(level, 2, 18f, -10f, 0f, level.ProjectileScale * 0.9f);
+            SpawnMuzzleFx(level, Position + cannonDirection * 24f);
+        }
+
+        private void SpawnVolley(WeaponLevelDefinition level, int count, float spreadDegrees, float forwardOffset, float homingStrength, float scale)
+        {
+            float totalSpread = MathHelper.ToRadians(spreadDegrees);
             float step = count <= 1 ? 0f : totalSpread / (count - 1);
             float start = -totalSpread * 0.5f;
+
             for (int i = 0; i < count; i++)
             {
                 float angle = start + step * i;
                 Vector2 direction = Vector2.Transform(cannonDirection, Matrix.CreateRotationZ(angle));
                 float lateral = count <= 1 ? 0f : (i - (count - 1) * 0.5f) * 8f;
-                FirePrimary(level, lateral, extraLifetime, homingStrength, direction, scale);
+                FirePrimary(level, direction, lateral, forwardOffset, homingStrength, scale);
             }
         }
 
-        private void FirePrimary(WeaponLevelDefinition level, float lateralOffset, float extraLifetime, float homingStrength, Vector2? directionOverride = null, float scale = 1f)
+        private void FirePrimary(WeaponLevelDefinition level, Vector2 direction, float lateralOffset, float forwardOffset, float homingStrength, float scale)
         {
-            Vector2 direction = directionOverride ?? cannonDirection;
             if (direction == Vector2.Zero)
                 direction = Vector2.UnitX;
             else
                 direction.Normalize();
 
             Vector2 perpendicular = new Vector2(-direction.Y, direction.X);
-            Vector2 spawnPoint = Position + direction * 30f + perpendicular * lateralOffset;
+            Vector2 spawnPoint = Position + direction * (30f + forwardOffset) + perpendicular * lateralOffset;
             ProceduralSpriteDefinition projectile = WeaponCatalog.CreateProjectileDefinition(ActiveStyle, ActiveWeaponLevel, true);
             EntityManager.Add(new Bullet(
                 spawnPoint,
@@ -286,32 +446,55 @@ namespace SpaceBurst
                 level.Impact,
                 projectile,
                 level.Pierce ? Math.Max(1, level.PierceCount) : 0,
-                2.4f + extraLifetime,
+                level.ProjectileLifetimeSeconds,
                 homingStrength,
-                scale));
-            Sound.Shot.Play(0.16f, 0f, 0f);
+                level.ProjectileScale * scale,
+                level.ProjectileBehavior,
+                level.TrailFxStyle,
+                level.ImpactFxStyle,
+                level.ExplosionRadius,
+                level.ChainCount,
+                level.HomingDelaySeconds));
+            Sound.Shot.Play(0.16f, ResolveShotPitch(level), 0f);
         }
 
-        private void FireDroneSupport(WeaponLevelDefinition level)
+        private void UpdateDrones()
         {
-            int drones = 1 + ActiveWeaponLevel;
-            for (int i = 0; i < drones; i++)
+            WeaponLevelDefinition level = ResolveWeaponLevel();
+            if (level.DroneCount <= 0 || droneSupportTimer > 0f)
+                return;
+
+            droneSupportTimer = Math.Max(0.24f, level.DroneIntervalSeconds);
+            for (int i = 0; i < level.DroneCount; i++)
             {
                 float side = i % 2 == 0 ? -1f : 1f;
                 float vertical = (i / 2) * 12f + 18f;
-                Vector2 offset = new Vector2(-18f, side * vertical);
-                Vector2 spawn = Position + offset + cannonDirection * 24f;
+                Vector2 offset = new Vector2(-20f, side * vertical);
+                Vector2 spawn = Position + offset;
+                Enemy nearest = EntityManager.Enemies.OrderBy(enemy => Vector2.DistanceSquared(enemy.Position, spawn)).FirstOrDefault();
+                Vector2 direction = nearest == null ? Vector2.UnitX : nearest.Position - spawn;
+                if (direction == Vector2.Zero)
+                    direction = Vector2.UnitX;
+                else
+                    direction.Normalize();
+
                 EntityManager.Add(new Bullet(
                     spawn,
-                    cannonDirection * (level.ProjectileSpeed + 40f),
+                    direction * (level.ProjectileSpeed + 70f),
                     true,
                     Math.Max(1, level.ProjectileDamage),
                     level.Impact,
                     WeaponCatalog.CreateProjectileDefinition(WeaponStyleId.Drone, ActiveWeaponLevel, true),
                     0,
-                    2.2f,
+                    level.ProjectileLifetimeSeconds,
+                    nearest == null ? 0f : 0.6f,
+                    0.9f,
+                    ProjectileBehavior.DroneBolt,
+                    TrailFxStyle.Streak,
+                    ImpactFxStyle.Drone,
                     0f,
-                    0.9f));
+                    0,
+                    0.08f));
             }
         }
 
@@ -320,6 +503,7 @@ namespace SpaceBurst
             PlayerStatus.RunProgress.Weapons.Cycle(direction);
             RefreshLoadoutVisuals();
             fireCooldown = 0f;
+            droneSupportTimer = 0f;
         }
 
         private void DrawAuxiliaryModules(SpriteBatch spriteBatch, bool flicker)
@@ -349,6 +533,19 @@ namespace SpaceBurst
                         ColorUtil.ParseHex(WeaponCatalog.GetStyle(WeaponStyleId.Drone).AccentColor, Color.Orange),
                         true);
                 }
+            }
+            else if (ActiveStyle == WeaponStyleId.Fortress)
+            {
+                Color accent = ColorUtil.ParseHex(WeaponCatalog.GetStyle(WeaponStyleId.Fortress).AccentColor, Color.Orange);
+                spriteBatch.Draw(Game1.UiPixel, new Rectangle((int)Position.X - 22, (int)Position.Y - 18, 6, 36), accent * 0.75f);
+                spriteBatch.Draw(Game1.UiPixel, new Rectangle((int)Position.X - 14, (int)Position.Y - 22, 4, 44), accent * 0.4f);
+            }
+            else if (ActiveStyle == WeaponStyleId.Blade)
+            {
+                Color accent = ColorUtil.ParseHex(WeaponCatalog.GetStyle(WeaponStyleId.Blade).AccentColor, Color.Pink);
+                float orbit = (float)Math.Sin(Game1.GameTime.TotalGameTime.TotalSeconds * 6f) * 6f;
+                spriteBatch.Draw(Game1.UiPixel, new Rectangle((int)Position.X - 10, (int)(Position.Y - 22 + orbit), 18, 2), accent * 0.85f);
+                spriteBatch.Draw(Game1.UiPixel, new Rectangle((int)Position.X - 10, (int)(Position.Y + 20 - orbit), 18, 2), accent * 0.85f);
             }
         }
 
@@ -380,6 +577,81 @@ namespace SpaceBurst
             RenderScale = 1f;
         }
 
+        private WeaponLevelDefinition ResolveWeaponLevel()
+        {
+            WeaponLevelDefinition baseLevel = WeaponCatalog.GetLevel(ActiveStyle, ActiveWeaponLevel);
+            int rank = Math.Max(0, ActiveWeaponRank);
+            if (rank <= 0)
+                return baseLevel;
+
+            var level = new WeaponLevelDefinition
+            {
+                FireIntervalSeconds = baseLevel.FireIntervalSeconds,
+                ProjectileSpeed = baseLevel.ProjectileSpeed,
+                ProjectileDamage = baseLevel.ProjectileDamage,
+                ProjectileCount = baseLevel.ProjectileCount,
+                SpreadDegrees = baseLevel.SpreadDegrees,
+                Pierce = baseLevel.Pierce,
+                PierceCount = baseLevel.PierceCount,
+                ProjectileLifetimeSeconds = baseLevel.ProjectileLifetimeSeconds,
+                ProjectileScale = baseLevel.ProjectileScale,
+                HomingDelaySeconds = baseLevel.HomingDelaySeconds,
+                ExplosionRadius = baseLevel.ExplosionRadius,
+                ChainCount = baseLevel.ChainCount,
+                DroneCount = baseLevel.DroneCount,
+                DroneIntervalSeconds = baseLevel.DroneIntervalSeconds,
+                BeamDurationSeconds = baseLevel.BeamDurationSeconds,
+                BeamThickness = baseLevel.BeamThickness,
+                BeamTickDamage = baseLevel.BeamTickDamage,
+                FireMode = baseLevel.FireMode,
+                ProjectileBehavior = baseLevel.ProjectileBehavior,
+                MuzzleFxStyle = baseLevel.MuzzleFxStyle,
+                TrailFxStyle = baseLevel.TrailFxStyle,
+                ImpactFxStyle = baseLevel.ImpactFxStyle,
+                Impact = baseLevel.Impact,
+            };
+
+            level.FireIntervalSeconds *= MathF.Max(0.62f, 1f - rank * 0.022f);
+            level.ProjectileSpeed *= 1f + MathF.Min(0.55f, rank * 0.03f);
+            level.ProjectileDamage += rank / 3;
+            level.ProjectileLifetimeSeconds *= 1f + MathF.Min(0.4f, rank * 0.018f);
+            level.ExplosionRadius += (rank / 4) * 4f;
+            level.ChainCount += rank / 5;
+
+            switch (ActiveStyle)
+            {
+                case WeaponStyleId.Pulse:
+                    level.PierceCount += rank / 4;
+                    break;
+                case WeaponStyleId.Spread:
+                    level.SpreadDegrees += rank % 5 == 4 ? 6f : 0f;
+                    break;
+                case WeaponStyleId.Laser:
+                    level.BeamTickDamage += rank / 4;
+                    level.BeamThickness += rank % 4 == 3 ? 2f : 0f;
+                    break;
+                case WeaponStyleId.Plasma:
+                case WeaponStyleId.Missile:
+                case WeaponStyleId.Fortress:
+                    level.ExplosionRadius += rank / 3 * 2f;
+                    break;
+                case WeaponStyleId.Rail:
+                    level.PierceCount += 1 + rank / 4;
+                    break;
+                case WeaponStyleId.Arc:
+                    level.ChainCount += 1 + rank / 4;
+                    break;
+                case WeaponStyleId.Blade:
+                    level.ProjectileCount += rank % 4 == 3 ? 1 : 0;
+                    break;
+                case WeaponStyleId.Drone:
+                    level.DroneCount += rank % 4 == 3 ? 1 : 0;
+                    break;
+            }
+
+            return level;
+        }
+
         private void RestoreAfterRespawn()
         {
             RefreshLoadoutVisuals();
@@ -391,6 +663,68 @@ namespace SpaceBurst
             invulnerabilityTimer = InvulnerabilitySeconds;
             cannonDirection = Vector2.UnitX;
             color = Color.White;
+        }
+
+        private void SpawnMuzzleFx(WeaponLevelDefinition level, Vector2 position)
+        {
+            Color color = ColorUtil.ParseHex(WeaponCatalog.GetStyle(ActiveStyle).AccentColor, Color.White);
+            float startRadius = 10f;
+            float endRadius = 26f;
+
+            switch (level.MuzzleFxStyle)
+            {
+                case MuzzleFxStyle.Laser:
+                    startRadius = 14f;
+                    endRadius = 34f;
+                    break;
+                case MuzzleFxStyle.Plasma:
+                    startRadius = 12f;
+                    endRadius = 30f;
+                    break;
+                case MuzzleFxStyle.Missile:
+                    startRadius = 12f;
+                    endRadius = 26f;
+                    color = Color.OrangeRed;
+                    break;
+                case MuzzleFxStyle.Rail:
+                    startRadius = 8f;
+                    endRadius = 36f;
+                    break;
+                case MuzzleFxStyle.Arc:
+                    startRadius = 10f;
+                    endRadius = 30f;
+                    color = Color.Cyan;
+                    break;
+                case MuzzleFxStyle.Fortress:
+                    startRadius = 14f;
+                    endRadius = 32f;
+                    break;
+            }
+
+            EntityManager.SpawnFlash(position, color * 0.22f, startRadius, endRadius, 0.08f);
+        }
+
+        private float ResolveShotPitch(WeaponLevelDefinition level)
+        {
+            switch (level.MuzzleFxStyle)
+            {
+                case MuzzleFxStyle.Laser:
+                    return 0.18f;
+                case MuzzleFxStyle.Plasma:
+                    return -0.12f;
+                case MuzzleFxStyle.Missile:
+                    return -0.18f;
+                case MuzzleFxStyle.Rail:
+                    return 0.28f;
+                case MuzzleFxStyle.Arc:
+                    return 0.1f;
+                case MuzzleFxStyle.Blade:
+                    return 0.22f;
+                case MuzzleFxStyle.Fortress:
+                    return -0.06f;
+                default:
+                    return 0f;
+            }
         }
     }
 }

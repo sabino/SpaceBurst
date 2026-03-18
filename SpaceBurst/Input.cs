@@ -16,6 +16,7 @@ namespace SpaceBurst
 
         private static bool primaryActionPressed;
         private static bool fireHeld;
+        private static bool rewindHeld;
         private static Vector2 pointerPosition;
 
 #if ANDROID
@@ -24,6 +25,7 @@ namespace SpaceBurst
         private static Vector2 touchAimDirection;
         private static int movementTouchId = -1;
         private static int aimTouchId = -1;
+        private static int rewindTouchId = -1;
         private static Vector2 movementTouchOrigin;
         private static Vector2 movementTouchPosition;
         private static Vector2 aimTouchOrigin;
@@ -42,6 +44,7 @@ namespace SpaceBurst
             lastGamepadState = gamepadState;
             primaryActionPressed = false;
             fireHeld = false;
+            rewindHeld = false;
 
             keyboardState = Keyboard.GetState();
             gamepadState = GamePad.GetState(PlayerIndex.One);
@@ -53,7 +56,8 @@ namespace SpaceBurst
             mouseState = Mouse.GetState();
             pointerPosition = Game1.ScreenToWorld(new Vector2(mouseState.X, mouseState.Y));
             primaryActionPressed = lastMouseState.LeftButton == ButtonState.Released && mouseState.LeftButton == ButtonState.Pressed;
-            fireHeld = keyboardState.IsKeyDown(Keys.Space) || gamepadState.Triggers.Right > 0.25f || gamepadState.Triggers.Left > 0.25f;
+            fireHeld = keyboardState.IsKeyDown(Keys.Space) || gamepadState.Triggers.Right > 0.25f;
+            rewindHeld = keyboardState.IsKeyDown(Keys.R) || gamepadState.IsButtonDown(Buttons.LeftShoulder);
 #endif
         }
 
@@ -89,12 +93,17 @@ namespace SpaceBurst
 
         public static bool WasPreviousStylePressed()
         {
-            return WasKeyPressed(Keys.Q) || WasButtonPressed(Buttons.LeftShoulder);
+            return WasKeyPressed(Keys.Q) || WasButtonPressed(Buttons.DPadLeft);
         }
 
         public static bool WasNextStylePressed()
         {
-            return WasKeyPressed(Keys.E) || WasButtonPressed(Buttons.RightShoulder);
+            return WasKeyPressed(Keys.E) || WasButtonPressed(Buttons.DPadRight);
+        }
+
+        public static bool IsRewindHeld()
+        {
+            return rewindHeld;
         }
 
         public static bool WasNavigateUpPressed()
@@ -184,7 +193,10 @@ namespace SpaceBurst
 
             bool movementFound = false;
             bool aimFound = false;
+            bool rewindFound = false;
             fireHeld = aimTouchId != -1;
+            rewindHeld = false;
+            Rectangle rewindBounds = GetRewindButtonBounds(gameplayBounds, stickRadius);
 
             foreach (TouchLocation touch in touches)
             {
@@ -197,6 +209,13 @@ namespace SpaceBurst
 
                 if (touch.State == TouchLocationState.Pressed)
                     primaryActionPressed = true;
+
+                if (touch.Id == rewindTouchId)
+                {
+                    rewindFound = true;
+                    rewindHeld = true;
+                    continue;
+                }
 
                 if (touch.Id == movementTouchId)
                 {
@@ -213,7 +232,13 @@ namespace SpaceBurst
                     continue;
                 }
 
-                if (screenPosition.X < gameplayBounds.Center.X)
+                if (rewindBounds.Contains(screenPosition))
+                {
+                    rewindTouchId = touch.Id;
+                    rewindFound = true;
+                    rewindHeld = true;
+                }
+                else if (screenPosition.X < gameplayBounds.Center.X)
                 {
                     if (movementTouchId == -1)
                     {
@@ -246,6 +271,9 @@ namespace SpaceBurst
                 aimTouchOrigin = Vector2.Zero;
                 aimTouchPosition = Vector2.Zero;
             }
+
+            if (!rewindFound)
+                rewindTouchId = -1;
 
             touchMovementDirection = GetVirtualStickDirection(movementTouchOrigin, movementTouchPosition, stickRadius);
 
@@ -284,6 +312,11 @@ namespace SpaceBurst
                 if (touchAimDirection != Vector2.Zero)
                     DrawCircle(spriteBatch, controlTexture, aimTouchOrigin, stickRadius * 0.16f, Color.White * 0.24f);
             }
+
+            Rectangle rewindBounds = GetRewindButtonBounds(gameplayBounds, stickRadius);
+            Vector2 rewindCenter = new Vector2(rewindBounds.Center.X, rewindBounds.Center.Y);
+            DrawCircle(spriteBatch, controlTexture, rewindCenter, rewindBounds.Width * 0.5f, Color.White * (rewindTouchId == -1 ? 0.1f : 0.24f));
+            BitmapFontRenderer.Draw(spriteBatch, Game1.UiPixel, "R", rewindCenter - new Vector2(6f, 8f), Color.White, 1.4f);
         }
 
         private static Vector2 GetVirtualStickDirection(Vector2 origin, Vector2 current, float maxDistance)
@@ -308,6 +341,17 @@ namespace SpaceBurst
         {
             float margin = radius * 0.7f;
             return new Vector2(gameplayBounds.Right - margin - radius, gameplayBounds.Bottom - margin - radius);
+        }
+
+        private static Rectangle GetRewindButtonBounds(Rectangle gameplayBounds, float radius)
+        {
+            float margin = radius * 0.6f;
+            int size = (int)(radius * 1.15f);
+            return new Rectangle(
+                (int)(gameplayBounds.Right - margin - size),
+                (int)(gameplayBounds.Top + margin),
+                size,
+                size);
         }
 
         private static float GetStickRadius(Rectangle gameplayBounds)
