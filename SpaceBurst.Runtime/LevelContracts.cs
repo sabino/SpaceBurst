@@ -318,6 +318,9 @@ namespace SpaceBurst.RuntimeData
         public int DroneCount { get; set; }
         public float DroneIntervalSeconds { get; set; } = 0.45f;
         public float BeamDurationSeconds { get; set; }
+        public float BeamLength { get; set; } = 520f;
+        public int BeamCount { get; set; } = 1;
+        public float BeamSpacing { get; set; }
         public float BeamThickness { get; set; } = 12f;
         public int BeamTickDamage { get; set; } = 1;
         public FireMode FireMode { get; set; } = FireMode.PulseBurst;

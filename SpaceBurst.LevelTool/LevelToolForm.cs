@@ -294,7 +294,7 @@ namespace SpaceBurst.LevelTool
             if (currentStage != null)
             {
                 foreach (SectionDefinition section in currentStage.Sections)
-                    sectionsList.Items.Add($"{section.StartSeconds:0.0}s  {section.Label}{(section.Checkpoint ? " [CP]" : string.Empty)}");
+                    sectionsList.Items.Add($"{section.StartSeconds:0.0}s  {section.Label}{(section.Checkpoint ? " [CP]" : string.Empty)}  {GetSectionEnemyTotal(section)} foes  SPD x{section.EnemySpeedMultiplier:0.00}");
             }
             sectionsList.EndUpdate();
             if (sectionsList.Items.Count > 0)
@@ -349,7 +349,9 @@ namespace SpaceBurst.LevelTool
 
         private void RefreshTimelineAndPreview()
         {
-            timelineLabel.Text = $"Time {timelineTrackBar.Value / 10f:0.0}s";
+            float currentTime = timelineTrackBar.Value / 10f;
+            int activeSectionIndex = GetActiveSectionIndex(currentStage, currentTime);
+            timelineLabel.Text = $"Time {currentTime:0.0}s   Active~{EstimateActiveEnemyPressure(currentStage, currentTime):0.0}/{GetTargetActiveBudget(currentStage?.StageNumber ?? 1, activeSectionIndex)}   Section {GetSectionEnemyTotal(SelectedSection())}   Stage {GetStageEnemyTotal(currentStage)}   Events {CountActiveEvents(currentStage, currentTime)}";
             RefreshPreview();
         }
 
@@ -357,6 +359,11 @@ namespace SpaceBurst.LevelTool
         {
             previewPanel.Stage = currentStage;
             previewPanel.CurrentTimeSeconds = timelineTrackBar.Value / 10f;
+            previewPanel.StageEnemyTotal = GetStageEnemyTotal(currentStage);
+            previewPanel.SelectedSectionEnemyTotal = GetSectionEnemyTotal(SelectedSection());
+            previewPanel.EstimatedActivePressure = EstimateActiveEnemyPressure(currentStage, previewPanel.CurrentTimeSeconds);
+            previewPanel.CurrentEventOverlap = CountActiveEvents(currentStage, previewPanel.CurrentTimeSeconds);
+            previewPanel.TargetActiveBudget = GetTargetActiveBudget(currentStage?.StageNumber ?? 1, GetActiveSectionIndex(currentStage, previewPanel.CurrentTimeSeconds));
             previewPanel.Invalidate();
         }
 
@@ -423,6 +430,100 @@ namespace SpaceBurst.LevelTool
             throw new DirectoryNotFoundException("Could not locate the SpaceBurst repository root.");
         }
 
+        private static int GetStageEnemyTotal(StageDefinition stage)
+        {
+            if (stage?.Sections == null)
+                return 0;
+
+            return stage.Sections.Sum(GetSectionEnemyTotal);
+        }
+
+        private static int GetSectionEnemyTotal(SectionDefinition section)
+        {
+            if (section?.Groups == null)
+                return 0;
+
+            return section.Groups.Sum(group => Math.Max(0, group.Count));
+        }
+
+        private float EstimateActiveEnemyPressure(StageDefinition stage, float timeSeconds)
+        {
+            if (stage?.Sections == null || archetypes == null || archetypes.Count == 0)
+                return 0f;
+
+            float total = 0f;
+            foreach (SectionDefinition section in stage.Sections)
+            {
+                foreach (SpawnGroupDefinition group in section.Groups)
+                {
+                    if (!archetypes.TryGetValue(group.ArchetypeId, out EnemyArchetypeDefinition archetype))
+                        continue;
+
+                    float start = section.StartSeconds + group.StartSeconds;
+                    float duration = LevelMath.EstimateGroupLifetimeSeconds(group, archetype, 1280f);
+                    if (timeSeconds < start || timeSeconds > start + duration)
+                        continue;
+
+                    float elapsed = timeSeconds - start;
+                    int spawned = Math.Min(group.Count, 1 + (int)Math.Floor(elapsed / Math.Max(0.08f, group.SpawnIntervalSeconds)));
+                    total += spawned;
+                }
+            }
+
+            return total;
+        }
+
+        private static int CountActiveEvents(StageDefinition stage, float timeSeconds)
+        {
+            if (stage?.Sections == null)
+                return 0;
+
+            int overlap = 0;
+            foreach (SectionDefinition section in stage.Sections)
+            {
+                if (section.EventWindows == null)
+                    continue;
+
+                foreach (RandomEventWindowDefinition window in section.EventWindows)
+                {
+                    float start = section.StartSeconds + window.StartSeconds;
+                    if (timeSeconds >= start && timeSeconds <= start + window.DurationSeconds)
+                        overlap++;
+                }
+            }
+
+            return overlap;
+        }
+
+        private static int GetActiveSectionIndex(StageDefinition stage, float timeSeconds)
+        {
+            if (stage?.Sections == null || stage.Sections.Count == 0)
+                return 0;
+
+            for (int i = stage.Sections.Count - 1; i >= 0; i--)
+            {
+                if (stage.Sections[i].StartSeconds <= timeSeconds)
+                    return i;
+            }
+
+            return 0;
+        }
+
+        private static int GetTargetActiveBudget(int stageNumber, int sectionIndex)
+        {
+            int band = stageNumber <= 5 ? 0 : stageNumber <= 15 ? 1 : stageNumber <= 30 ? 2 : 3;
+            int[][] budgets =
+            {
+                new[] { 2, 3, 4, 5, 5 },
+                new[] { 4, 5, 6, 7, 8 },
+                new[] { 6, 7, 8, 9, 10 },
+                new[] { 7, 8, 10, 11, 12 },
+            };
+
+            int[] tier = budgets[Math.Clamp(band, 0, budgets.Length - 1)];
+            return tier[Math.Clamp(sectionIndex, 0, tier.Length - 1)];
+        }
+
         private sealed class PreviewPanel : Panel
         {
             private static readonly Vector2 ArenaSize = new(1280f, 720f);
@@ -430,6 +531,11 @@ namespace SpaceBurst.LevelTool
             public StageDefinition Stage { get; set; }
             public int SelectedSectionIndex { get; set; }
             public float CurrentTimeSeconds { get; set; }
+            public int StageEnemyTotal { get; set; }
+            public int SelectedSectionEnemyTotal { get; set; }
+            public float EstimatedActivePressure { get; set; }
+            public int CurrentEventOverlap { get; set; }
+            public int TargetActiveBudget { get; set; }
 
             public PreviewPanel()
             {
@@ -503,7 +609,7 @@ namespace SpaceBurst.LevelTool
                 using var textBrush = new SolidBrush(Color.FromArgb(228, 235, 242));
                 string footer = Stage == null
                     ? "No stage loaded"
-                    : $"{Stage.Name}    Scroll {Stage.ScrollSpeed:0}    Lives {Stage.StartingLives}    Ships {Stage.ShipsPerLife}    Time {CurrentTimeSeconds:0.0}s";
+                    : $"{Stage.Name}    Scroll {Stage.ScrollSpeed:0}    Stage {StageEnemyTotal} foes    Section {SelectedSectionEnemyTotal} foes    Active~{EstimatedActivePressure:0.0}/{TargetActiveBudget}    Events {CurrentEventOverlap}    Time {CurrentTimeSeconds:0.0}s";
                 e.Graphics.DrawString(footer, Font, textBrush, new PointF(arena.Left, arena.Bottom + 8f));
             }
 

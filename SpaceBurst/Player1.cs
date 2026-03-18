@@ -355,25 +355,27 @@ namespace SpaceBurst
 
         private void FireBeam(WeaponLevelDefinition level)
         {
-            int count = Math.Max(1, level.ProjectileCount);
-            float spread = MathHelper.ToRadians(Math.Max(0f, level.SpreadDegrees));
-            float step = count <= 1 ? 0f : spread / (count - 1);
-            float start = -spread * 0.5f;
+            EntityManager.ClearFriendlyBeams();
+
+            int count = Math.Max(1, level.BeamCount);
+            float spacing = Math.Max(0f, level.BeamSpacing);
+            Vector2 direction = cannonDirection;
+            if (direction == Vector2.Zero)
+                direction = Vector2.UnitX;
+            else
+                direction.Normalize();
+
+            Vector2 perpendicular = new Vector2(-direction.Y, direction.X);
+            float centerOffset = (count - 1) * 0.5f;
 
             for (int i = 0; i < count; i++)
             {
-                float angle = start + step * i;
-                Vector2 direction = Vector2.Transform(cannonDirection, Matrix.CreateRotationZ(angle));
-                if (direction == Vector2.Zero)
-                    direction = Vector2.UnitX;
-                else
-                    direction.Normalize();
-
-                Vector2 origin = Position + direction * 26f;
+                float lateralOffset = count <= 1 ? 0f : (i - centerOffset) * spacing;
+                Vector2 origin = Position + direction * 26f + perpendicular * lateralOffset;
                 EntityManager.Add(new BeamShot(
                     origin,
                     direction,
-                    520f + ActiveWeaponLevel * 40f + ActiveWeaponRank * 20f,
+                    level.BeamLength,
                     level.BeamThickness,
                     level.BeamDurationSeconds,
                     level.BeamTickDamage,
@@ -612,6 +614,9 @@ namespace SpaceBurst
                 DroneCount = baseLevel.DroneCount,
                 DroneIntervalSeconds = baseLevel.DroneIntervalSeconds,
                 BeamDurationSeconds = baseLevel.BeamDurationSeconds,
+                BeamLength = baseLevel.BeamLength,
+                BeamCount = baseLevel.BeamCount,
+                BeamSpacing = baseLevel.BeamSpacing,
                 BeamThickness = baseLevel.BeamThickness,
                 BeamTickDamage = baseLevel.BeamTickDamage,
                 FireMode = baseLevel.FireMode,
@@ -640,6 +645,7 @@ namespace SpaceBurst
                 case WeaponStyleId.Laser:
                     level.BeamTickDamage += rank / 4;
                     level.BeamThickness += rank % 4 == 3 ? 2f : 0f;
+                    level.BeamLength += rank * 10f;
                     break;
                 case WeaponStyleId.Plasma:
                 case WeaponStyleId.Missile:

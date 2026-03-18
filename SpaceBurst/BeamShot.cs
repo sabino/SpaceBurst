@@ -90,8 +90,10 @@ namespace SpaceBurst
             if (pixel == null)
                 return;
 
-            Color outer = ColorUtil.ParseHex(AccentColorHex, Color.Cyan) * 0.32f;
-            Color inner = ColorUtil.ParseHex(PrimaryColorHex, Color.White) * 0.9f;
+            float pulse = 0.92f + 0.08f * MathF.Sin((float)Game1.GameTime.TotalGameTime.TotalSeconds * 18f);
+            Color outer = ColorUtil.ParseHex(AccentColorHex, Color.Cyan) * 0.24f;
+            Color mid = ColorUtil.ParseHex(AccentColorHex, Color.Cyan) * 0.48f;
+            Color inner = ColorUtil.ParseHex(PrimaryColorHex, Color.White) * 0.92f;
             Vector2 origin = new Vector2(0f, 0.5f);
 
             spriteBatch.Draw(
@@ -101,7 +103,18 @@ namespace SpaceBurst
                 outer,
                 Orientation,
                 origin,
-                new Vector2(Length, Thickness),
+                new Vector2(Length, Thickness * 1.9f * pulse),
+                SpriteEffects.None,
+                0f);
+
+            spriteBatch.Draw(
+                pixel,
+                Position,
+                null,
+                mid,
+                Orientation,
+                origin,
+                new Vector2(Length, Thickness * 1.08f * pulse),
                 SpriteEffects.None,
                 0f);
 
@@ -112,7 +125,7 @@ namespace SpaceBurst
                 inner,
                 Orientation,
                 origin,
-                new Vector2(Length, Math.Max(1f, Thickness * 0.35f)),
+                new Vector2(Length, Math.Max(1f, Thickness * 0.28f * pulse)),
                 SpriteEffects.None,
                 0f);
         }
@@ -157,7 +170,7 @@ namespace SpaceBurst
 
         private bool TryGetHitPoint(Enemy enemy, out Vector2 impactPoint)
         {
-            const int sampleCount = 24;
+            int sampleCount = Math.Max(16, (int)(Length / 18f));
             for (int i = 1; i <= sampleCount; i++)
             {
                 float t = i / (float)sampleCount;

@@ -1325,8 +1325,22 @@ namespace SpaceBurst
 
         private void ScheduleSection(SectionDefinition section)
         {
-            for (int groupIndex = 0; groupIndex < section.Groups.Count; groupIndex++)
-                ScheduleGroup(section.StartSeconds, section, section.Groups[groupIndex]);
+            List<SpawnGroupDefinition> orderedGroups = section.Groups
+                .OrderBy(group => group.StartSeconds)
+                .ThenBy(group => group.ArchetypeId ?? string.Empty)
+                .ToList();
+            float previousStartSeconds = -1f;
+            float maxGapSeconds = GetSectionGapClampSeconds(currentStageNumber, currentSectionIndex);
+            for (int groupIndex = 0; groupIndex < orderedGroups.Count; groupIndex++)
+            {
+                SpawnGroupDefinition group = orderedGroups[groupIndex];
+                float scheduledStartSeconds = group.StartSeconds;
+                if (previousStartSeconds >= 0f && scheduledStartSeconds - previousStartSeconds > maxGapSeconds)
+                    scheduledStartSeconds = previousStartSeconds + maxGapSeconds;
+
+                ScheduleGroup(section.StartSeconds, section, group, scheduledStartSeconds);
+                previousStartSeconds = scheduledStartSeconds;
+            }
 
             if (section.EventWindows == null)
                 return;
@@ -1347,20 +1361,31 @@ namespace SpaceBurst
 
         private void ScheduleGroup(float stageStartSeconds, SectionDefinition section, SpawnGroupDefinition group)
         {
+            ScheduleGroup(stageStartSeconds, section, group, group.StartSeconds);
+        }
+
+        private void ScheduleGroup(float stageStartSeconds, SectionDefinition section, SpawnGroupDefinition group, float groupStartSeconds)
+        {
             EnemyArchetypeDefinition archetype = repository.ArchetypesById[group.ArchetypeId];
             float targetY = LevelMath.ResolveTargetY(Game1.ScreenSize.ToSystemNumerics(), group);
+            int sectionIndex = section != null ? currentSectionIndex : GetActiveSectionIndex();
             float sectionSpeedMultiplier = section != null && section.EnemySpeedMultiplier > 0f
                 ? section.EnemySpeedMultiplier
-                : GetDefaultEnemySpeedMultiplier(currentSectionIndex);
+                : GetDefaultEnemySpeedMultiplier(sectionIndex);
             float runPressureMultiplier = 1f + MathHelper.Clamp(PlayerStatus.RunProgress.PowerBudget * 0.02f, 0f, 0.32f);
+            int scheduledCount = GetAdjustedGroupCount(group, archetype, currentStageNumber, sectionIndex);
+            float spawnIntervalSeconds = Math.Max(0.08f, group.SpawnIntervalSeconds * GetSpawnIntervalScale(archetype.Id, currentStageNumber, sectionIndex));
+            float spacingX = Math.Max(52f, group.SpacingX * GetSpacingScale(archetype.Id, currentStageNumber, sectionIndex));
 
-            for (int index = 0; index < group.Count; index++)
+            for (int index = 0; index < scheduledCount; index++)
             {
                 scheduledSpawns.Add(new ScheduledSpawn
                 {
-                    SpawnAtSeconds = stageStartSeconds + group.StartSeconds + group.SpawnIntervalSeconds * index,
+                    SpawnAtSeconds = stageStartSeconds + groupStartSeconds + spawnIntervalSeconds * index,
                     Group = group,
-                    SpawnPoint = LevelMath.GetSpawnPoint(Game1.ScreenSize.ToSystemNumerics(), group, index).ToXna(),
+                    SpawnPoint = new Vector2(
+                        Game1.ScreenSize.X + Math.Max(40f, group.SpawnLeadDistance + index * spacingX),
+                        targetY),
                     TargetY = targetY,
                     MovePattern = group.MovePatternOverride ?? archetype.MovePattern,
                     FirePattern = group.FirePatternOverride ?? archetype.FirePattern,
@@ -1644,9 +1669,14 @@ namespace SpaceBurst
                 float y = 40f + ySeed * (Game1.VirtualHeight - 80f);
                 spriteBatch.Draw(pixel, new Rectangle((int)x, (int)y, (int)width, 2), new Color(110, 193, 255) * (0.08f + 0.12f * strength));
             }
-
-            spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight / 2), Color.White * 0.025f);
-            spriteBatch.Draw(pixel, new Rectangle(0, (int)(Game1.VirtualHeight * 0.58f), Game1.VirtualWidth, (int)(Game1.VirtualHeight * 0.42f)), new Color(49, 88, 132) * 0.18f);
+            if (Game1.RadialTexture != null)
+            {
+                Texture2D radial = Game1.RadialTexture;
+                Vector2 origin = new Vector2(radial.Width / 2f, radial.Height / 2f);
+                spriteBatch.Draw(radial, new Vector2(Game1.VirtualWidth * 0.18f, Game1.VirtualHeight * 0.28f), null, new Color(110, 193, 255) * (0.08f + 0.05f * strength), 0f, origin, 2.6f + strength * 0.4f, SpriteEffects.None, 0f);
+                spriteBatch.Draw(radial, new Vector2(Game1.VirtualWidth * 0.82f, Game1.VirtualHeight * 0.24f), null, new Color(246, 198, 116) * (0.06f + 0.05f * strength), 0f, origin, 2.1f + strength * 0.35f, SpriteEffects.None, 0f);
+                spriteBatch.Draw(radial, new Vector2(Game1.VirtualWidth * 0.62f, Game1.VirtualHeight * 0.72f), null, new Color(90, 140, 200) * 0.05f, 0f, origin, 3.1f, SpriteEffects.None, 0f);
+            }
 
             if (!string.IsNullOrEmpty(headline))
                 DrawCenteredText(spriteBatch, pixel, headline, Game1.ScreenSize.X / 2f, 26f, Color.White * 0.2f, 1.1f);
@@ -1802,30 +1832,8 @@ namespace SpaceBurst
             const int gap = 10;
             const int top = 10;
             const int height = 88;
-            const int leftWidth = 206;
-            const int styleWidth = 340;
-            const int stageWidth = 172;
-            const int pityWidth = 164;
-            int rightWidth = Game1.VirtualWidth - margin * 2 - gap * 4 - leftWidth - styleWidth - stageWidth - pityWidth;
-
-            Rectangle livesBounds = new Rectangle(margin, top, leftWidth, height);
-            Rectangle styleBounds = new Rectangle(livesBounds.Right + gap, top, styleWidth, height);
-            Rectangle stageBounds = new Rectangle(styleBounds.Right + gap, top, stageWidth, height);
-            Rectangle pityBounds = new Rectangle(stageBounds.Right + gap, top, pityWidth, height);
-            Rectangle scoreBounds = new Rectangle(pityBounds.Right + gap, top, rightWidth, height);
-
-            DrawPanel(spriteBatch, pixel, livesBounds, Color.Black * 0.22f, Color.White * 0.18f);
-            DrawPanel(spriteBatch, pixel, styleBounds, Color.Black * 0.18f, Color.White * 0.14f);
-            DrawPanel(spriteBatch, pixel, stageBounds, Color.Black * 0.18f, Color.White * 0.14f);
-            DrawPanel(spriteBatch, pixel, pityBounds, Color.Black * 0.18f, Color.White * 0.14f);
-            DrawPanel(spriteBatch, pixel, scoreBounds, Color.Black * 0.22f, Color.White * 0.18f);
-
-            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("LIVES ", PlayerStatus.Lives.ToString()), new Vector2(livesBounds.X + 12f, livesBounds.Y + 12f), Color.White, 2f);
-            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("SHIPS ", PlayerStatus.Ships.ToString()), new Vector2(livesBounds.X + 12f, livesBounds.Y + 38f), Color.White, 2f);
-            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("SAFE ", Math.Max(0f, Player1.Instance.HullRatio * 100f).ToString("0"), "%"), new Vector2(livesBounds.X + 12f, livesBounds.Bottom - 22f), Color.White * 0.55f, 1.15f);
-
-            DrawStyleHud(spriteBatch, pixel, styleBounds);
-
+            WeaponInventoryState inventory = PlayerStatus.RunProgress.Weapons;
+            WeaponStyleDefinition activeStyle = WeaponCatalog.GetStyle(inventory.ActiveStyle);
             string stageLabel = state switch
             {
                 GameFlowState.Tutorial => "TUTORIAL",
@@ -1834,18 +1842,60 @@ namespace SpaceBurst
                 _ when state == GameFlowState.StageTransition && transitionTargetStageNumber > currentStageNumber => string.Concat("JUMP ", transitionTargetStageNumber.ToString("00")),
                 _ => string.Concat("STAGE ", currentStageNumber.ToString("00")),
             };
+            string scoreLabel = string.Concat("SCORE ", PlayerStatus.Score.ToString());
+            int totalWidth = Game1.VirtualWidth - margin * 2 - gap * 5;
+            int livesWidth = MeasureHudWidth(string.Concat("LIVES ", PlayerStatus.Lives.ToString()), 2f, 40, 200);
+            int activeWidth = MeasureHudWidth(activeStyle.DisplayName, 1.8f, 110, 220);
+            int stageWidth = MeasureHudWidth(stageLabel, 1.7f, 54, 170);
+            int pityWidth = 190;
+            int scoreWidth = MeasureHudWidth(scoreLabel, 1.65f, 186, 272);
+            int ownedWidth = totalWidth - livesWidth - activeWidth - stageWidth - pityWidth - scoreWidth;
+            if (ownedWidth < 180)
+            {
+                int deficit = 180 - ownedWidth;
+                int reduceScore = System.Math.Min(deficit, System.Math.Max(0, scoreWidth - 240));
+                scoreWidth -= reduceScore;
+                deficit -= reduceScore;
+                int reduceActive = System.Math.Min(deficit, System.Math.Max(0, activeWidth - 200));
+                activeWidth -= reduceActive;
+                deficit -= reduceActive;
+                int reduceStage = System.Math.Min(deficit, System.Math.Max(0, stageWidth - 150));
+                stageWidth -= reduceStage;
+                ownedWidth = totalWidth - livesWidth - activeWidth - stageWidth - pityWidth - scoreWidth;
+            }
 
-            DrawCenteredText(spriteBatch, pixel, stageLabel, stageBounds.Center.X, stageBounds.Y + 14f, Color.White, 1.7f);
+            Rectangle livesBounds = new Rectangle(margin, top, livesWidth, height);
+            Rectangle activeBounds = new Rectangle(livesBounds.Right + gap, top, activeWidth, height);
+            Rectangle ownedBounds = new Rectangle(activeBounds.Right + gap, top, ownedWidth, height);
+            Rectangle stageBounds = new Rectangle(ownedBounds.Right + gap, top, stageWidth, height);
+            Rectangle pityBounds = new Rectangle(stageBounds.Right + gap, top, pityWidth, height);
+            Rectangle scoreBounds = new Rectangle(pityBounds.Right + gap, top, scoreWidth, height);
+
+            DrawPanel(spriteBatch, pixel, livesBounds, Color.Black * 0.22f, Color.White * 0.18f);
+            DrawPanel(spriteBatch, pixel, activeBounds, Color.Black * 0.18f, Color.White * 0.14f);
+            DrawPanel(spriteBatch, pixel, ownedBounds, Color.Black * 0.16f, Color.White * 0.12f);
+            DrawPanel(spriteBatch, pixel, stageBounds, Color.Black * 0.18f, Color.White * 0.14f);
+            DrawPanel(spriteBatch, pixel, pityBounds, Color.Black * 0.18f, Color.White * 0.14f);
+            DrawPanel(spriteBatch, pixel, scoreBounds, Color.Black * 0.22f, Color.White * 0.18f);
+
+            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("LIVES ", PlayerStatus.Lives.ToString()), new Vector2(livesBounds.X + 12f, livesBounds.Y + 12f), Color.White, 2f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("SHIPS ", PlayerStatus.Ships.ToString()), new Vector2(livesBounds.X + 12f, livesBounds.Y + 38f), Color.White, 2f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("SAFE ", Math.Max(0f, Player1.Instance.HullRatio * 100f).ToString("0"), "%"), new Vector2(livesBounds.X + 12f, livesBounds.Bottom - 22f), Color.White * 0.55f, 1.15f);
+
+            DrawStyleHud(spriteBatch, pixel, activeBounds);
+            DrawOwnedStyleHud(spriteBatch, pixel, ownedBounds, inventory);
+
+            DrawCenteredText(spriteBatch, pixel, stageLabel, stageBounds.Center.X, stageBounds.Y + 14f, Color.White, GetFittedScale(stageLabel, stageBounds.Width - 20f, 1.7f, 1.15f));
             string stageSubLabel = state == GameFlowState.StageTransition
                 ? (transitionToBoss ? "THREAT LOCK" : "FTL TRANSIT")
                 : (!string.IsNullOrEmpty(activeEventWarning) ? activeEventWarning : (state == GameFlowState.Tutorial ? tutorialStep.ToString().ToUpperInvariant() : currentStage?.Name?.ToUpperInvariant() ?? "RUN"));
-            DrawCenteredText(spriteBatch, pixel, stageSubLabel, stageBounds.Center.X, stageBounds.Y + 46f, !string.IsNullOrEmpty(activeEventWarning) ? Color.Orange : Color.White * 0.7f, 1.08f);
+            DrawCenteredText(spriteBatch, pixel, stageSubLabel, stageBounds.Center.X, stageBounds.Y + 46f, !string.IsNullOrEmpty(activeEventWarning) ? Color.Orange : Color.White * 0.7f, GetFittedScale(stageSubLabel, stageBounds.Width - 20f, 1.08f, 0.82f));
 
             BitmapFontRenderer.Draw(spriteBatch, pixel, "PITY", new Vector2(pityBounds.X + 12f, pityBounds.Y + 10f), Color.White, 1.25f);
             DrawBar(spriteBatch, pixel, new Rectangle(pityBounds.X + 12, pityBounds.Y + 34, pityBounds.Width - 24, 12), PlayerStatus.RunProgress.Powerups.PityMeter, Color.Orange);
-            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("CHARGES ", PlayerStatus.RunProgress.StoredUpgradeCharges.ToString()), new Vector2(pityBounds.X + 12f, pityBounds.Y + 54f), Color.White * 0.78f, 1.08f);
+            DrawChargeTray(spriteBatch, pixel, pityBounds, inventory);
 
-            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("SCORE ", PlayerStatus.Score.ToString()), new Vector2(scoreBounds.X + 12f, scoreBounds.Y + 10f), Color.White, 1.65f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, scoreLabel, new Vector2(scoreBounds.X + 12f, scoreBounds.Y + 10f), Color.White, 1.65f);
             BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("MULTI ", PlayerStatus.Multiplier.ToString()), new Vector2(scoreBounds.X + 12f, scoreBounds.Y + 34f), Color.White, 1.45f);
             BitmapFontRenderer.Draw(spriteBatch, pixel, "REWIND", new Vector2(scoreBounds.X + 12f, scoreBounds.Y + 56f), Color.White * 0.85f, 1.08f);
             DrawBar(spriteBatch, pixel, new Rectangle(scoreBounds.X + 92, scoreBounds.Y + 58, scoreBounds.Width - 104, 10), rewindMeterSeconds / RewindCapacitySeconds, Color.Cyan * 0.9f);
@@ -1863,7 +1913,7 @@ namespace SpaceBurst
             Color accent = ColorUtil.ParseHex(activeStyle.AccentColor, Color.Orange);
 
             PixelArtRenderer.DrawRows(spriteBatch, pixel, activeStyle.IconRows, new Vector2(bounds.X + 22f, bounds.Y + 46f), 4.5f, primary, secondary, accent, true);
-            BitmapFontRenderer.Draw(spriteBatch, pixel, activeStyle.DisplayName, new Vector2(bounds.X + 60f, bounds.Y + 10f), Color.White, 1.8f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, activeStyle.DisplayName, new Vector2(bounds.X + 60f, bounds.Y + 10f), Color.White, GetFittedScale(activeStyle.DisplayName, bounds.Width - 72f, 1.8f, 1.15f));
             string levelLabel = string.Concat("LV ", inventory.ActiveLevel.ToString(), inventory.ActiveRank > 0 ? string.Concat("  RK ", inventory.ActiveRank.ToString()) : string.Empty);
             BitmapFontRenderer.Draw(spriteBatch, pixel, levelLabel, new Vector2(bounds.X + 60f, bounds.Y + 34f), Color.White * 0.72f, 1.18f);
 
@@ -1872,18 +1922,81 @@ namespace SpaceBurst
                 Color pip = i <= inventory.ActiveLevel ? accent : Color.White * 0.14f;
                 spriteBatch.Draw(pixel, new Rectangle(bounds.X + 62 + i * 18, bounds.Y + 58, 12, 12), pip);
             }
+        }
 
+        private void DrawOwnedStyleHud(SpriteBatch spriteBatch, Texture2D pixel, Rectangle bounds, WeaponInventoryState inventory)
+        {
             IReadOnlyList<WeaponStyleId> ownedStyles = inventory.OwnedStyles;
-            float iconStartX = bounds.Right - 34f - Math.Max(0, ownedStyles.Count - 1) * 28f;
+            BitmapFontRenderer.Draw(spriteBatch, pixel, "ARSENAL", new Vector2(bounds.X + 12f, bounds.Y + 10f), Color.White * 0.8f, 1.05f);
+            if (ownedStyles.Count == 0)
+                return;
+
+            float availableWidth = bounds.Width - 24f;
+            float spacing = ownedStyles.Count <= 1 ? 0f : MathF.Min(34f, availableWidth / Math.Max(1f, ownedStyles.Count - 1));
+            float scale = ownedStyles.Count >= 8 ? 1.45f : 1.7f;
+            float totalWidth = (ownedStyles.Count - 1) * spacing;
+            float startX = bounds.X + 12f + Math.Max(0f, (availableWidth - totalWidth) * 0.5f);
             for (int i = 0; i < ownedStyles.Count; i++)
             {
                 WeaponStyleDefinition style = WeaponCatalog.GetStyle(ownedStyles[i]);
-                float x = iconStartX + i * 28f;
+                float x = startX + i * spacing;
                 Color iconAccent = ColorUtil.ParseHex(style.AccentColor, Color.Orange);
-                PixelArtRenderer.DrawRows(spriteBatch, pixel, style.IconRows, new Vector2(x, bounds.Y + 62f), 1.95f, ColorUtil.ParseHex(style.PrimaryColor, Color.White), ColorUtil.ParseHex(style.SecondaryColor, Color.LightBlue), iconAccent, true);
+                Vector2 iconPosition = new Vector2(x, bounds.Y + 58f);
+                PixelArtRenderer.DrawRows(spriteBatch, pixel, style.IconRows, iconPosition, scale, ColorUtil.ParseHex(style.PrimaryColor, Color.White), ColorUtil.ParseHex(style.SecondaryColor, Color.LightBlue), iconAccent, true);
                 if (ownedStyles[i] == inventory.ActiveStyle)
-                    spriteBatch.Draw(pixel, new Rectangle((int)x - 8, bounds.Bottom - 10, 18, 3), iconAccent);
+                    spriteBatch.Draw(pixel, new Rectangle((int)x - 10, bounds.Bottom - 10, 22, 3), iconAccent);
+
+                int stored = inventory.GetStoredCharge(ownedStyles[i]);
+                if (stored > 0)
+                {
+                    Rectangle badgeBounds = new Rectangle((int)x + 6, bounds.Y + 20, stored >= 10 ? 26 : 18, 14);
+                    DrawPanel(spriteBatch, pixel, badgeBounds, iconAccent * 0.18f, iconAccent * 0.72f);
+                    BitmapFontRenderer.Draw(spriteBatch, pixel, stored.ToString(), new Vector2(badgeBounds.X + 4f, badgeBounds.Y + 2f), Color.White, 0.82f);
+                }
             }
+        }
+
+        private void DrawChargeTray(SpriteBatch spriteBatch, Texture2D pixel, Rectangle bounds, WeaponInventoryState inventory)
+        {
+            IReadOnlyList<WeaponStyleId> chargedStyles = inventory.ChargedStyles;
+            if (chargedStyles.Count == 0)
+            {
+                BitmapFontRenderer.Draw(spriteBatch, pixel, "CORES BANK 0", new Vector2(bounds.X + 12f, bounds.Y + 54f), Color.White * 0.58f, 1.02f);
+                return;
+            }
+
+            int visibleCount = System.Math.Min(4, chargedStyles.Count);
+            float spacing = 34f;
+            float startX = bounds.X + 14f;
+            for (int i = 0; i < visibleCount; i++)
+            {
+                WeaponStyleId styleId = chargedStyles[i];
+                WeaponStyleDefinition style = WeaponCatalog.GetStyle(styleId);
+                float x = startX + i * spacing;
+                PixelArtRenderer.DrawRows(spriteBatch, pixel, style.IconRows, new Vector2(x, bounds.Y + 63f), 1.55f, ColorUtil.ParseHex(style.PrimaryColor, Color.White), ColorUtil.ParseHex(style.SecondaryColor, Color.LightBlue), ColorUtil.ParseHex(style.AccentColor, Color.Orange), true);
+                BitmapFontRenderer.Draw(spriteBatch, pixel, inventory.GetStoredCharge(styleId).ToString(), new Vector2(x + 11f, bounds.Y + 56f), Color.White * 0.86f, 0.84f);
+            }
+
+            if (chargedStyles.Count > visibleCount)
+                BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("+", (chargedStyles.Count - visibleCount).ToString()), new Vector2(bounds.Right - 28f, bounds.Y + 55f), Color.White * 0.7f, 0.95f);
+        }
+
+        private static int MeasureHudWidth(string text, float scale, int padding, int minimum)
+        {
+            return System.Math.Max(minimum, (int)System.MathF.Ceiling(BitmapFontRenderer.Measure(text, scale).X) + padding);
+        }
+
+        private static float GetFittedScale(string text, float maxWidth, float preferredScale, float minimumScale)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return preferredScale;
+
+            float measuredWidth = BitmapFontRenderer.Measure(text, preferredScale).X;
+            if (measuredWidth <= maxWidth || measuredWidth <= 0f)
+                return preferredScale;
+
+            float ratio = maxWidth / measuredWidth;
+            return MathHelper.Clamp(preferredScale * ratio, minimumScale, preferredScale);
         }
 
         private void DrawBossHealthBar(SpriteBatch spriteBatch, Texture2D pixel, BossEnemy boss)
@@ -2378,6 +2491,111 @@ namespace SpaceBurst
         {
             float[] multipliers = { 0.82f, 0.94f, 1.0f, 1.12f, 1.18f };
             return multipliers[Math.Clamp(sectionIndex, 0, multipliers.Length - 1)];
+        }
+
+        private static int GetStageDensityBand(int stageNumber)
+        {
+            if (stageNumber <= 5)
+                return 0;
+            if (stageNumber <= 15)
+                return 1;
+            if (stageNumber <= 30)
+                return 2;
+
+            return 3;
+        }
+
+        private static int GetTargetActiveEnemyBudget(int stageNumber, int sectionIndex)
+        {
+            int band = GetStageDensityBand(stageNumber);
+            int[][] budgets =
+            {
+                new[] { 2, 3, 4, 5, 5 },
+                new[] { 4, 5, 6, 7, 8 },
+                new[] { 6, 7, 8, 9, 10 },
+                new[] { 7, 8, 10, 11, 12 },
+            };
+
+            int[] tier = budgets[Math.Clamp(band, 0, budgets.Length - 1)];
+            return tier[Math.Clamp(sectionIndex, 0, tier.Length - 1)];
+        }
+
+        private static float GetSectionGapClampSeconds(int stageNumber, int sectionIndex)
+        {
+            float[] gaps = { 3.4f, 2.9f, 2.45f, 2.15f };
+            float gap = gaps[Math.Clamp(GetStageDensityBand(stageNumber), 0, gaps.Length - 1)] - sectionIndex * 0.18f;
+            return Math.Max(1.65f, gap);
+        }
+
+        private static int GetAdjustedGroupCount(SpawnGroupDefinition group, EnemyArchetypeDefinition archetype, int stageNumber, int sectionIndex)
+        {
+            int band = GetStageDensityBand(stageNumber);
+            int bonus = 0;
+            switch (archetype.Id)
+            {
+                case "Walker":
+                case "Interceptor":
+                    bonus = band + (sectionIndex >= 2 ? 1 : 0);
+                    break;
+                case "Destroyer":
+                    bonus = band >= 1 ? 1 : 0;
+                    if (band >= 3 && sectionIndex >= 2)
+                        bonus++;
+                    break;
+                case "Carrier":
+                    bonus = band >= 2 ? 1 : 0;
+                    break;
+                case "Bulwark":
+                    bonus = band >= 3 && sectionIndex >= 2 ? 1 : 0;
+                    break;
+            }
+
+            int targetBudget = GetTargetActiveEnemyBudget(stageNumber, sectionIndex);
+            return Math.Max(1, Math.Min(group.Count + bonus, targetBudget + 1));
+        }
+
+        private static float GetSpawnIntervalScale(string archetypeId, int stageNumber, int sectionIndex)
+        {
+            int band = GetStageDensityBand(stageNumber);
+            float scale = 1f;
+            switch (archetypeId)
+            {
+                case "Walker":
+                case "Interceptor":
+                    scale = 0.92f - band * 0.08f - sectionIndex * 0.04f;
+                    break;
+                case "Destroyer":
+                    scale = 0.96f - band * 0.05f - sectionIndex * 0.03f;
+                    break;
+                case "Carrier":
+                case "Bulwark":
+                    scale = 0.98f - band * 0.03f - sectionIndex * 0.02f;
+                    break;
+            }
+
+            return MathHelper.Clamp(scale, 0.56f, 1f);
+        }
+
+        private static float GetSpacingScale(string archetypeId, int stageNumber, int sectionIndex)
+        {
+            int band = GetStageDensityBand(stageNumber);
+            float scale = 1f;
+            switch (archetypeId)
+            {
+                case "Walker":
+                case "Interceptor":
+                    scale = 0.94f - band * 0.06f - sectionIndex * 0.03f;
+                    break;
+                case "Destroyer":
+                    scale = 0.96f - band * 0.04f - sectionIndex * 0.025f;
+                    break;
+                case "Carrier":
+                case "Bulwark":
+                    scale = 0.98f - band * 0.03f - sectionIndex * 0.02f;
+                    break;
+            }
+
+            return MathHelper.Clamp(scale, 0.7f, 1f);
         }
 
         private static string GetEventLabel(RandomEventType eventType)

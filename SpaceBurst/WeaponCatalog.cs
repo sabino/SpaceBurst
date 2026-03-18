@@ -128,10 +128,10 @@ namespace SpaceBurst
                 }),
                 [WeaponStyleId.Laser] = CreateStyle(WeaponStyleId.Laser, "LASER", "#E9F4FF", "#A4D2FF", "#6EC1FF", new[] { "####.", "...#.", "..#..", ".#...", "####." }, new[]
                 {
-                    Level(0.18f, 1200f, 1, 1, 0f, true, 2, Impact("Laser", ImpactKernelShape.Point, 4, 1, 0, 0, 8), FireMode.BeamBurst, ProjectileBehavior.Beam, MuzzleFxStyle.Laser, TrailFxStyle.Beam, ImpactFxStyle.Beam, 0.2f, 1f, 0f, 0f, 0, 0, 0.45f, 0.12f, 14f, 1),
-                    Level(0.14f, 1240f, 2, 1, 0f, true, 3, Impact("LongLaser", ImpactKernelShape.Point, 5, 1, 0, 0, 9), FireMode.BeamBurst, ProjectileBehavior.Beam, MuzzleFxStyle.Laser, TrailFxStyle.Beam, ImpactFxStyle.Beam, 0.2f, 1f, 0f, 0f, 0, 0, 0.18f, 16f, 2),
-                    Level(0.13f, 1260f, 2, 2, 10f, true, 3, Impact("DualPulse", ImpactKernelShape.Point, 5, 1, 0, 0, 10), FireMode.BeamBurst, ProjectileBehavior.Beam, MuzzleFxStyle.Laser, TrailFxStyle.Beam, ImpactFxStyle.Beam, 0.2f, 1f, 0f, 0f, 0, 0, 0.22f, 18f, 2),
-                    Level(0.08f, 1280f, 3, 1, 0f, true, 4, Impact("Carve", ImpactKernelShape.Point, 6, 1, 0, 0, 12), FireMode.BeamBurst, ProjectileBehavior.Beam, MuzzleFxStyle.Laser, TrailFxStyle.Beam, ImpactFxStyle.Beam, 0.2f, 1f, 0f, 0f, 0, 0, 0.45f, 22f, 3),
+                    Level(0.18f, 1200f, 1, 1, 0f, true, 2, Impact("Laser", ImpactKernelShape.Point, 4, 1, 0, 0, 8), FireMode.BeamBurst, ProjectileBehavior.Beam, MuzzleFxStyle.Laser, TrailFxStyle.Beam, ImpactFxStyle.Beam, 0.2f, 1f, 0f, 0f, 0, 0, 0.45f, 0.1f, 10f, 2, 460f, 1, 0f),
+                    Level(0.15f, 1240f, 2, 1, 0f, true, 3, Impact("LongLaser", ImpactKernelShape.Point, 5, 1, 0, 0, 9), FireMode.BeamBurst, ProjectileBehavior.Beam, MuzzleFxStyle.Laser, TrailFxStyle.Beam, ImpactFxStyle.Beam, 0.2f, 1f, 0f, 0f, 0, 0, 0.45f, 0.12f, 12f, 2, 520f, 1, 0f),
+                    Level(0.13f, 1260f, 2, 1, 0f, true, 3, Impact("DualPulse", ImpactKernelShape.Point, 5, 1, 0, 0, 10), FireMode.BeamBurst, ProjectileBehavior.Beam, MuzzleFxStyle.Laser, TrailFxStyle.Beam, ImpactFxStyle.Beam, 0.2f, 1f, 0f, 0f, 0, 0, 0.45f, 0.13f, 10f, 3, 560f, 2, 18f),
+                    Level(0.11f, 1280f, 3, 1, 0f, true, 4, Impact("Carve", ImpactKernelShape.Point, 6, 1, 0, 0, 12), FireMode.BeamBurst, ProjectileBehavior.Beam, MuzzleFxStyle.Laser, TrailFxStyle.Beam, ImpactFxStyle.Beam, 0.2f, 1f, 0f, 0f, 0, 0, 0.45f, 0.16f, 14f, 4, 620f, 2, 22f),
                 }),
                 [WeaponStyleId.Plasma] = CreateStyle(WeaponStyleId.Plasma, "PLASMA", "#F4E0FF", "#B57CFF", "#FF8BD7", new[] { ".###.", "##.##", "..#..", ".#.#.", "#...#" }, new[]
                 {
@@ -222,7 +222,10 @@ namespace SpaceBurst
             float droneIntervalSeconds = 0.45f,
             float beamDurationSeconds = 0f,
             float beamThickness = 12f,
-            int beamTickDamage = 1)
+            int beamTickDamage = 1,
+            float beamLength = 520f,
+            int beamCount = 1,
+            float beamSpacing = 0f)
         {
             return new WeaponLevelDefinition
             {
@@ -241,6 +244,9 @@ namespace SpaceBurst
                 DroneCount = droneCount,
                 DroneIntervalSeconds = droneIntervalSeconds,
                 BeamDurationSeconds = beamDurationSeconds,
+                BeamLength = beamLength,
+                BeamCount = beamCount,
+                BeamSpacing = beamSpacing,
                 BeamThickness = beamThickness,
                 BeamTickDamage = beamTickDamage,
                 FireMode = fireMode,

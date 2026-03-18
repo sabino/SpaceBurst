@@ -171,6 +171,15 @@ namespace SpaceBurst
                 Add(BeamShot.FromSnapshot(snapshot));
         }
 
+        public static void ClearFriendlyBeams()
+        {
+            for (int i = 0; i < beams.Count; i++)
+            {
+                if (beams[i].IsFriendly)
+                    beams[i].IsExpired = true;
+            }
+        }
+
         public static void RestorePowerups(IEnumerable<PowerupSnapshotData> snapshots)
         {
             if (snapshots == null)

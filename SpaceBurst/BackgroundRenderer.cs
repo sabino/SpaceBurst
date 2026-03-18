@@ -23,13 +23,17 @@ namespace SpaceBurst
             Color midColor = ColorUtil.ParseHex(resolvedMood.SecondaryColor, new Color(26, 34, 52));
             Color accentColor = ColorUtil.ParseHex(resolvedMood.AccentColor, new Color(110, 193, 255));
             Color glowColor = ColorUtil.ParseHex(resolvedMood.GlowColor, new Color(246, 198, 116));
+            float light = MathHelper.Clamp(resolvedMood.LightIntensity, 0.35f, 1.4f);
+            float contrast = MathHelper.Clamp(resolvedMood.Contrast, 0.55f, 1.2f);
 
             spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), backColor);
-            spriteBatch.Draw(pixel, new Rectangle(0, (int)(Game1.VirtualHeight * 0.55f), Game1.VirtualWidth, (int)(Game1.VirtualHeight * 0.45f)), midColor * 0.35f);
+            spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), midColor * (0.06f + 0.04f * contrast));
 
-            DrawNebulaBand(spriteBatch, radialTexture, new Vector2(Game1.VirtualWidth * 0.22f, Game1.VirtualHeight * 0.28f), 420f, accentColor * 0.20f);
-            DrawNebulaBand(spriteBatch, radialTexture, new Vector2(Game1.VirtualWidth * 0.72f, Game1.VirtualHeight * 0.18f), 300f, glowColor * 0.16f);
-            DrawNebulaBand(spriteBatch, radialTexture, new Vector2(Game1.VirtualWidth * 0.84f, Game1.VirtualHeight * 0.62f), 260f, midColor * 0.18f);
+            DrawNebulaBand(spriteBatch, radialTexture, new Vector2(Game1.VirtualWidth * 0.18f, Game1.VirtualHeight * 0.32f), 420f + 40f * light, accentColor * (0.16f + 0.06f * light));
+            DrawNebulaBand(spriteBatch, radialTexture, new Vector2(Game1.VirtualWidth * 0.58f, Game1.VirtualHeight * 0.52f), 520f + 60f * contrast, midColor * (0.10f + 0.05f * contrast));
+            DrawNebulaBand(spriteBatch, radialTexture, new Vector2(Game1.VirtualWidth * 0.84f, Game1.VirtualHeight * 0.22f), 300f + 30f * light, glowColor * (0.12f + 0.05f * light));
+            DrawNebulaBand(spriteBatch, radialTexture, new Vector2(Game1.VirtualWidth * 0.78f, Game1.VirtualHeight * 0.78f), 240f + 45f * contrast, accentColor * 0.08f);
+            DrawNebulaBand(spriteBatch, radialTexture, new Vector2(Game1.VirtualWidth * 0.08f, Game1.VirtualHeight * 0.82f), 180f + 20f * light, glowColor * 0.06f);
 
             DrawPlanet(spriteBatch, radialTexture, resolvedMood, seed, new Vector2(Game1.VirtualWidth * 0.78f, Game1.VirtualHeight * 0.22f), 120f + resolvedMood.PlanetPresence * 50f);
             DrawPlanet(spriteBatch, radialTexture, resolvedMood, seed + 19, new Vector2(Game1.VirtualWidth * 0.18f, Game1.VirtualHeight * 0.76f), 72f + resolvedMood.PlanetPresence * 30f);
