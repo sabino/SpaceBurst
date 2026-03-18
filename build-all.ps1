@@ -59,6 +59,7 @@ Invoke-Step "Publishing Windows game single-file exe" {
         -r $WindowsRuntimeIdentifier `
         -p:SelfContained=true `
         -p:PublishSingleFile=true `
+        -p:IncludeNativeLibrariesForSelfExtract=true `
         -p:DebugType=None `
         -p:DebugSymbols=false `
         -o $gameOutput
@@ -74,6 +75,7 @@ Invoke-Step "Publishing Windows level editor single-file exe" {
         -r $WindowsRuntimeIdentifier `
         -p:SelfContained=true `
         -p:PublishSingleFile=true `
+        -p:IncludeNativeLibrariesForSelfExtract=true `
         -p:DebugType=None `
         -p:DebugSymbols=false `
         -o $levelToolOutput
