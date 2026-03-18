@@ -1,127 +1,158 @@
 {
-    "LevelNumber":  15,
-    "Name":  "Hammer Arc",
-    "IntroSeconds":  1.25,
-    "Waves":  [
-                  {
-                      "Label":  "Wave 1",
-                      "StartSeconds":  0.8,
-                      "Checkpoint":  false,
-                      "Groups":  [
-                                     {
-                                         "ArchetypeId":  "Turret",
-                                         "Count":  5,
-                                         "Formation":  "Ring",
-                                         "EntrySide":  "Top",
-                                         "PathType":  "OrbitAnchor",
-                                         "AnchorX":  0.5,
-                                         "AnchorY":  0.22,
-                                         "Spacing":  62,
-                                         "DelayBetweenSpawns":  0.1,
-                                         "TravelDuration":  4,
-                                         "SpeedMultiplier":  1.08
-                                     }
-                                 ]
-                  },
-                  {
-                      "Label":  "Wave 2",
-                      "StartSeconds":  11.5,
-                      "Checkpoint":  false,
-                      "Groups":  [
-                                     {
-                                         "ArchetypeId":  "Walker",
-                                         "Count":  5,
-                                         "Formation":  "Arc",
-                                         "EntrySide":  "Right",
-                                         "PathType":  "Swoop",
-                                         "AnchorX":  0.82,
-                                         "AnchorY":  0.24,
-                                         "Spacing":  70,
-                                         "DelayBetweenSpawns":  0.14,
-                                         "TravelDuration":  3.2,
-                                         "SpeedMultiplier":  1.2
-                                     },
-                                     {
-                                         "ArchetypeId":  "Interceptor",
-                                         "Count":  4,
-                                         "Formation":  "Column",
-                                         "EntrySide":  "Left",
-                                         "PathType":  "LaneSweep",
-                                         "AnchorX":  0.18,
-                                         "AnchorY":  0.36,
-                                         "Spacing":  76,
-                                         "DelayBetweenSpawns":  0.2,
-                                         "TravelDuration":  3.7,
-                                         "SpeedMultiplier":  1.1
-                                     }
-                                 ]
-                  },
-                  {
-                      "Label":  "Wave 3",
-                      "StartSeconds":  23.5,
-                      "Checkpoint":  true,
-                      "Groups":  [
-                                     {
-                                         "ArchetypeId":  "Interceptor",
-                                         "Count":  4,
-                                         "Formation":  "Line",
-                                         "EntrySide":  "Bottom",
-                                         "PathType":  "ChaseAfterDelay",
-                                         "AnchorX":  0.3,
-                                         "AnchorY":  0.42,
-                                         "Spacing":  72,
-                                         "DelayBetweenSpawns":  0.22,
-                                         "TravelDuration":  3.5,
-                                         "SpeedMultiplier":  1.16
-                                     },
-                                     {
-                                         "ArchetypeId":  "Turret",
-                                         "Count":  4,
-                                         "Formation":  "V",
-                                         "EntrySide":  "Top",
-                                         "PathType":  "Straight",
-                                         "AnchorX":  0.7,
-                                         "AnchorY":  0.3,
-                                         "Spacing":  72,
-                                         "DelayBetweenSpawns":  0.14,
-                                         "TravelDuration":  3.3,
-                                         "SpeedMultiplier":  1.12
-                                     }
-                                 ]
-                  },
-                  {
-                      "Label":  "Wave 4",
-                      "StartSeconds":  36.5,
-                      "Checkpoint":  false,
-                      "Groups":  [
-                                     {
-                                         "ArchetypeId":  "Destroyer",
-                                         "Count":  5,
-                                         "Formation":  "Line",
-                                         "EntrySide":  "Top",
-                                         "PathType":  "Straight",
-                                         "AnchorX":  0.18,
-                                         "AnchorY":  0.34,
-                                         "Spacing":  70,
-                                         "DelayBetweenSpawns":  0.16,
-                                         "TravelDuration":  3.2,
-                                         "SpeedMultiplier":  1.1
-                                     },
-                                     {
-                                         "ArchetypeId":  "Turret",
-                                         "Count":  5,
-                                         "Formation":  "Line",
-                                         "EntrySide":  "Top",
-                                         "PathType":  "Straight",
-                                         "AnchorX":  0.82,
-                                         "AnchorY":  0.38,
-                                         "Spacing":  70,
-                                         "DelayBetweenSpawns":  0.16,
-                                         "TravelDuration":  3.2,
-                                         "SpeedMultiplier":  1.1
-                                     }
-                                 ]
-                  }
-              ],
+    "StageNumber":  15,
+    "Name":  "Burning Turn",
+    "IntroSeconds":  1.2,
+    "ScrollSpeed":  185,
+    "Theme":  "Solar",
+    "BackgroundSeed":  105,
+    "CheckpointMarkers":  [
+                              27.25
+                          ],
+    "Sections":  [
+                     {
+                         "Label":  "Section 1",
+                         "StartSeconds":  0.75,
+                         "DurationSeconds":  11.8,
+                         "Checkpoint":  false,
+                         "Groups":  [
+                                        {
+                                            "ArchetypeId":  "Interceptor",
+                                            "StartSeconds":  0,
+                                            "Lane":  0,
+                                            "Count":  6,
+                                            "SpawnLeadDistance":  240,
+                                            "SpawnIntervalSeconds":  0.16,
+                                            "SpacingX":  74,
+                                            "SpeedMultiplier":  1.13,
+                                            "MovePatternOverride":  "SineWave",
+                                            "FirePatternOverride":  "None",
+                                            "Amplitude":  60,
+                                            "Frequency":  1.12
+                                        },
+                                        {
+                                            "ArchetypeId":  "Walker",
+                                            "StartSeconds":  5.4,
+                                            "Lane":  2,
+                                            "Count":  5,
+                                            "SpawnLeadDistance":  220,
+                                            "SpawnIntervalSeconds":  0.26,
+                                            "SpacingX":  86,
+                                            "SpeedMultiplier":  1.06,
+                                            "MovePatternOverride":  "StraightFlyIn",
+                                            "FirePatternOverride":  "None",
+                                            "Amplitude":  30,
+                                            "Frequency":  1
+                                        }
+                                    ]
+                     },
+                     {
+                         "Label":  "Section 2",
+                         "StartSeconds":  14,
+                         "DurationSeconds":  11.8,
+                         "Checkpoint":  false,
+                         "Groups":  [
+                                        {
+                                            "ArchetypeId":  "Destroyer",
+                                            "StartSeconds":  0.5,
+                                            "Lane":  3,
+                                            "Count":  4,
+                                            "SpawnLeadDistance":  300,
+                                            "SpawnIntervalSeconds":  0.34,
+                                            "SpacingX":  112,
+                                            "SpeedMultiplier":  1.04,
+                                            "MovePatternOverride":  "Dive",
+                                            "FirePatternOverride":  "ForwardPulse",
+                                            "Amplitude":  48,
+                                            "Frequency":  0.92
+                                        },
+                                        {
+                                            "ArchetypeId":  "Interceptor",
+                                            "StartSeconds":  5.8,
+                                            "Lane":  0,
+                                            "Count":  5,
+                                            "SpawnLeadDistance":  260,
+                                            "SpawnIntervalSeconds":  0.18,
+                                            "SpacingX":  76,
+                                            "SpeedMultiplier":  1.18,
+                                            "MovePatternOverride":  "SineWave",
+                                            "FirePatternOverride":  "None",
+                                            "Amplitude":  70,
+                                            "Frequency":  1.18
+                                        }
+                                    ]
+                     },
+                     {
+                         "Label":  "Section 3",
+                         "StartSeconds":  27.25,
+                         "DurationSeconds":  11.8,
+                         "Checkpoint":  true,
+                         "Groups":  [
+                                        {
+                                            "ArchetypeId":  "Carrier",
+                                            "StartSeconds":  0.6,
+                                            "Lane":  2,
+                                            "Count":  2,
+                                            "SpawnLeadDistance":  330,
+                                            "SpawnIntervalSeconds":  0.52,
+                                            "SpacingX":  132,
+                                            "SpeedMultiplier":  1.04,
+                                            "MovePatternOverride":  "TurretCarrier",
+                                            "FirePatternOverride":  "SpreadPulse",
+                                            "Amplitude":  34,
+                                            "Frequency":  0.8
+                                        },
+                                        {
+                                            "ArchetypeId":  "Walker",
+                                            "StartSeconds":  4.2,
+                                            "Lane":  3,
+                                            "Count":  4,
+                                            "SpawnLeadDistance":  220,
+                                            "SpawnIntervalSeconds":  0.24,
+                                            "SpacingX":  88,
+                                            "SpeedMultiplier":  1.08,
+                                            "MovePatternOverride":  "StraightFlyIn",
+                                            "FirePatternOverride":  "None",
+                                            "Amplitude":  28,
+                                            "Frequency":  1
+                                        }
+                                    ]
+                     },
+                     {
+                         "Label":  "Section 4",
+                         "StartSeconds":  40.5,
+                         "DurationSeconds":  11.8,
+                         "Checkpoint":  false,
+                         "Groups":  [
+                                        {
+                                            "ArchetypeId":  "Walker",
+                                            "StartSeconds":  0,
+                                            "Lane":  2,
+                                            "Count":  6,
+                                            "SpawnLeadDistance":  220,
+                                            "SpawnIntervalSeconds":  0.18,
+                                            "SpacingX":  84,
+                                            "SpeedMultiplier":  1.08,
+                                            "MovePatternOverride":  "StraightFlyIn",
+                                            "FirePatternOverride":  "None",
+                                            "Amplitude":  30,
+                                            "Frequency":  1
+                                        },
+                                        {
+                                            "ArchetypeId":  "Bulwark",
+                                            "StartSeconds":  5.9,
+                                            "Lane":  4,
+                                            "Count":  3,
+                                            "SpawnLeadDistance":  340,
+                                            "SpawnIntervalSeconds":  0.46,
+                                            "SpacingX":  136,
+                                            "SpeedMultiplier":  1.01,
+                                            "MovePatternOverride":  "RetreatBackfire",
+                                            "FirePatternOverride":  "ForwardPulse",
+                                            "Amplitude":  32,
+                                            "Frequency":  0.78
+                                        }
+                                    ]
+                     }
+                 ],
     "Boss":  null
 }

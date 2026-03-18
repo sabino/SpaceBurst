@@ -1,35 +1,32 @@
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
+using SpaceBurst.RuntimeData;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Input;
-using SpaceBurst.RuntimeData;
 
 namespace SpaceBurst
 {
     sealed class CampaignDirector
     {
-        private const float gameOverDelaySeconds = 0.85f;
-        private const float bossWarningSeconds = 1.25f;
-        private const float levelClearSeconds = 1.25f;
-        private const float playerSafetyClearRadius = 180f;
+        private const float GameOverDelaySeconds = 0.85f;
+        private const float LevelClearSeconds = 1.35f;
+        private const float PlayerSafetyClearRadius = 220f;
 
         private readonly CampaignRepository repository = new CampaignRepository();
         private readonly OptionsData options;
         private readonly MedalProgress medals;
         private readonly List<ScheduledSpawn> scheduledSpawns = new List<ScheduledSpawn>();
 
-        private LevelDefinition currentLevel;
+        private StageDefinition currentStage;
         private BossEnemy activeBoss;
         private GameFlowState state = GameFlowState.Title;
-        private int currentLevelNumber = 1;
-        private int currentWaveIndex;
-        private int checkpointWaveIndex;
-        private int levelStartWaveIndex;
-        private float levelElapsedSeconds;
+        private int currentStageNumber = 1;
+        private int currentSectionIndex;
+        private int checkpointSectionIndex;
+        private float stageElapsedSeconds;
         private float stateTimer;
-        private bool levelHadDeath;
+        private bool stageHadDeath;
         private bool campaignHadDeath;
         private bool medalEligibleRun;
         private string bannerText = string.Empty;
@@ -52,6 +49,30 @@ namespace SpaceBurst
             get { return state == GameFlowState.Playing && ShouldDrawWorld; }
         }
 
+        public float CurrentScrollSpeed
+        {
+            get
+            {
+                if (currentStage == null || state == GameFlowState.Title || state == GameFlowState.Options || state == GameFlowState.GameOver || state == GameFlowState.CampaignComplete)
+                    return 0f;
+
+                if (activeBoss != null && currentStage.Boss != null)
+                    return currentStage.Boss.ArenaScrollSpeed;
+
+                return currentStage.ScrollSpeed;
+            }
+        }
+
+        public string CurrentTheme
+        {
+            get { return currentStage != null ? currentStage.Theme : "Nebula"; }
+        }
+
+        public int CurrentBackgroundSeed
+        {
+            get { return currentStage != null ? currentStage.BackgroundSeed : 1; }
+        }
+
         public void Load()
         {
             repository.Load();
@@ -65,60 +86,30 @@ namespace SpaceBurst
                 case GameFlowState.Title:
                     UpdateTitle();
                     break;
+
                 case GameFlowState.Options:
                     UpdateOptions();
                     break;
+
                 case GameFlowState.LevelIntro:
                     UpdateTimedState(GameFlowState.Playing);
                     break;
+
                 case GameFlowState.BossWarning:
                     UpdateBossWarning();
                     break;
+
                 case GameFlowState.LevelClear:
                     UpdateLevelClear();
                     break;
+
                 case GameFlowState.GameOver:
                 case GameFlowState.CampaignComplete:
                     UpdateEndState();
                     break;
+
                 case GameFlowState.Playing:
                     UpdatePlaying();
-                    break;
-            }
-        }
-
-        public void HandlePlayerCollision()
-        {
-            if (state != GameFlowState.Playing || Player1.Instance.IsDead || Player1.Instance.IsInvulnerable)
-                return;
-
-            levelHadDeath = true;
-            campaignHadDeath = true;
-            PlayerStatus.RemoveLife();
-            PlayerStatus.ResetMultiplier();
-
-            if (PlayerStatus.IsGameOver)
-            {
-                EntityManager.ClearHostiles();
-                scheduledSpawns.Clear();
-                Player1.Instance.StartRespawn(gameOverDelaySeconds);
-                EnterEndState(GameFlowState.GameOver, "Game Over");
-                return;
-            }
-
-            switch (options.RetryMode)
-            {
-                case RetryMode.WaveCheckpoint:
-                    PrepareLevel(currentLevelNumber, checkpointWaveIndex, true, true);
-                    break;
-
-                case RetryMode.CasualRespawn:
-                    Player1.Instance.StartRespawn(1.1f);
-                    EntityManager.ClearHostilesNear(Game1.ScreenSize / 2f, playerSafetyClearRadius);
-                    break;
-
-                default:
-                    PrepareLevel(currentLevelNumber, 0, true, false);
                     break;
             }
         }
@@ -166,7 +157,7 @@ namespace SpaceBurst
 
         private void UpdateTitle()
         {
-            var buttons = GetTitleButtons();
+            List<UiButton> buttons = GetTitleButtons();
             UpdateVerticalSelection(ref titleSelection, buttons.Count);
             HandlePointerSelection(buttons, ref titleSelection);
 
@@ -179,23 +170,19 @@ namespace SpaceBurst
             int itemCount = 2;
             UpdateVerticalSelection(ref optionSelection, itemCount);
 
-            var buttons = GetOptionButtons();
+            List<UiButton> buttons = GetOptionButtons();
             HandlePointerSelection(buttons, ref optionSelection);
 
             if (optionSelection == 0 && (Input.WasNavigateLeftPressed() || Input.WasNavigateRightPressed() || Input.WasPrimaryActionPressed() || Input.WasConfirmPressed()))
-            {
                 CycleRetryMode(Input.WasNavigateLeftPressed() ? -1 : 1);
-            }
             else if (optionSelection == 1 && (Input.WasPrimaryActionPressed() || Input.WasConfirmPressed() || Input.WasCancelPressed()))
-            {
                 state = GameFlowState.Title;
-            }
         }
 
         private void UpdatePlaying()
         {
             float deltaSeconds = (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
-            levelElapsedSeconds += deltaSeconds;
+            stageElapsedSeconds += deltaSeconds;
 
             if (Input.WasCancelPressed())
             {
@@ -204,30 +191,37 @@ namespace SpaceBurst
                 return;
             }
 
-            ScheduleDueWaves();
+            ScheduleDueSections();
             SpawnDueEntities();
             EntityManager.Update();
+
+            if (Player1.Instance.ConsumeHullDestroyed() || EntityManager.ConsumePlayerHullDestruction())
+            {
+                HandlePlayerShipDestroyed();
+                return;
+            }
+
             PlayerStatus.Update();
 
             if (activeBoss != null)
                 DrainBossSupportQueue();
 
-            if (activeBoss == null && currentLevel.Boss != null && currentWaveIndex >= currentLevel.Waves.Count && scheduledSpawns.Count == 0 && !EntityManager.HasHostiles)
+            if (activeBoss == null && currentStage.Boss != null && currentSectionIndex >= currentStage.Sections.Count && scheduledSpawns.Count == 0 && !EntityManager.HasHostiles)
             {
                 state = GameFlowState.BossWarning;
-                stateTimer = bossWarningSeconds;
-                bannerText = string.Concat("Boss Incoming\n", currentLevel.Boss.DisplayName);
+                stateTimer = currentStage.Boss.IntroSeconds;
+                bannerText = string.Concat("Boss Incoming\n", currentStage.Boss.DisplayName);
                 return;
             }
 
-            if (currentLevel.Boss == null && currentWaveIndex >= currentLevel.Waves.Count && scheduledSpawns.Count == 0 && !EntityManager.HasHostiles)
+            if (currentStage.Boss == null && currentSectionIndex >= currentStage.Sections.Count && scheduledSpawns.Count == 0 && !EntityManager.HasHostiles)
             {
-                CompleteLevel();
+                CompleteStage();
                 return;
             }
 
             if (activeBoss != null && activeBoss.IsExpired && !EntityManager.HasHostiles && scheduledSpawns.Count == 0)
-                CompleteLevel();
+                CompleteStage();
         }
 
         private void UpdateBossWarning()
@@ -246,13 +240,13 @@ namespace SpaceBurst
             if (stateTimer > 0f && !Input.WasConfirmPressed() && !Input.WasPrimaryActionPressed())
                 return;
 
-            if (currentLevelNumber >= 50)
+            if (currentStageNumber >= 50)
             {
                 EnterEndState(GameFlowState.CampaignComplete, "Campaign Complete");
                 return;
             }
 
-            PrepareLevel(currentLevelNumber + 1, 0, false, false);
+            PrepareStage(currentStageNumber + 1, 0, false, false);
         }
 
         private void UpdateEndState()
@@ -272,30 +266,65 @@ namespace SpaceBurst
                 state = nextState;
         }
 
-        private void PrepareLevel(int levelNumber, int startWaveIndex, bool isRetry, bool fromCheckpoint)
+        private void HandlePlayerShipDestroyed()
         {
-            currentLevelNumber = levelNumber;
-            currentLevel = repository.GetLevel(levelNumber);
-            currentWaveIndex = startWaveIndex;
-            checkpointWaveIndex = startWaveIndex;
-            levelStartWaveIndex = startWaveIndex;
-            levelElapsedSeconds = startWaveIndex > 0 ? currentLevel.Waves[startWaveIndex].StartSeconds : 0f;
+            if (state != GameFlowState.Playing)
+                return;
+
+            stageHadDeath = true;
+            campaignHadDeath = true;
+            PlayerStatus.RemoveLife();
+            PlayerStatus.ResetMultiplier();
+
+            if (PlayerStatus.IsGameOver)
+            {
+                EntityManager.ClearHostiles();
+                scheduledSpawns.Clear();
+                Player1.Instance.StartRespawn(GameOverDelaySeconds);
+                EnterEndState(GameFlowState.GameOver, "Game Over");
+                return;
+            }
+
+            switch (options.RetryMode)
+            {
+                case RetryMode.WaveCheckpoint:
+                    PrepareStage(currentStageNumber, checkpointSectionIndex, true, true);
+                    break;
+
+                case RetryMode.CasualRespawn:
+                    Player1.Instance.StartRespawn(1.05f);
+                    EntityManager.ClearHostilesNear(new Vector2(Game1.ScreenSize.X * 0.22f, Game1.ScreenSize.Y * 0.5f), PlayerSafetyClearRadius);
+                    break;
+
+                default:
+                    PrepareStage(currentStageNumber, 0, true, false);
+                    break;
+            }
+        }
+
+        private void PrepareStage(int stageNumber, int startSectionIndex, bool isRetry, bool fromCheckpoint)
+        {
+            currentStageNumber = stageNumber;
+            currentStage = repository.GetStage(stageNumber);
+            currentSectionIndex = Math.Clamp(startSectionIndex, 0, currentStage.Sections.Count - 1);
+            checkpointSectionIndex = currentSectionIndex;
+            stageElapsedSeconds = currentSectionIndex > 0 ? currentStage.Sections[currentSectionIndex].StartSeconds : 0f;
             activeBoss = null;
             scheduledSpawns.Clear();
 
             EntityManager.Reset();
-            Player1.Instance.ResetForLevel();
+            Player1.Instance.ResetForStage();
             EntityManager.Add(Player1.Instance);
 
             if (!isRetry)
-                levelHadDeath = false;
+                stageHadDeath = false;
 
             bannerText = isRetry
-                ? (fromCheckpoint ? string.Concat("Checkpoint\nLevel ", levelNumber.ToString()) : string.Concat("Retry Level ", levelNumber.ToString()))
-                : string.Concat("Level ", levelNumber.ToString(), "\n", currentLevel.Name);
+                ? (fromCheckpoint ? string.Concat("Checkpoint\nStage ", stageNumber.ToString()) : string.Concat("Retry Stage ", stageNumber.ToString()))
+                : string.Concat("Stage ", stageNumber.ToString(), "\n", currentStage.Name);
 
             state = GameFlowState.LevelIntro;
-            stateTimer = currentLevel.IntroSeconds;
+            stateTimer = currentStage.IntroSeconds;
         }
 
         private void StartCampaign()
@@ -304,17 +333,17 @@ namespace SpaceBurst
             PlayerStatus.BeginCampaign();
             medalEligibleRun = options.RetryMode == RetryMode.ClassicStageRestart;
             campaignHadDeath = false;
-            levelHadDeath = false;
-            currentLevelNumber = 1;
-            PrepareLevel(1, 0, false, false);
+            stageHadDeath = false;
+            currentStageNumber = 1;
+            PrepareStage(1, 0, false, false);
         }
 
-        private void CompleteLevel()
+        private void CompleteStage()
         {
-            UnlockLevelMedals();
+            UnlockStageMedals();
             state = GameFlowState.LevelClear;
-            stateTimer = levelClearSeconds;
-            bannerText = string.Concat("Level ", currentLevelNumber.ToString(), " Clear");
+            stateTimer = LevelClearSeconds;
+            bannerText = string.Concat("Stage ", currentStageNumber.ToString(), " Clear");
         }
 
         private void EnterEndState(GameFlowState endState, string text)
@@ -325,6 +354,7 @@ namespace SpaceBurst
                 medals.CampaignClear = true;
                 if (!campaignHadDeath)
                     medals.PerfectCampaign = true;
+
                 PersistentStorage.SaveMedals(medals);
             }
 
@@ -333,37 +363,43 @@ namespace SpaceBurst
             stateTimer = 0.35f;
         }
 
-        private void ScheduleDueWaves()
+        private void ScheduleDueSections()
         {
-            while (currentWaveIndex < currentLevel.Waves.Count && currentLevel.Waves[currentWaveIndex].StartSeconds <= levelElapsedSeconds)
+            while (currentSectionIndex < currentStage.Sections.Count && currentStage.Sections[currentSectionIndex].StartSeconds <= stageElapsedSeconds)
             {
-                var wave = currentLevel.Waves[currentWaveIndex];
-                if (wave.Checkpoint)
-                    checkpointWaveIndex = currentWaveIndex;
+                SectionDefinition section = currentStage.Sections[currentSectionIndex];
+                if (section.Checkpoint)
+                    checkpointSectionIndex = currentSectionIndex;
 
-                ScheduleWave(wave);
-                currentWaveIndex++;
+                ScheduleSection(section);
+                currentSectionIndex++;
             }
         }
 
-        private void ScheduleWave(WaveDefinition wave)
+        private void ScheduleSection(SectionDefinition section)
         {
-            foreach (var group in wave.Groups)
+            for (int groupIndex = 0; groupIndex < section.Groups.Count; groupIndex++)
+                ScheduleGroup(section.StartSeconds, section.Groups[groupIndex]);
+        }
+
+        private void ScheduleGroup(float stageStartSeconds, SpawnGroupDefinition group)
+        {
+            EnemyArchetypeDefinition archetype = repository.ArchetypesById[group.ArchetypeId];
+            float targetY = LevelMath.ResolveTargetY(Game1.ScreenSize.ToSystemNumerics(), group);
+
+            for (int index = 0; index < group.Count; index++)
             {
-                var offsets = LevelMath.GetFormationOffsets(group.Formation, group.Count, group.Spacing);
-                for (int i = 0; i < offsets.Count; i++)
+                scheduledSpawns.Add(new ScheduledSpawn
                 {
-                    Vector2 anchor = GetSafeAnchor(LevelMath.GetAnchorPoint(Game1.ScreenSize.ToSystemNumerics(), group.AnchorX, group.AnchorY, offsets[i]).ToXna(), levelStartWaveIndex == 0);
-                    Vector2 spawn = LevelMath.GetSpawnPoint(group.EntrySide, Game1.ScreenSize.ToSystemNumerics(), anchor.ToSystemNumerics(), offsets[i], 90f).ToXna();
-                    scheduledSpawns.Add(new ScheduledSpawn
-                    {
-                        SpawnAtSeconds = wave.StartSeconds + group.DelayBetweenSpawns * i,
-                        Group = group,
-                        FormationIndex = i,
-                        SpawnPoint = spawn,
-                        AnchorPoint = anchor,
-                    });
-                }
+                    SpawnAtSeconds = stageStartSeconds + group.StartSeconds + group.SpawnIntervalSeconds * index,
+                    Group = group,
+                    SpawnPoint = LevelMath.GetSpawnPoint(Game1.ScreenSize.ToSystemNumerics(), group, index).ToXna(),
+                    TargetY = targetY,
+                    MovePattern = group.MovePatternOverride ?? archetype.MovePattern,
+                    FirePattern = group.FirePatternOverride ?? archetype.FirePattern,
+                    Amplitude = group.Amplitude > 0f ? group.Amplitude : archetype.MovementAmplitude,
+                    Frequency = group.Frequency > 0f ? group.Frequency : archetype.MovementFrequency,
+                });
             }
 
             scheduledSpawns.Sort((left, right) => left.SpawnAtSeconds.CompareTo(right.SpawnAtSeconds));
@@ -371,19 +407,21 @@ namespace SpaceBurst
 
         private void SpawnDueEntities()
         {
-            while (scheduledSpawns.Count > 0 && scheduledSpawns[0].SpawnAtSeconds <= levelElapsedSeconds)
+            while (scheduledSpawns.Count > 0 && scheduledSpawns[0].SpawnAtSeconds <= stageElapsedSeconds)
             {
-                var scheduledSpawn = scheduledSpawns[0];
+                ScheduledSpawn scheduledSpawn = scheduledSpawns[0];
                 scheduledSpawns.RemoveAt(0);
 
-                var archetype = repository.ArchetypesById[scheduledSpawn.Group.ArchetypeId];
+                EnemyArchetypeDefinition archetype = repository.ArchetypesById[scheduledSpawn.Group.ArchetypeId];
                 var enemy = new Enemy(
                     archetype,
                     scheduledSpawn.SpawnPoint,
-                    scheduledSpawn.AnchorPoint,
-                    scheduledSpawn.Group.PathType,
-                    scheduledSpawn.FormationIndex,
-                    scheduledSpawn.Group.SpeedMultiplier);
+                    scheduledSpawn.TargetY,
+                    scheduledSpawn.MovePattern,
+                    scheduledSpawn.FirePattern,
+                    scheduledSpawn.Group.SpeedMultiplier,
+                    scheduledSpawn.Amplitude,
+                    scheduledSpawn.Frequency);
 
                 EntityManager.Add(enemy);
             }
@@ -391,38 +429,28 @@ namespace SpaceBurst
 
         private void SpawnBoss()
         {
-            var archetype = repository.ArchetypesById[currentLevel.Boss.ArchetypeId];
-            Vector2 anchor = LevelMath.GetAnchorPoint(Game1.ScreenSize.ToSystemNumerics(), currentLevel.Boss.AnchorX, currentLevel.Boss.AnchorY, System.Numerics.Vector2.Zero).ToXna();
-            Vector2 spawn = LevelMath.GetSpawnPoint(currentLevel.Boss.EntrySide, Game1.ScreenSize.ToSystemNumerics(), anchor.ToSystemNumerics(), System.Numerics.Vector2.Zero, 120f).ToXna();
-
-            activeBoss = new BossEnemy(archetype, currentLevel.Boss, spawn, anchor);
+            EnemyArchetypeDefinition archetype = repository.ArchetypesById[currentStage.Boss.ArchetypeId];
+            Vector2 spawnPoint = new Vector2(Game1.ScreenSize.X + archetype.SpawnLeadDistance, currentStage.Boss.TargetY * Game1.ScreenSize.Y);
+            activeBoss = new BossEnemy(archetype, currentStage.Boss, spawnPoint);
             EntityManager.Add(activeBoss);
         }
 
         private void DrainBossSupportQueue()
         {
-            while (activeBoss != null && activeBoss.TryConsumeSupportWave(out SpawnGroupDefinition group))
-            {
-                var wave = new WaveDefinition
-                {
-                    StartSeconds = levelElapsedSeconds + 0.2f,
-                    Checkpoint = false,
-                    Groups = new List<SpawnGroupDefinition> { group },
-                };
-                ScheduleWave(wave);
-            }
+            while (activeBoss != null && activeBoss.TryConsumeSupportGroup(out SpawnGroupDefinition group))
+                ScheduleGroup(stageElapsedSeconds + 0.35f, group);
         }
 
-        private void UnlockLevelMedals()
+        private void UnlockStageMedals()
         {
             if (!medalEligibleRun)
                 return;
 
-            medals.UnlockStageClear(currentLevelNumber);
-            if (!levelHadDeath)
-                medals.UnlockNoDeath(currentLevelNumber);
-            if (currentLevel.Boss != null)
-                medals.UnlockBossClear(currentLevelNumber);
+            medals.UnlockStageClear(currentStageNumber);
+            if (!stageHadDeath)
+                medals.UnlockNoDeath(currentStageNumber);
+            if (currentStage.Boss != null)
+                medals.UnlockBossClear(currentStageNumber);
 
             PersistentStorage.SaveMedals(medals);
         }
@@ -447,7 +475,7 @@ namespace SpaceBurst
 
         private void CycleRetryMode(int direction)
         {
-            var values = (RetryMode[])Enum.GetValues(typeof(RetryMode));
+            RetryMode[] values = (RetryMode[])Enum.GetValues(typeof(RetryMode));
             int current = Array.IndexOf(values, options.RetryMode);
             current = (current + values.Length + direction) % values.Length;
             options.RetryMode = values[current];
@@ -500,52 +528,49 @@ namespace SpaceBurst
         private UiButton CreateButton(string text, int index, int total)
         {
             Vector2 center = Game1.ScreenSize / 2f;
-            int width = 360;
-            int height = 54;
+            int width = 400;
+            int height = 58;
             int x = (int)center.X - width / 2;
-            int y = (int)center.Y - 20 + index * 74 - (total - 1) * 37;
+            int y = (int)center.Y - 12 + index * 78 - (total - 1) * 39;
             return new UiButton(new Rectangle(x, y, width, height), text);
         }
 
         private void DrawTitle(SpriteBatch spriteBatch, Texture2D pixel)
         {
-            DrawCenteredText(spriteBatch, "SpaceBurst", Game1.ScreenSize.X / 2f, 140f, Color.White, 1.4f);
-            DrawCenteredText(spriteBatch, "Deterministic Campaign Build", Game1.ScreenSize.X / 2f, 200f, Color.White * 0.65f, 0.65f);
-            DrawCenteredText(spriteBatch, string.Concat("High Score: ", PlayerStatus.HighScore.ToString()), Game1.ScreenSize.X / 2f, 240f, Color.White * 0.85f, 0.75f);
+            DrawCenteredText(spriteBatch, "SpaceBurst", Game1.ScreenSize.X / 2f, 132f, Color.White, 1.6f);
+            DrawCenteredText(spriteBatch, "Autoscroll Destructible Campaign", Game1.ScreenSize.X / 2f, 198f, Color.White * 0.68f, 0.7f);
+            DrawCenteredText(spriteBatch, string.Concat("High Score: ", PlayerStatus.HighScore.ToString()), Game1.ScreenSize.X / 2f, 240f, Color.White * 0.85f, 0.8f);
 
-            var buttons = GetTitleButtons();
+            List<UiButton> buttons = GetTitleButtons();
             for (int i = 0; i < buttons.Count; i++)
                 DrawButton(spriteBatch, pixel, buttons[i], i == titleSelection);
 
             string medalText = medals.CampaignClear
                 ? (medals.PerfectCampaign ? "Perfect Campaign Medal: Unlocked" : "Campaign Clear Medal: Unlocked")
                 : "Campaign medals not yet unlocked";
-            DrawCenteredText(spriteBatch, medalText, Game1.ScreenSize.X / 2f, 470f, Color.White * 0.65f, 0.6f);
+            DrawCenteredText(spriteBatch, medalText, Game1.ScreenSize.X / 2f, 520f, Color.White * 0.65f, 0.62f);
         }
 
         private void DrawOptions(SpriteBatch spriteBatch, Texture2D pixel)
         {
-            DrawCenteredText(spriteBatch, "Options", Game1.ScreenSize.X / 2f, 140f, Color.White, 1.15f);
+            DrawCenteredText(spriteBatch, "Options", Game1.ScreenSize.X / 2f, 140f, Color.White, 1.2f);
 
-            var buttons = GetOptionButtons();
+            List<UiButton> buttons = GetOptionButtons();
             for (int i = 0; i < buttons.Count; i++)
                 DrawButton(spriteBatch, pixel, buttons[i], i == optionSelection);
 
-            DrawCenteredText(spriteBatch, "Classic restart is medal-eligible. Easier modes disable medals.", Game1.ScreenSize.X / 2f, 390f, Color.White * 0.6f, 0.58f);
+            DrawCenteredText(spriteBatch, "Classic restart is medal-eligible. Easier modes disable medals.", Game1.ScreenSize.X / 2f, 410f, Color.White * 0.62f, 0.58f);
         }
 
         private void DrawHud(SpriteBatch spriteBatch, Texture2D pixel)
         {
-            spriteBatch.DrawString(Element.Font, string.Concat("Lives: ", PlayerStatus.Lives.ToString()), new Vector2(5f, 5f), Color.White);
-
-            string stageLabel = string.Concat("Level ", currentLevelNumber.ToString("00"));
-            DrawCenteredText(spriteBatch, stageLabel, Game1.ScreenSize.X / 2f, 10f, Color.White, 0.7f);
-
-            DrawRightAlignedText(spriteBatch, string.Concat("Score: ", PlayerStatus.Score.ToString()), 5f);
-            DrawRightAlignedText(spriteBatch, string.Concat("Multiplier: ", PlayerStatus.Multiplier.ToString()), 35f);
+            spriteBatch.DrawString(Element.Font, string.Concat("Lives: ", PlayerStatus.Lives.ToString()), new Vector2(16f, 12f), Color.White);
+            spriteBatch.DrawString(Element.Font, string.Concat("Score: ", PlayerStatus.Score.ToString()), new Vector2(Game1.ScreenSize.X - 180f, 12f), Color.White);
+            spriteBatch.DrawString(Element.Font, string.Concat("Multiplier: ", PlayerStatus.Multiplier.ToString()), new Vector2(Game1.ScreenSize.X - 180f, 42f), Color.White);
+            DrawCenteredText(spriteBatch, string.Concat("Stage ", currentStageNumber.ToString("00")), Game1.ScreenSize.X / 2f, 12f, Color.White, 0.72f);
 
             if (!medalEligibleRun)
-                DrawCenteredText(spriteBatch, "Medals Disabled", Game1.ScreenSize.X / 2f, 38f, Color.Orange, 0.55f);
+                DrawCenteredText(spriteBatch, "Medals Disabled", Game1.ScreenSize.X / 2f, 44f, Color.Orange, 0.56f);
 
             if (activeBoss != null && !activeBoss.IsExpired)
                 DrawBossHealthBar(spriteBatch, pixel, activeBoss);
@@ -553,10 +578,10 @@ namespace SpaceBurst
 
         private void DrawBossHealthBar(SpriteBatch spriteBatch, Texture2D pixel, BossEnemy boss)
         {
-            Rectangle bounds = new Rectangle(180, 72, 440, 18);
-            spriteBatch.Draw(pixel, bounds, Color.White * 0.15f);
+            Rectangle bounds = new Rectangle(320, 78, 640, 20);
+            spriteBatch.Draw(pixel, bounds, Color.White * 0.14f);
             spriteBatch.Draw(pixel, new Rectangle(bounds.X, bounds.Y, (int)(bounds.Width * boss.HealthRatio), bounds.Height), Color.OrangeRed);
-            DrawCenteredText(spriteBatch, boss.DisplayName, Game1.ScreenSize.X / 2f, 52f, Color.White, 0.65f);
+            DrawCenteredText(spriteBatch, boss.DisplayName, Game1.ScreenSize.X / 2f, 54f, Color.White, 0.68f);
         }
 
         private void DrawCenteredBanner(SpriteBatch spriteBatch, string text, Color color)
@@ -578,9 +603,7 @@ namespace SpaceBurst
             spriteBatch.Draw(pixel, new Rectangle(button.Bounds.Right - 2, button.Bounds.Y, 2, button.Bounds.Height), border);
 
             Vector2 textSize = Element.Font.MeasureString(button.Text);
-            Vector2 textPosition = new Vector2(
-                button.Bounds.Center.X - textSize.X / 2f,
-                button.Bounds.Center.Y - textSize.Y / 2f);
+            Vector2 textPosition = new Vector2(button.Bounds.Center.X - textSize.X / 2f, button.Bounds.Center.Y - textSize.Y / 2f);
             spriteBatch.DrawString(Element.Font, button.Text, textPosition, Color.White);
         }
 
@@ -588,28 +611,6 @@ namespace SpaceBurst
         {
             Vector2 size = Element.Font.MeasureString(text) * scale;
             spriteBatch.DrawString(Element.Font, text, new Vector2(x - size.X / 2f, y), color, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
-        }
-
-        private void DrawRightAlignedText(SpriteBatch spriteBatch, string text, float y)
-        {
-            float width = Element.Font.MeasureString(text).X;
-            spriteBatch.DrawString(Element.Font, text, new Vector2(Game1.ScreenSize.X - width - 5f, y), Color.White);
-        }
-
-        private Vector2 GetSafeAnchor(Vector2 proposedAnchor, bool guardOpening)
-        {
-            if (!guardOpening)
-                return proposedAnchor;
-
-            Vector2 center = Game1.ScreenSize / 2f;
-            Vector2 delta = proposedAnchor - center;
-            if (delta == Vector2.Zero)
-                delta = new Vector2(1f, 0f);
-
-            if (delta.LengthSquared() < playerSafetyClearRadius * playerSafetyClearRadius)
-                proposedAnchor = center + delta.ScaleTo(playerSafetyClearRadius);
-
-            return Vector2.Clamp(proposedAnchor, new Vector2(80f, 90f), Game1.ScreenSize - new Vector2(80f, 90f));
         }
 
         private static string GetRetryModeLabel(RetryMode retryMode)
@@ -629,9 +630,12 @@ namespace SpaceBurst
         {
             public float SpawnAtSeconds { get; set; }
             public SpawnGroupDefinition Group { get; set; }
-            public int FormationIndex { get; set; }
             public Vector2 SpawnPoint { get; set; }
-            public Vector2 AnchorPoint { get; set; }
+            public float TargetY { get; set; }
+            public MovePattern MovePattern { get; set; }
+            public FirePattern FirePattern { get; set; }
+            public float Amplitude { get; set; }
+            public float Frequency { get; set; }
         }
 
         private readonly struct UiButton

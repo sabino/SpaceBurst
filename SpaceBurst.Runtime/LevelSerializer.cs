@@ -18,9 +18,9 @@ namespace SpaceBurst.RuntimeData
             return JsonSerializer.Deserialize<EnemyArchetypeCatalogDefinition>(json, jsonOptions);
         }
 
-        public static LevelDefinition DeserializeLevel(string json)
+        public static StageDefinition DeserializeLevel(string json)
         {
-            return JsonSerializer.Deserialize<LevelDefinition>(json, jsonOptions);
+            return JsonSerializer.Deserialize<StageDefinition>(json, jsonOptions);
         }
 
         public static string SerializeArchetypes(EnemyArchetypeCatalogDefinition definition)
@@ -28,7 +28,7 @@ namespace SpaceBurst.RuntimeData
             return JsonSerializer.Serialize(definition, jsonOptions);
         }
 
-        public static string SerializeLevel(LevelDefinition definition)
+        public static string SerializeLevel(StageDefinition definition)
         {
             return JsonSerializer.Serialize(definition, jsonOptions);
         }
@@ -38,7 +38,7 @@ namespace SpaceBurst.RuntimeData
             return DeserializeArchetypes(File.ReadAllText(path));
         }
 
-        public static LevelDefinition LoadLevelFromFile(string path)
+        public static StageDefinition LoadLevelFromFile(string path)
         {
             return DeserializeLevel(File.ReadAllText(path));
         }
@@ -48,7 +48,7 @@ namespace SpaceBurst.RuntimeData
             File.WriteAllText(path, SerializeArchetypes(definition));
         }
 
-        public static void SaveLevelToFile(string path, LevelDefinition definition)
+        public static void SaveLevelToFile(string path, StageDefinition definition)
         {
             File.WriteAllText(path, SerializeLevel(definition));
         }

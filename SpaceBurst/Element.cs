@@ -1,59 +1,117 @@
-﻿using Microsoft.Xna.Framework.Content;
+using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
-using System;
+using SpaceBurst.RuntimeData;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace SpaceBurst
 {
     static class Element
     {
-        public static Texture2D Player { get; private set; }
-        public static Texture2D Pointer { get; private set; }
-        public static Texture2D Bullet { get; private set; }
-        public static Texture2D Turret { get; private set; }
-        public static Texture2D Destroyer { get; private set; }
-        public static Texture2D Walker { get; private set; }
-        public static Texture2D Portal { get; private set; }
-
         public static SpriteFont Font { get; private set; }
+
+        public static ProceduralSpriteDefinition PlayerHullDefinition { get; private set; }
+        public static ProceduralSpriteDefinition PlayerCannonDefinition { get; private set; }
+        public static ProceduralSpriteDefinition PlayerBulletDefinition { get; private set; }
+        public static ProceduralSpriteDefinition EnemyBulletDefinition { get; private set; }
+
+        public static DamageMaskDefinition PlayerDamageMask { get; private set; }
 
         public static void Load(ContentManager content)
         {
             Font = content.Load<SpriteFont>("Font");
 
-            Player = content.Load<Texture2D>("Player");
-            Pointer = content.Load<Texture2D>("Pointer");
-            Bullet = content.Load<Texture2D>("Bullet");
-            Destroyer = content.Load<Texture2D>("Destroyer");
-            Walker = content.Load<Texture2D>("Walker");
-            Turret = content.Load<Texture2D>("Turret");
-            Portal = content.Load<Texture2D>("Portal");
-        }
-
-        public static Texture2D GetTexture(string textureId)
-        {
-            switch (textureId)
+            PlayerHullDefinition = new ProceduralSpriteDefinition
             {
-                case "Player":
-                    return Player;
-                case "Pointer":
-                    return Pointer;
-                case "Bullet":
-                    return Bullet;
-                case "Destroyer":
-                    return Destroyer;
-                case "Walker":
-                    return Walker;
-                case "Turret":
-                    return Turret;
-                case "Portal":
-                    return Portal;
-                default:
-                    return null;
-            }
+                Id = "PlayerHull",
+                PixelScale = 5,
+                PrimaryColor = "#D7F5FF",
+                SecondaryColor = "#5AAFCB",
+                AccentColor = "#FFB347",
+                Rows = new List<string>
+                {
+                    ".....##......",
+                    "...######....",
+                    "..###++###...",
+                    ".###++++###..",
+                    "###++CC++###.",
+                    "###++CC++##**",
+                    "###++CC++###.",
+                    ".###++++###..",
+                    "..###++###...",
+                    "...######....",
+                    ".....##......",
+                },
+                VitalCore = new VitalCoreMaskDefinition
+                {
+                    Rows = new List<string>
+                    {
+                        ".............",
+                        ".............",
+                        ".............",
+                        ".............",
+                        ".....XX......",
+                        ".....XX......",
+                        ".....XX......",
+                        ".............",
+                        ".............",
+                        ".............",
+                        ".............",
+                    }
+                }
+            };
+
+            PlayerCannonDefinition = new ProceduralSpriteDefinition
+            {
+                Id = "PlayerCannon",
+                PixelScale = 5,
+                PrimaryColor = "#F7FBFF",
+                SecondaryColor = "#A3C7DB",
+                AccentColor = "#FFB347",
+                Rows = new List<string>
+                {
+                    "...##.....",
+                    ".######...",
+                    "##########",
+                    ".######...",
+                    "...##.....",
+                }
+            };
+
+            PlayerBulletDefinition = new ProceduralSpriteDefinition
+            {
+                Id = "PlayerBullet",
+                PixelScale = 4,
+                PrimaryColor = "#FFF4DA",
+                SecondaryColor = "#FFB347",
+                AccentColor = "#FF7A59",
+                Rows = new List<string>
+                {
+                    "##",
+                    "##",
+                }
+            };
+
+            EnemyBulletDefinition = new ProceduralSpriteDefinition
+            {
+                Id = "EnemyBullet",
+                PixelScale = 4,
+                PrimaryColor = "#FFBFA8",
+                SecondaryColor = "#F26D5B",
+                AccentColor = "#FFD166",
+                Rows = new List<string>
+                {
+                    "##",
+                    "##",
+                }
+            };
+
+            PlayerDamageMask = new DamageMaskDefinition
+            {
+                ContactDamage = 3,
+                ProjectileDamage = 2,
+                DamageRadius = 1,
+                IntegrityThresholdPercent = 15,
+            };
         }
     }
 }

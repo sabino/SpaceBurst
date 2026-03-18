@@ -1,34 +1,65 @@
-﻿using Microsoft.Xna.Framework;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using Microsoft.Xna.Framework;
 
 namespace SpaceBurst
 {
     class Bullet : Entity
     {
-        public Bullet(Vector2 position, Vector2 velocity)
+        public Vector2 PreviousPosition { get; private set; }
+
+        public override bool IsFriendly
         {
-            image = Element.Bullet;
+            get { return Friendly; }
+        }
+
+        public bool Friendly { get; }
+        public int Damage { get; }
+
+        public Bullet(Vector2 position, Vector2 velocity, bool friendly, int damage)
+        {
+            Friendly = friendly;
+            Damage = damage;
             Position = position;
             Velocity = velocity;
-            Orientation = Velocity.ToAngle();
-            RenderScale = 0.9f;
-            Radius = 6;
+            PreviousPosition = position;
+            Orientation = velocity == Vector2.Zero ? 0f : velocity.ToAngle();
+            sprite = new ProceduralSpriteInstance(
+                Game1.Instance.GraphicsDevice,
+                friendly ? Element.PlayerBulletDefinition : Element.EnemyBulletDefinition);
         }
 
         public override void Update()
         {
-            if (Velocity.LengthSquared() > 0)
+            float deltaSeconds = (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
+            PreviousPosition = Position;
+            Position += Velocity * deltaSeconds;
+
+            if (Velocity != Vector2.Zero)
                 Orientation = Velocity.ToAngle();
 
-            Position += Velocity;
-
-            // delete bullets that go off-screen
-            if (!Game1.Viewport.Bounds.Contains(Position.ToPoint()))
+            Rectangle bounds = Bounds;
+            Rectangle screenBounds = new Rectangle(-120, -120, Game1.VirtualWidth + 240, Game1.VirtualHeight + 240);
+            if (!screenBounds.Intersects(bounds))
                 IsExpired = true;
+        }
+
+        public bool TryGetImpactPoint(Entity target, out Vector2 impactPoint)
+        {
+            Vector2 delta = Position - PreviousPosition;
+            int steps = delta == Vector2.Zero ? 1 : System.Math.Max(1, (int)(delta.Length() / 6f));
+
+            for (int step = 0; step <= steps; step++)
+            {
+                float t = steps == 0 ? 1f : step / (float)steps;
+                Vector2 sample = Vector2.Lerp(PreviousPosition, Position, t);
+                if (target.ContainsPoint(sample))
+                {
+                    impactPoint = sample;
+                    return true;
+                }
+            }
+
+            impactPoint = Position;
+            return false;
         }
     }
 }

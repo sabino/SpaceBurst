@@ -6,53 +6,76 @@ namespace SpaceBurst.Runtime.Tests
     public sealed class CampaignDefinitionTests
     {
         [Fact]
-        public void CampaignFilesDeserializeAndValidate()
+        public void StageFilesDeserializeAndValidate()
         {
             string repoRoot = FindRepositoryRoot();
             string levelsDirectory = Path.Combine(repoRoot, "Levels");
 
-            EnemyArchetypeCatalogDefinition archetypeCatalog = LevelSerializer.LoadArchetypesFromFile(Path.Combine(levelsDirectory, "enemy-archetypes.json"));
-            Dictionary<string, EnemyArchetypeDefinition> archetypes = archetypeCatalog.Archetypes.ToDictionary(x => x.Id, x => x);
-            List<LevelDefinition> levels = new List<LevelDefinition>();
+            EnemyArchetypeCatalogDefinition catalog = LevelSerializer.LoadArchetypesFromFile(Path.Combine(levelsDirectory, "enemy-archetypes.json"));
+            Dictionary<string, EnemyArchetypeDefinition> archetypes = catalog.Archetypes.ToDictionary(x => x.Id, x => x);
+            List<StageDefinition> stages = new();
 
-            for (int levelNumber = 1; levelNumber <= 50; levelNumber++)
-            {
-                string path = Path.Combine(levelsDirectory, string.Concat("level-", levelNumber.ToString("00"), ".json"));
-                levels.Add(LevelSerializer.LoadLevelFromFile(path));
-            }
+            for (int stageNumber = 1; stageNumber <= 50; stageNumber++)
+                stages.Add(LevelSerializer.LoadLevelFromFile(Path.Combine(levelsDirectory, $"level-{stageNumber:00}.json")));
 
-            List<ValidationIssue> archetypeIssues = LevelValidator.ValidateArchetypes(archetypeCatalog);
-            List<ValidationIssue> campaignIssues = LevelValidator.ValidateCampaign(levels, archetypes);
-
-            Assert.Empty(archetypeIssues);
-            Assert.Empty(campaignIssues);
+            Assert.Empty(LevelValidator.ValidateArchetypes(catalog));
+            Assert.Empty(LevelValidator.ValidateCampaign(stages, archetypes));
         }
 
         [Fact]
-        public void BossLevelsOnlyAppearEveryTenthStage()
+        public void BossStagesOnlyAppearEveryTenthStage()
         {
             string repoRoot = FindRepositoryRoot();
             string levelsDirectory = Path.Combine(repoRoot, "Levels");
 
-            for (int levelNumber = 1; levelNumber <= 50; levelNumber++)
+            for (int stageNumber = 1; stageNumber <= 50; stageNumber++)
             {
-                LevelDefinition level = LevelSerializer.LoadLevelFromFile(Path.Combine(levelsDirectory, string.Concat("level-", levelNumber.ToString("00"), ".json")));
-                bool shouldHaveBoss = levelNumber % 10 == 0;
-
-                Assert.Equal(shouldHaveBoss, level.Boss != null);
+                StageDefinition stage = LevelSerializer.LoadLevelFromFile(Path.Combine(levelsDirectory, $"level-{stageNumber:00}.json"));
+                Assert.Equal(stageNumber % 10 == 0, stage.Boss != null);
             }
+        }
+
+        [Fact]
+        public void DamageMaskRemovesCellsAndDestroysOnCoreBreach()
+        {
+            var sprite = new ProceduralSpriteDefinition
+            {
+                Rows = new List<string>
+                {
+                    ".....",
+                    ".###.",
+                    ".#C#.",
+                    ".###.",
+                    ".....",
+                },
+                VitalCore = new VitalCoreMaskDefinition
+                {
+                    Rows = new List<string>
+                    {
+                        ".....",
+                        ".....",
+                        "..X..",
+                        ".....",
+                        ".....",
+                    }
+                }
+            };
+
+            MaskGrid mask = DamageMaskMath.CreateGrid(sprite);
+            DamageResult result = DamageMaskMath.ApplyPointDamage(mask, 2, 2, 0, 1, 15);
+
+            Assert.Equal(1, result.CellsRemoved);
+            Assert.True(result.Destroyed);
+            Assert.Equal(8, result.RemainingOccupied);
         }
 
         private static string FindRepositoryRoot()
         {
-            DirectoryInfo directory = new DirectoryInfo(AppContext.BaseDirectory);
+            DirectoryInfo directory = new(AppContext.BaseDirectory);
             while (directory != null)
             {
-                string levelsDirectory = Path.Combine(directory.FullName, "Levels");
-                string solutionPath = Path.Combine(directory.FullName, "SpaceBurst.sln");
-                if (Directory.Exists(levelsDirectory) && File.Exists(solutionPath))
+                if (Directory.Exists(Path.Combine(directory.FullName, "Levels")) && File.Exists(Path.Combine(directory.FullName, "SpaceBurst.sln")))
                     return directory.FullName;
-
                 directory = directory.Parent;
             }
 

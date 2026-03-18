@@ -1,7 +1,7 @@
-using System;
-using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using SpaceBurst.RuntimeData;
+using System;
+using System.Collections.Generic;
 
 namespace SpaceBurst
 {
@@ -9,11 +9,11 @@ namespace SpaceBurst
     {
         private readonly BossDefinition definition;
         private readonly Queue<SpawnGroupDefinition> pendingSupportGroups = new Queue<SpawnGroupDefinition>();
-        private readonly int[] phaseThresholds;
+        private readonly List<float> phaseThresholds;
 
-        private float bossTimer;
         private int currentPhase;
-        private float dashDirection = 1f;
+        private float sweepDirection = -1f;
+        private float bossFireCooldown;
 
         public override bool IsBoss
         {
@@ -22,13 +22,12 @@ namespace SpaceBurst
 
         public override int PointValue
         {
-            get { return 500; }
-            protected set { }
+            get { return archetype.ScoreValue * 5; }
         }
 
         public float HealthRatio
         {
-            get { return hitPoints / (float)definition.HitPoints; }
+            get { return IntegrityRatio; }
         }
 
         public string DisplayName
@@ -36,41 +35,26 @@ namespace SpaceBurst
             get { return definition.DisplayName; }
         }
 
-        public BossType BossType
-        {
-            get { return definition.Type; }
-        }
-
         public BossEnemy(
             EnemyArchetypeDefinition archetype,
             BossDefinition definition,
-            Vector2 spawnPoint,
-            Vector2 anchorPoint)
-            : base(archetype, spawnPoint, anchorPoint, PathType.OrbitAnchor, 0, 1f)
+            Vector2 spawnPoint)
+            : base(
+                archetype,
+                spawnPoint,
+                definition.TargetY * Game1.ScreenSize.Y,
+                definition.MovePattern,
+                definition.FirePattern,
+                1f,
+                archetype.MovementAmplitude * 1.15f,
+                archetype.MovementFrequency)
         {
             this.definition = definition;
-            hitPoints = definition.HitPoints;
-            RenderScale = definition.RenderScale;
-            Radius = Math.Max(archetype.CollisionRadius * definition.RenderScale * 0.85f, archetype.CollisionRadius + 10f);
-            phaseThresholds = new[]
-            {
-                (int)(definition.HitPoints * 0.75f),
-                (int)(definition.HitPoints * 0.5f),
-                (int)(definition.HitPoints * 0.25f),
-            };
+            phaseThresholds = new List<float>(definition.PhaseThresholds ?? new List<float> { 0.75f, 0.5f, 0.25f });
+            bossFireCooldown = Math.Max(0.45f, archetype.FireIntervalSeconds);
         }
 
-        public override void HandleBulletHit(Bullet bullet)
-        {
-            hitPoints--;
-            color = Color.White;
-            CheckPhaseTransitions();
-
-            if (hitPoints <= 0)
-                Destroy();
-        }
-
-        public bool TryConsumeSupportWave(out SpawnGroupDefinition group)
+        public bool TryConsumeSupportGroup(out SpawnGroupDefinition group)
         {
             if (pendingSupportGroups.Count > 0)
             {
@@ -82,40 +66,100 @@ namespace SpaceBurst
             return false;
         }
 
-        protected override void Destroy()
+        public override void ApplyBulletHit(Bullet bullet, Vector2 impactPoint)
         {
-            base.Destroy();
+            base.ApplyBulletHit(bullet, impactPoint);
+            CheckPhaseTransitions();
         }
 
-        protected override void UpdateMovement(float frameScale)
+        protected override void UpdateMovement(float deltaSeconds)
         {
-            bossTimer += (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
+            float scrollSpeed = Game1.Instance.CurrentScrollSpeed;
+            float phase = ageSeconds * (0.75f + currentPhase * 0.18f);
+            float desiredY = targetY;
+            float desiredX = Game1.ScreenSize.X * 0.77f;
 
-            Vector2 desiredVelocity;
             switch (definition.Type)
             {
                 case BossType.DestroyerBoss:
                 case BossType.DestroyerBossMk2:
-                    desiredVelocity = GetDestroyerBossVelocity();
+                    desiredX = Game1.ScreenSize.X * 0.72f + sweepDirection * 90f;
+                    desiredY = targetY + (float)Math.Sin(phase * 1.4f) * (movementAmplitude * (0.6f + currentPhase * 0.1f));
+                    if (Position.X <= Game1.ScreenSize.X * 0.58f)
+                        sweepDirection = 1f;
+                    else if (Position.X >= Game1.ScreenSize.X * 0.82f)
+                        sweepDirection = -1f;
                     break;
 
                 case BossType.FinalBoss:
-                    desiredVelocity = currentPhase % 2 == 0 ? GetDestroyerBossVelocity() : GetWalkerBossVelocity();
+                    if (currentPhase % 2 == 0)
+                    {
+                        desiredX = Game1.ScreenSize.X * 0.74f + (float)Math.Cos(phase * 0.7f) * 80f;
+                        desiredY = targetY + (float)Math.Sin(phase * 1.8f) * movementAmplitude;
+                    }
+                    else
+                    {
+                        desiredX = Game1.ScreenSize.X * 0.68f + sweepDirection * 110f;
+                        desiredY = targetY + (float)Math.Sin(phase * 1.1f) * movementAmplitude * 0.65f;
+                        if (Position.X <= Game1.ScreenSize.X * 0.54f)
+                            sweepDirection = 1f;
+                        else if (Position.X >= Game1.ScreenSize.X * 0.84f)
+                            sweepDirection = -1f;
+                    }
                     break;
 
                 default:
-                    desiredVelocity = GetWalkerBossVelocity();
+                    desiredX = Game1.ScreenSize.X * 0.78f + (float)Math.Cos(phase * 0.9f) * 70f;
+                    desiredY = targetY + (float)Math.Sin(phase * 1.7f) * movementAmplitude * 0.85f;
                     break;
             }
 
-            Velocity = Vector2.Lerp(Velocity, desiredVelocity, 0.14f * frameScale);
-            if (Velocity.LengthSquared() > 0.001f)
-                Orientation = Velocity.ToAngle();
+            Vector2 desiredVelocity = new Vector2(
+                (desiredX - Position.X) * 1.8f - scrollSpeed * 0.45f,
+                (desiredY - Position.Y) * 2.8f);
+
+            Velocity = Vector2.Lerp(Velocity, desiredVelocity, Math.Min(1f, 3.8f * deltaSeconds));
+        }
+
+        protected override void TryFire(float deltaSeconds)
+        {
+            bossFireCooldown -= deltaSeconds;
+            if (bossFireCooldown > 0f)
+                return;
+
+            bossFireCooldown = Math.Max(0.35f, archetype.FireIntervalSeconds - currentPhase * 0.08f);
+
+            switch (definition.FirePattern)
+            {
+                case FirePattern.AimedShot:
+                    Vector2 aimed = Player1.Instance.Position - Position;
+                    if (aimed == Vector2.Zero)
+                        aimed = -Vector2.UnitX;
+                    else
+                        aimed.Normalize();
+
+                    SpawnBullet(aimed);
+                    break;
+
+                case FirePattern.SpreadPulse:
+                    SpawnBullet(new Vector2(-1f, -0.25f));
+                    SpawnBullet(new Vector2(-1f, 0f));
+                    SpawnBullet(new Vector2(-1f, 0.25f));
+                    break;
+
+                default:
+                    SpawnBullet(new Vector2(-1f, -0.35f));
+                    SpawnBullet(new Vector2(-1f, -0.15f));
+                    SpawnBullet(new Vector2(-1f, 0f));
+                    SpawnBullet(new Vector2(-1f, 0.15f));
+                    SpawnBullet(new Vector2(-1f, 0.35f));
+                    break;
+            }
         }
 
         private void CheckPhaseTransitions()
         {
-            while (currentPhase < phaseThresholds.Length && hitPoints <= phaseThresholds[currentPhase])
+            while (currentPhase < phaseThresholds.Count && HealthRatio <= phaseThresholds[currentPhase])
             {
                 currentPhase++;
                 QueueSupportBurst();
@@ -124,47 +168,63 @@ namespace SpaceBurst
 
         private void QueueSupportBurst()
         {
-            int count = 2 + currentPhase;
-            pendingSupportGroups.Enqueue(new SpawnGroupDefinition
+            switch (definition.Type)
             {
-                ArchetypeId = currentPhase % 2 == 0 ? "Walker" : "Destroyer",
-                Count = count,
-                Formation = currentPhase % 2 == 0 ? FormationType.Line : FormationType.Arc,
-                EntrySide = currentPhase % 2 == 0 ? EntrySide.Left : EntrySide.Right,
-                PathType = currentPhase % 2 == 0 ? PathType.LaneSweep : PathType.ChaseAfterDelay,
-                AnchorX = currentPhase % 2 == 0 ? 0.28f : 0.72f,
-                AnchorY = 0.28f + currentPhase * 0.12f,
-                Spacing = 70f,
-                DelayBetweenSpawns = 0.18f,
-                TravelDuration = 2.6f,
-                SpeedMultiplier = 1f + currentPhase * 0.12f,
-            });
-        }
+                case BossType.WalkerBoss:
+                case BossType.WalkerBossMk2:
+                    pendingSupportGroups.Enqueue(new SpawnGroupDefinition
+                    {
+                        ArchetypeId = currentPhase % 2 == 0 ? "Interceptor" : "Carrier",
+                        StartSeconds = 0f,
+                        Lane = currentPhase % 5,
+                        Count = 3 + currentPhase,
+                        SpawnLeadDistance = 240f,
+                        SpawnIntervalSeconds = 0.25f,
+                        SpacingX = 84f,
+                        SpeedMultiplier = 1f + currentPhase * 0.1f,
+                        MovePatternOverride = MovePattern.SineWave,
+                        FirePatternOverride = currentPhase > 1 ? FirePattern.ForwardPulse : FirePattern.None,
+                        Amplitude = 60f + currentPhase * 12f,
+                        Frequency = 0.9f + currentPhase * 0.15f,
+                    });
+                    break;
 
-        private Vector2 GetDestroyerBossVelocity()
-        {
-            float topLane = Game1.ScreenSize.Y * (0.22f + currentPhase * 0.04f);
-            float left = Game1.ScreenSize.X * 0.22f;
-            float right = Game1.ScreenSize.X * 0.78f;
+                case BossType.FinalBoss:
+                    pendingSupportGroups.Enqueue(new SpawnGroupDefinition
+                    {
+                        ArchetypeId = currentPhase % 2 == 0 ? "Destroyer" : "Bulwark",
+                        StartSeconds = 0f,
+                        Lane = 1 + (currentPhase % 3),
+                        Count = 2 + currentPhase,
+                        SpawnLeadDistance = 300f,
+                        SpawnIntervalSeconds = 0.32f,
+                        SpacingX = 112f,
+                        SpeedMultiplier = 1.05f + currentPhase * 0.08f,
+                        MovePatternOverride = currentPhase % 2 == 0 ? MovePattern.Dive : MovePattern.TurretCarrier,
+                        FirePatternOverride = FirePattern.SpreadPulse,
+                        Amplitude = 72f + currentPhase * 8f,
+                        Frequency = 0.8f + currentPhase * 0.1f,
+                    });
+                    break;
 
-            if (Position.X <= left)
-                dashDirection = 1f;
-            else if (Position.X >= right)
-                dashDirection = -1f;
-
-            float dashSpeed = archetype.Speed * (1.35f + currentPhase * 0.18f);
-            float verticalCorrection = (topLane - Position.Y) * 0.06f;
-            return new Vector2(dashDirection * dashSpeed, verticalCorrection);
-        }
-
-        private Vector2 GetWalkerBossVelocity()
-        {
-            float angle = bossTimer * (1.25f + currentPhase * 0.2f);
-            Vector2 target = anchorPoint + new Vector2((float)Math.Cos(angle) * 130f, (float)Math.Sin(angle * 1.3f) * 70f);
-            if (definition.Type == BossType.WalkerBossMk2)
-                target += new Vector2((float)Math.Sin(angle * 0.7f) * 90f, 0f);
-
-            return MoveToward(target, archetype.Speed * (1.05f + currentPhase * 0.12f));
+                default:
+                    pendingSupportGroups.Enqueue(new SpawnGroupDefinition
+                    {
+                        ArchetypeId = currentPhase % 2 == 0 ? "Destroyer" : "Interceptor",
+                        StartSeconds = 0f,
+                        Lane = 2,
+                        Count = 3 + currentPhase,
+                        SpawnLeadDistance = 260f,
+                        SpawnIntervalSeconds = 0.22f,
+                        SpacingX = 96f,
+                        SpeedMultiplier = 1.05f + currentPhase * 0.12f,
+                        MovePatternOverride = currentPhase % 2 == 0 ? MovePattern.RetreatBackfire : MovePattern.SineWave,
+                        FirePatternOverride = currentPhase > 1 ? FirePattern.ForwardPulse : FirePattern.None,
+                        Amplitude = 64f,
+                        Frequency = 1f + currentPhase * 0.1f,
+                    });
+                    break;
+            }
         }
     }
 }

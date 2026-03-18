@@ -1,32 +1,35 @@
-using System;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 using SpaceBurst.RuntimeData;
+using System;
 
 namespace SpaceBurst
 {
     class Enemy : Entity
     {
         protected readonly EnemyArchetypeDefinition archetype;
-        protected readonly Vector2 spawnPoint;
-        protected readonly Vector2 anchorPoint;
-        protected readonly PathType pathType;
+        protected readonly DamageMaskDefinition damageMask;
+        protected readonly float targetY;
         protected readonly float speedMultiplier;
-        protected readonly int formationIndex;
-        protected readonly float spawnDelaySeconds;
-        protected readonly float orbitRadius;
-        protected readonly float orbitPhase;
+        protected readonly float movementAmplitude;
+        protected readonly float movementFrequency;
+        protected readonly MovePattern movePattern;
+        protected readonly FirePattern firePattern;
 
         protected float ageSeconds;
-        protected float spawnCountdownSeconds;
-        protected int hitPoints;
-        protected float laneDirection = 1f;
+        protected float flashTimer;
+        protected float fireCooldown;
+        protected float phaseOffset;
 
         public static Random Random { get; } = new Random();
 
-        public bool IsActive
+        public override bool IsDamageable
         {
-            get { return spawnCountdownSeconds <= 0f; }
+            get { return true; }
+        }
+
+        public override int ContactDamage
+        {
+            get { return damageMask.ContactDamage; }
         }
 
         public virtual bool IsBoss
@@ -34,186 +37,185 @@ namespace SpaceBurst
             get { return false; }
         }
 
-        public virtual int PointValue { get; protected set; }
-
-        public int HitPoints
+        public virtual int PointValue
         {
-            get { return hitPoints; }
+            get { return archetype.ScoreValue; }
+        }
+
+        public float IntegrityRatio
+        {
+            get
+            {
+                if (sprite == null || sprite.Mask.InitialOccupiedCount <= 0)
+                    return 0f;
+
+                return sprite.Mask.OccupiedCount / (float)sprite.Mask.InitialOccupiedCount;
+            }
         }
 
         public Enemy(
             EnemyArchetypeDefinition archetype,
             Vector2 spawnPoint,
-            Vector2 anchorPoint,
-            PathType pathType,
-            int formationIndex,
-            float speedMultiplier)
+            float targetY,
+            MovePattern movePattern,
+            FirePattern firePattern,
+            float speedMultiplier,
+            float amplitude,
+            float frequency)
         {
             this.archetype = archetype;
-            this.spawnPoint = spawnPoint;
-            this.anchorPoint = anchorPoint;
-            this.pathType = pathType;
-            this.formationIndex = formationIndex;
+            this.targetY = targetY;
+            this.movePattern = movePattern;
+            this.firePattern = firePattern;
             this.speedMultiplier = speedMultiplier;
-            spawnDelaySeconds = archetype.SpawnDelaySeconds;
-            spawnCountdownSeconds = spawnDelaySeconds;
-            hitPoints = archetype.HitPoints;
-            PointValue = archetype.ScoreValue;
-            orbitRadius = 48f + formationIndex * 10f;
-            orbitPhase = formationIndex * 0.7f;
-
-            image = Element.GetTexture(archetype.Texture);
+            movementAmplitude = amplitude;
+            movementFrequency = frequency;
+            damageMask = archetype.DamageMask;
             Position = spawnPoint;
-            color = Color.Transparent;
             RenderScale = archetype.RenderScale;
-            Radius = archetype.CollisionRadius;
-
-            laneDirection = spawnPoint.X <= Game1.ScreenSize.X / 2f ? 1f : -1f;
+            sprite = new ProceduralSpriteInstance(Game1.Instance.GraphicsDevice, archetype.Sprite);
+            phaseOffset = spawnPoint.Y * 0.013f;
+            fireCooldown = archetype.FireIntervalSeconds * (0.6f + Random.NextFloat(0f, 0.6f));
         }
 
         public override void Update()
         {
             float deltaSeconds = (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
-            float frameScale = deltaSeconds * 60f;
-
-            if (!IsActive)
-            {
-                spawnCountdownSeconds -= deltaSeconds;
-                float fade = 1f - MathHelper.Clamp(spawnCountdownSeconds / Math.Max(0.001f, spawnDelaySeconds), 0f, 1f);
-                color = Color.White * fade;
-                return;
-            }
-
             ageSeconds += deltaSeconds;
-            UpdateMovement(frameScale);
-            Position += Velocity * frameScale;
-            Position = Vector2.Clamp(Position, Size / 2f, Game1.ScreenSize - Size / 2f);
-        }
 
-        public override void Draw(SpriteBatch spriteBatch)
-        {
-            if (!IsActive)
+            if (flashTimer > 0f)
             {
-                float progress = 1f - MathHelper.Clamp(spawnCountdownSeconds / Math.Max(0.001f, spawnDelaySeconds), 0f, 1f);
-                float burstScale = RenderScale * MathHelper.Lerp(1.6f, 1f, progress);
-                spriteBatch.Draw(
-                    image,
-                    Position,
-                    null,
-                    Color.White * progress,
-                    Orientation,
-                    new Vector2(image.Width, image.Height) / 2f,
-                    burstScale,
-                    0,
-                    0f);
+                flashTimer -= deltaSeconds;
+                color = flashTimer > 0f ? Color.White : Color.White;
             }
 
-            base.Draw(spriteBatch);
+            UpdateMovement(deltaSeconds);
+            TryFire(deltaSeconds);
+
+            Position += Velocity * deltaSeconds;
+
+            if (Position.X < -Size.X || Position.Y < -Size.Y || Position.Y > Game1.ScreenSize.Y + Size.Y || Position.X > Game1.ScreenSize.X + 400f)
+                IsExpired = true;
         }
 
-        public virtual void HandleCollision(Enemy other)
+        public virtual void ApplyBulletHit(Bullet bullet, Vector2 impactPoint)
         {
-            Vector2 separation = Position - other.Position;
-            if (separation != Vector2.Zero)
-                Velocity += separation.ScaleTo(0.4f);
-        }
-
-        public virtual void HandleBulletHit(Bullet bullet)
-        {
-            hitPoints--;
-            color = Color.White;
-            if (hitPoints <= 0)
+            DamageResult result = sprite.ApplyDamage(Position, impactPoint, RenderScale, damageMask, Math.Max(1, bullet.Damage));
+            flashTimer = 0.08f;
+            color = result.CellsRemoved > 0 ? Color.Lerp(Color.White, Color.OrangeRed, 0.2f) : Color.White;
+            if (result.Destroyed)
                 Destroy();
+        }
+
+        public virtual void ApplyContactHit(Vector2 impactPoint, int contactDamage)
+        {
+            DamageResult result = sprite.ApplyDamage(Position, impactPoint, RenderScale, damageMask, Math.Max(1, contactDamage));
+            if (result.Destroyed)
+                Destroy();
+        }
+
+        public void ApplyKnockback(Vector2 direction, float impulse)
+        {
+            if (direction == Vector2.Zero)
+                return;
+
+            Velocity += Vector2.Normalize(direction) * impulse;
         }
 
         protected virtual void Destroy()
         {
+            if (IsExpired)
+                return;
+
             IsExpired = true;
             Sound.Explosion.Play(0.45f, Random.NextFloat(-0.2f, 0.2f), 0);
             PlayerStatus.AddPoints(PointValue);
             PlayerStatus.IncreaseMultiplier();
         }
 
-        protected virtual void UpdateMovement(float frameScale)
+        protected virtual void UpdateMovement(float deltaSeconds)
         {
-            Vector2 desiredVelocity;
-            switch (pathType)
+            float scrollSpeed = Game1.Instance.CurrentScrollSpeed;
+            float baseSpeed = archetype.MoveSpeed * Math.Max(0.35f, speedMultiplier);
+            float phase = ageSeconds * Math.Max(0.2f, movementFrequency) + phaseOffset;
+            float desiredY = targetY;
+            float desiredXVelocity = -(baseSpeed + scrollSpeed);
+
+            switch (movePattern)
             {
-                case PathType.Swoop:
-                    desiredVelocity = GetSwoopVelocity();
+                case MovePattern.SineWave:
+                    desiredY = targetY + (float)Math.Sin(phase * MathF.Tau) * movementAmplitude;
                     break;
-                case PathType.LaneSweep:
-                    desiredVelocity = GetLaneSweepVelocity();
+
+                case MovePattern.Dive:
+                    desiredXVelocity *= 1.08f;
+                    desiredY = Position.X > Game1.ScreenSize.X * 0.62f
+                        ? targetY + (float)Math.Sin(phase * MathF.PI) * movementAmplitude * 0.35f
+                        : MathHelper.Lerp(targetY, Player1.Instance.Position.Y, 0.7f);
                     break;
-                case PathType.ChaseAfterDelay:
-                    desiredVelocity = GetChaseVelocity();
+
+                case MovePattern.RetreatBackfire:
+                    desiredXVelocity = ageSeconds < 1.6f
+                        ? -(baseSpeed * 0.75f + scrollSpeed)
+                        : baseSpeed * 0.25f - scrollSpeed * 0.35f;
+                    desiredY = targetY + (float)Math.Sin(phase * MathF.PI) * movementAmplitude * 0.3f;
                     break;
-                case PathType.OrbitAnchor:
-                    desiredVelocity = GetOrbitVelocity();
-                    break;
-                default:
-                    desiredVelocity = MoveToward(anchorPoint, archetype.Speed * speedMultiplier);
+
+                case MovePattern.TurretCarrier:
+                    desiredXVelocity = -(baseSpeed * 0.55f + scrollSpeed);
+                    desiredY = targetY + (float)Math.Sin(phase * MathF.PI) * movementAmplitude * 0.2f;
                     break;
             }
 
-            Velocity = Vector2.Lerp(Velocity, desiredVelocity, 0.16f * frameScale);
-            if (Velocity.LengthSquared() > 0.001f)
-                Orientation = Velocity.ToAngle();
+            float yVelocity = (desiredY - Position.Y) * 3.5f;
+            Velocity = Vector2.Lerp(Velocity, new Vector2(desiredXVelocity, yVelocity), Math.Min(1f, 5.5f * deltaSeconds));
         }
 
-        protected Vector2 MoveToward(Vector2 target, float speed)
+        protected virtual void TryFire(float deltaSeconds)
         {
-            Vector2 delta = target - Position;
-            if (delta == Vector2.Zero)
-                return Vector2.Zero;
+            if (firePattern == FirePattern.None || archetype.FireIntervalSeconds <= 0f || Position.X > Game1.ScreenSize.X + 40f || Position.X < Game1.ScreenSize.X * 0.1f)
+                return;
 
-            if (delta.LengthSquared() < 64f)
-                return delta * 0.15f;
+            fireCooldown -= deltaSeconds;
+            if (fireCooldown > 0f)
+                return;
 
-            return delta.ScaleTo(speed);
+            fireCooldown = archetype.FireIntervalSeconds;
+
+            switch (firePattern)
+            {
+                case FirePattern.ForwardPulse:
+                    SpawnBullet(new Vector2(-1f, 0f));
+                    break;
+
+                case FirePattern.SpreadPulse:
+                    SpawnBullet(new Vector2(-1f, -0.18f));
+                    SpawnBullet(new Vector2(-1f, 0f));
+                    SpawnBullet(new Vector2(-1f, 0.18f));
+                    break;
+
+                case FirePattern.AimedShot:
+                    Vector2 aim = Player1.Instance.Position - Position;
+                    if (aim == Vector2.Zero)
+                        aim = -Vector2.UnitX;
+                    else
+                        aim.Normalize();
+
+                    SpawnBullet(aim);
+                    break;
+            }
         }
 
-        private Vector2 GetSwoopVelocity()
+        protected void SpawnBullet(Vector2 direction)
         {
-            Vector2 toAnchor = anchorPoint - Position;
-            if (toAnchor == Vector2.Zero)
-                return Vector2.Zero;
+            if (direction == Vector2.Zero)
+                direction = -Vector2.UnitX;
+            else
+                direction.Normalize();
 
-            Vector2 direction = Vector2.Normalize(toAnchor);
-            Vector2 perpendicular = new Vector2(-direction.Y, direction.X);
-            float sway = (float)Math.Sin(ageSeconds * 4.5f + formationIndex * 0.8f);
-            return direction * archetype.Speed * speedMultiplier + perpendicular * sway * archetype.Speed * 0.85f;
-        }
-
-        private Vector2 GetLaneSweepVelocity()
-        {
-            if (Math.Abs(Position.Y - anchorPoint.Y) > 18f)
-                return MoveToward(anchorPoint, archetype.Speed * speedMultiplier);
-
-            float horizontalSpeed = archetype.Speed * speedMultiplier;
-            float leftBound = Size.X / 2f + 28f;
-            float rightBound = Game1.ScreenSize.X - Size.X / 2f - 28f;
-
-            if (Position.X <= leftBound)
-                laneDirection = 1f;
-            else if (Position.X >= rightBound)
-                laneDirection = -1f;
-
-            return new Vector2(horizontalSpeed * laneDirection, (anchorPoint.Y - Position.Y) * 0.04f);
-        }
-
-        private Vector2 GetChaseVelocity()
-        {
-            if (ageSeconds < 1.25f || Vector2.DistanceSquared(Position, anchorPoint) > 6400f)
-                return MoveToward(anchorPoint, archetype.Speed * speedMultiplier);
-
-            return MoveToward(Player1.Instance.Position, archetype.Speed * speedMultiplier * 0.95f);
-        }
-
-        private Vector2 GetOrbitVelocity()
-        {
-            Vector2 orbitTarget = anchorPoint + MathUtil.FromPolar(orbitPhase + ageSeconds * 1.8f, orbitRadius);
-            return MoveToward(orbitTarget, archetype.Speed * speedMultiplier);
+            Vector2 spawnPoint = Position + direction * (ApproximateRadius * 0.75f);
+            EntityManager.Add(new Bullet(spawnPoint, direction * 420f, false, Math.Max(1, damageMask.ProjectileDamage)));
+            Sound.Shot.Play(0.08f, Random.NextFloat(-0.25f, 0.25f), -0.2f);
         }
     }
 }

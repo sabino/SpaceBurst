@@ -1,37 +1,108 @@
-﻿using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace SpaceBurst
 {
     static class EntityManager
     {
-        static List<Entity> entities = new List<Entity>();
-        static List<Enemy> enemies = new List<Enemy>();
-        static List<Bullet> bullets = new List<Bullet>();
-        static List<Portal> portals = new List<Portal>();
+        private static List<Entity> entities = new List<Entity>();
+        private static List<Enemy> enemies = new List<Enemy>();
+        private static List<Bullet> bullets = new List<Bullet>();
+        private static List<Entity> addedEntities = new List<Entity>();
 
-        public static IEnumerable<Portal> Portals { get { return portals; } }
-        public static IEnumerable<Enemy> Enemies { get { return enemies; } }
+        private static bool isUpdating;
+        private static bool queuedPlayerHullDestruction;
 
-        static bool isUpdating;
-        static List<Entity> addedEntities = new List<Entity>();
+        public static IEnumerable<Enemy> Enemies
+        {
+            get { return enemies; }
+        }
 
-        public static int Count { get { return entities.Count; } }
-        public static int PortalCount { get { return portals.Count; } }
-        public static int EnemyCount { get { return enemies.Count; } }
-        public static bool HasHostiles { get { return enemies.Count > 0 || portals.Count > 0; } }
+        public static int Count
+        {
+            get { return entities.Count; }
+        }
+
+        public static bool HasHostiles
+        {
+            get { return enemies.Any(x => !x.IsExpired); }
+        }
 
         public static void Add(Entity entity)
         {
+            if (entity == null)
+                return;
+
             if (!isUpdating)
                 AddEntity(entity);
             else
                 addedEntities.Add(entity);
+        }
+
+        public static void Reset()
+        {
+            entities.Clear();
+            enemies.Clear();
+            bullets.Clear();
+            addedEntities.Clear();
+            isUpdating = false;
+            queuedPlayerHullDestruction = false;
+        }
+
+        public static void ClearHostiles()
+        {
+            foreach (Enemy enemy in enemies)
+                enemy.IsExpired = true;
+        }
+
+        public static void ClearHostilesNear(Vector2 position, float radius)
+        {
+            float radiusSquared = radius * radius;
+            foreach (Enemy enemy in enemies)
+            {
+                if (Vector2.DistanceSquared(enemy.Position, position) <= radiusSquared)
+                    enemy.IsExpired = true;
+            }
+        }
+
+        public static void Update()
+        {
+            isUpdating = true;
+
+            for (int i = 0; i < entities.Count; i++)
+            {
+                if (!entities[i].IsExpired)
+                    entities[i].Update();
+            }
+
+            HandleCollisions();
+
+            isUpdating = false;
+
+            foreach (Entity entity in addedEntities)
+                AddEntity(entity);
+
+            addedEntities.Clear();
+            entities = entities.Where(x => !x.IsExpired).ToList();
+            enemies = enemies.Where(x => !x.IsExpired).ToList();
+            bullets = bullets.Where(x => !x.IsExpired).ToList();
+        }
+
+        public static bool ConsumePlayerHullDestruction()
+        {
+            if (!queuedPlayerHullDestruction)
+                return false;
+
+            queuedPlayerHullDestruction = false;
+            return true;
+        }
+
+        public static void Draw(SpriteBatch spriteBatch)
+        {
+            foreach (Entity entity in entities)
+                entity.Draw(spriteBatch);
         }
 
         private static void AddEntity(Entity entity)
@@ -40,144 +111,104 @@ namespace SpaceBurst
                 return;
 
             entities.Add(entity);
-            if (entity is Bullet)
-                bullets.Add(entity as Bullet);
-            else if (entity is Enemy)
-                enemies.Add(entity as Enemy);
-            else if (entity is Portal)
-                portals.Add(entity as Portal);
+            if (entity is Enemy enemy)
+                enemies.Add(enemy);
+            else if (entity is Bullet bullet)
+                bullets.Add(bullet);
         }
 
-        public static void Reset()
+        private static void HandleCollisions()
         {
-            entities.Clear();
-            enemies.Clear();
-            bullets.Clear();
-            portals.Clear();
-            addedEntities.Clear();
-            isUpdating = false;
+            HandlePlayerAndEnemies();
+            HandleBullets();
         }
 
-        public static void ClearHostiles()
+        private static void HandlePlayerAndEnemies()
         {
-            enemies.ForEach(x => x.IsExpired = true);
-            portals.ForEach(x => x.IsExpired = true);
-        }
+            if (Player1.Instance.IsDead || Player1.Instance.IsInvulnerable)
+                return;
 
-        public static void ClearHostilesNear(Vector2 position, float radius)
-        {
-            float radiusSquared = radius * radius;
-
-            foreach (var enemy in enemies)
-            {
-                if (Vector2.DistanceSquared(enemy.Position, position) <= radiusSquared)
-                    enemy.IsExpired = true;
-            }
-
-            foreach (var portal in portals)
-            {
-                if (Vector2.DistanceSquared(portal.Position, position) <= radiusSquared)
-                    portal.IsExpired = true;
-            }
-        }
-
-        public static void Update()
-        {
-            isUpdating = true;
-            HandleCollisions();
-
-            foreach (var entity in entities)
-                entity.Update();
-
-            isUpdating = false;
-
-            foreach (var entity in addedEntities)
-                AddEntity(entity);
-
-            addedEntities.Clear();
-
-            entities = entities.Where(x => !x.IsExpired).ToList();
-            bullets = bullets.Where(x => !x.IsExpired).ToList();
-            enemies = enemies.Where(x => !x.IsExpired).ToList();
-            portals = portals.Where(x => !x.IsExpired).ToList();
-        }
-
-        static void HandleCollisions()
-        {
-            // handle collisions between enemies
             for (int i = 0; i < enemies.Count; i++)
-                for (int j = i + 1; j < enemies.Count; j++)
-                {
-                    if (IsColliding(enemies[i], enemies[j]))
-                    {
-                        enemies[i].HandleCollision(enemies[j]);
-                        enemies[j].HandleCollision(enemies[i]);
-                    }
-                }
-
-            // handle collisions between bullets and enemies
-            for (int i = 0; i < enemies.Count; i++)
-                for (int j = 0; j < bullets.Count; j++)
-                {
-                    if (IsColliding(enemies[i], bullets[j]))
-                    {
-                        enemies[i].HandleBulletHit(bullets[j]);
-                        bullets[j].IsExpired = true;
-                    }
-                }
-
-            // handle collisions between the player and enemies
-            if (!Player1.Instance.IsDead && !Player1.Instance.IsInvulnerable)
             {
-                for (int i = 0; i < enemies.Count; i++)
-                {
-                    if (enemies[i].IsActive && IsColliding(Player1.Instance, enemies[i]))
-                    {
-                        Game1.Instance.HandlePlayerCollision();
-                        break;
-                    }
-                }
-            }
+                Enemy enemy = enemies[i];
+                if (enemy.IsExpired || !MayOverlap(Player1.Instance, enemy))
+                    continue;
 
-            // handle collisions with portals
-            for (int i = 0; i < portals.Count; i++)
-            {
-                for (int j = 0; j < enemies.Count; j++)
-                    if (enemies[j].IsActive && IsColliding(portals[i], enemies[j]))
-                        enemies[j].HandleBulletHit(null);
+                if (!Player1.Instance.Overlaps(enemy))
+                    continue;
 
-                for (int j = 0; j < bullets.Count; j++)
-                {
-                    if (IsColliding(portals[i], bullets[j]))
-                    {
-                        bullets[j].IsExpired = true;
-                        portals[i].WasShot();
-                    }
-                }
+                Vector2 delta = Player1.Instance.Position - enemy.Position;
+                if (delta == Vector2.Zero)
+                    delta = Vector2.UnitX;
 
-                if (!Player1.Instance.IsDead && !Player1.Instance.IsInvulnerable && IsColliding(Player1.Instance, portals[i]))
-                {
-                    Game1.Instance.HandlePlayerCollision();
+                bool destroyed = Player1.Instance.ApplyDamage((Player1.Instance.Position + enemy.Position) * 0.5f, enemy.ContactDamage);
+                Player1.Instance.ApplyKnockback(delta, 260f);
+                enemy.ApplyContactHit(Player1.Instance.Position, 1);
+                enemy.ApplyKnockback(-delta, 180f);
+
+                if (destroyed)
+                    queuedPlayerHullDestruction = true;
+
+                if (destroyed || Player1.Instance.IsInvulnerable)
                     break;
+            }
+        }
+
+        private static void HandleBullets()
+        {
+            for (int bulletIndex = 0; bulletIndex < bullets.Count; bulletIndex++)
+            {
+                Bullet bullet = bullets[bulletIndex];
+                if (bullet.IsExpired)
+                    continue;
+
+                if (bullet.Friendly)
+                    HandleFriendlyBullet(bullet);
+                else
+                    HandleEnemyBullet(bullet);
+            }
+        }
+
+        private static void HandleFriendlyBullet(Bullet bullet)
+        {
+            for (int enemyIndex = 0; enemyIndex < enemies.Count; enemyIndex++)
+            {
+                Enemy enemy = enemies[enemyIndex];
+                if (enemy.IsExpired || !MayOverlap(enemy, bullet))
+                    continue;
+
+                if (bullet.TryGetImpactPoint(enemy, out Vector2 impactPoint))
+                {
+                    enemy.ApplyBulletHit(bullet, impactPoint);
+                    bullet.IsExpired = true;
+                    return;
                 }
             }
         }
 
-        private static bool IsColliding(Entity a, Entity b)
+        private static void HandleEnemyBullet(Bullet bullet)
         {
-            float radius = a.Radius + b.Radius;
-            return !a.IsExpired && !b.IsExpired && Vector2.DistanceSquared(a.Position, b.Position) < radius * radius;
+            if (Player1.Instance.IsDead || Player1.Instance.IsInvulnerable || !MayOverlap(Player1.Instance, bullet))
+                return;
+
+            if (bullet.TryGetImpactPoint(Player1.Instance, out Vector2 impactPoint))
+            {
+                bool destroyed = Player1.Instance.ApplyDamage(impactPoint, bullet.Damage);
+                if (destroyed)
+                    queuedPlayerHullDestruction = true;
+
+                Player1.Instance.ApplyKnockback(Player1.Instance.Position - impactPoint, 220f);
+                bullet.IsExpired = true;
+            }
         }
 
-        public static IEnumerable<Entity> GetNearbyEntities(Vector2 position, float radius)
+        private static bool MayOverlap(Entity first, Entity second)
         {
-            return entities.Where(x => Vector2.DistanceSquared(position, x.Position) < radius * radius);
-        }
+            if (first.IsExpired || second.IsExpired)
+                return false;
 
-        public static void Draw(SpriteBatch spriteBatch)
-        {
-            foreach (var entity in entities)
-                entity.Draw(spriteBatch);
+            float radius = first.ApproximateRadius + second.ApproximateRadius + 6f;
+            return Vector2.DistanceSquared(first.Position, second.Position) <= radius * radius;
         }
     }
 }

@@ -2,34 +2,38 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Microsoft.Xna.Framework.Input.Touch;
-using System.Linq;
 
 namespace SpaceBurst
 {
     static class Input
     {
-        private static KeyboardState keyboardState, lastKeyboardState;
-        private static MouseState mouseState, lastMouseState;
-        private static GamePadState gamepadState, lastGamepadState;
+        private static KeyboardState keyboardState;
+        private static KeyboardState lastKeyboardState;
+        private static MouseState mouseState;
+        private static MouseState lastMouseState;
+        private static GamePadState gamepadState;
+        private static GamePadState lastGamepadState;
 
-        private static bool isAimingWithMouse = false;
-        private static bool primaryActionPressed = false;
+        private static bool primaryActionPressed;
+        private static bool fireHeld;
         private static Vector2 pointerPosition;
+
 #if ANDROID
-        private const float StickRadiusFactor = 0.12f;
-        private const float StickZoneWidthFactor = 0.48f;
-        private const float StickZoneHeightFactor = 0.4f;
+        private const float StickRadiusFactor = 0.11f;
         private static Vector2 touchMovementDirection;
         private static Vector2 touchAimDirection;
         private static int movementTouchId = -1;
         private static int aimTouchId = -1;
         private static Vector2 movementTouchOrigin;
         private static Vector2 movementTouchPosition;
+        private static Vector2 aimTouchOrigin;
         private static Vector2 aimTouchPosition;
 #endif
 
-        public static Vector2 MousePosition { get { return Game1.ScreenToWorld(new Vector2(mouseState.X, mouseState.Y)); } }
-        public static Vector2 PointerPosition { get { return pointerPosition; } }
+        public static Vector2 PointerPosition
+        {
+            get { return pointerPosition; }
+        }
 
         public static void Update()
         {
@@ -37,6 +41,7 @@ namespace SpaceBurst
             lastMouseState = mouseState;
             lastGamepadState = gamepadState;
             primaryActionPressed = false;
+            fireHeld = false;
 
             keyboardState = Keyboard.GetState();
             gamepadState = GamePad.GetState(PlayerIndex.One);
@@ -44,24 +49,14 @@ namespace SpaceBurst
 #if ANDROID
             UpdateTouchState();
             mouseState = default(MouseState);
-            isAimingWithMouse = false;
 #else
             mouseState = Mouse.GetState();
-            pointerPosition = MousePosition;
+            pointerPosition = Game1.ScreenToWorld(new Vector2(mouseState.X, mouseState.Y));
             primaryActionPressed = lastMouseState.LeftButton == ButtonState.Released && mouseState.LeftButton == ButtonState.Pressed;
-
-            // If the player pressed one of the arrow keys or is using a gamepad to aim, we want to disable mouse aiming. Otherwise,
-            // if the player moves the mouse, enable mouse aiming.
-            if (new[] { Keys.Left, Keys.Right, Keys.Up, Keys.Down }.Any(x => keyboardState.IsKeyDown(x)) || gamepadState.ThumbSticks.Right != Vector2.Zero)
-                isAimingWithMouse = false;
-            else if (mouseState.LeftButton == ButtonState.Pressed)
-                isAimingWithMouse = true;
-            else
-                isAimingWithMouse = false;
+            fireHeld = keyboardState.IsKeyDown(Keys.Space) || gamepadState.Triggers.Right > 0.25f || gamepadState.Triggers.Left > 0.25f;
 #endif
         }
 
-        // Checks if a key was just pressed down
         public static bool WasKeyPressed(Keys key)
         {
             return lastKeyboardState.IsKeyUp(key) && keyboardState.IsKeyDown(key);
@@ -107,27 +102,35 @@ namespace SpaceBurst
             return WasKeyPressed(Keys.Right) || WasKeyPressed(Keys.D) || WasButtonPressed(Buttons.DPadRight);
         }
 
+        public static bool IsFireHeld()
+        {
+            return fireHeld;
+        }
+
         public static Vector2 GetMovementDirection()
         {
 #if ANDROID
             if (touchMovementDirection != Vector2.Zero)
                 return touchMovementDirection;
 #endif
+
             Vector2 direction = gamepadState.ThumbSticks.Left;
-            direction.Y *= -1;  // invert the y-axis
+            direction.Y *= -1f;
+            if (direction.X > 0f)
+                direction.X = 0f;
 
             if (keyboardState.IsKeyDown(Keys.A))
-                direction.X -= 1;
-            if (keyboardState.IsKeyDown(Keys.D))
-                direction.X += 1;
+                direction.X -= 1f;
             if (keyboardState.IsKeyDown(Keys.W))
-                direction.Y -= 1;
+                direction.Y -= 1f;
             if (keyboardState.IsKeyDown(Keys.S))
-                direction.Y += 1;
+                direction.Y += 1f;
 
-            // Clamp the length of the vector to a maximum of 1.
-            if (direction.LengthSquared() > 1)
+            if (direction.LengthSquared() > 1f)
                 direction.Normalize();
+
+            if (direction.X > 0f)
+                direction.X = 0f;
 
             return direction;
         }
@@ -138,62 +141,46 @@ namespace SpaceBurst
             if (touchAimDirection != Vector2.Zero)
                 return touchAimDirection;
 #endif
-            if (isAimingWithMouse)
-                return GetMouseAimDirection();
 
             Vector2 direction = gamepadState.ThumbSticks.Right;
-            direction.Y *= -1;
+            direction.Y *= -1f;
 
             if (keyboardState.IsKeyDown(Keys.Left))
-                direction.X -= 1;
+                direction.X -= 1f;
             if (keyboardState.IsKeyDown(Keys.Right))
-                direction.X += 1;
+                direction.X += 1f;
             if (keyboardState.IsKeyDown(Keys.Up))
-                direction.Y -= 1;
+                direction.Y -= 1f;
             if (keyboardState.IsKeyDown(Keys.Down))
-                direction.Y += 1;
-
-            // If there's no aim input, return zero. Otherwise normalize the direction to have a length of 1.
-            if (direction == Vector2.Zero)
-                return Vector2.Zero;
-            else
-                return Vector2.Normalize(direction);
-        }
-
-        private static Vector2 GetMouseAimDirection()
-        {
-            Vector2 direction = MousePosition - Player1.Instance.Position;
+                direction.Y += 1f;
 
             if (direction == Vector2.Zero)
                 return Vector2.Zero;
-            else
-                return Vector2.Normalize(direction);
-        }
 
-        public static bool WasBombButtonPressed()
-        {
-            return WasButtonPressed(Buttons.LeftTrigger) || WasButtonPressed(Buttons.RightTrigger) || WasKeyPressed(Keys.Space);
+            direction.Normalize();
+            return direction;
         }
 
 #if ANDROID
         private static void UpdateTouchState()
         {
-            var touches = TouchPanel.GetState();
-            bool movementTouchFound = false;
-            bool aimTouchFound = false;
+            TouchCollection touches = TouchPanel.GetState();
             Rectangle gameplayBounds = Game1.RenderBounds;
-            Rectangle movementZone = GetMovementZone(gameplayBounds);
             float stickRadius = GetStickRadius(gameplayBounds);
-            movementTouchOrigin = GetStickOrigin(gameplayBounds);
+            Vector2 movementOrigin = GetMovementStickOrigin(gameplayBounds, stickRadius);
             pointerPosition = Game1.ScreenSize / 2f;
 
-            foreach (var touch in touches)
+            bool movementFound = false;
+            bool aimFound = false;
+            fireHeld = aimTouchId != -1;
+
+            foreach (TouchLocation touch in touches)
             {
-                var rawScreenPosition = touch.Position;
-                var screenPosition = Vector2.Clamp(
-                    rawScreenPosition,
+                Vector2 screenPosition = Vector2.Clamp(
+                    touch.Position,
                     new Vector2(gameplayBounds.Left, gameplayBounds.Top),
                     new Vector2(gameplayBounds.Right - 1, gameplayBounds.Bottom - 1));
+
                 pointerPosition = Game1.ScreenToWorld(screenPosition);
 
                 if (touch.State == TouchLocationState.Pressed)
@@ -201,51 +188,90 @@ namespace SpaceBurst
 
                 if (touch.Id == movementTouchId)
                 {
-                    movementTouchFound = true;
-                    movementTouchPosition = ClampToRadius(screenPosition, movementTouchOrigin, stickRadius);
+                    movementFound = true;
+                    movementTouchPosition = ClampToRadius(screenPosition, movementOrigin, stickRadius);
                     continue;
                 }
 
                 if (touch.Id == aimTouchId)
                 {
-                    aimTouchFound = true;
+                    aimFound = true;
                     aimTouchPosition = screenPosition;
+                    fireHeld = true;
                     continue;
                 }
 
-                if (!gameplayBounds.Contains(rawScreenPosition.ToPoint()))
-                    continue;
-
-                if (!movementTouchFound && movementTouchId == -1 && movementZone.Contains(screenPosition.ToPoint()))
+                if (screenPosition.X < gameplayBounds.Center.X)
                 {
-                    movementTouchId = touch.Id;
-                    movementTouchFound = true;
-                    movementTouchPosition = ClampToRadius(screenPosition, movementTouchOrigin, stickRadius);
+                    if (movementTouchId == -1)
+                    {
+                        movementTouchId = touch.Id;
+                        movementFound = true;
+                        movementTouchOrigin = movementOrigin;
+                        movementTouchPosition = ClampToRadius(screenPosition, movementOrigin, stickRadius);
+                    }
                 }
-                else if (!aimTouchFound && aimTouchId == -1)
+                else if (aimTouchId == -1)
                 {
                     aimTouchId = touch.Id;
-                    aimTouchFound = true;
+                    aimFound = true;
+                    aimTouchOrigin = screenPosition;
                     aimTouchPosition = screenPosition;
+                    fireHeld = true;
                 }
             }
 
-            if (!movementTouchFound)
+            if (!movementFound)
             {
                 movementTouchId = -1;
-                movementTouchPosition = movementTouchOrigin;
+                movementTouchOrigin = movementOrigin;
+                movementTouchPosition = movementOrigin;
             }
 
-            if (!aimTouchFound)
+            if (!aimFound)
             {
                 aimTouchId = -1;
+                aimTouchOrigin = Vector2.Zero;
                 aimTouchPosition = Vector2.Zero;
             }
 
             touchMovementDirection = GetVirtualStickDirection(movementTouchOrigin, movementTouchPosition, stickRadius);
-            touchAimDirection = aimTouchId == -1
-                ? Vector2.Zero
-                : GetDirectionToPoint(Player1.Instance.Position, Game1.ScreenToWorld(aimTouchPosition));
+
+            if (aimTouchId == -1)
+            {
+                touchAimDirection = Vector2.Zero;
+                fireHeld = false;
+            }
+            else
+            {
+                Vector2 delta = aimTouchPosition - aimTouchOrigin;
+                touchAimDirection = delta.LengthSquared() > 625f ? Vector2.Normalize(new Vector2(delta.X, delta.Y)) : Vector2.Zero;
+                fireHeld = true;
+            }
+        }
+
+        public static void DrawTouchControls(SpriteBatch spriteBatch, Texture2D controlTexture)
+        {
+            if (controlTexture == null)
+                return;
+
+            Rectangle gameplayBounds = Game1.RenderBounds;
+            float stickRadius = GetStickRadius(gameplayBounds);
+            Vector2 leftStick = GetMovementStickOrigin(gameplayBounds, stickRadius);
+            Vector2 thumb = movementTouchId == -1 ? leftStick : movementTouchPosition;
+            Vector2 rightPad = GetAimStickOrigin(gameplayBounds, stickRadius);
+
+            DrawCircle(spriteBatch, controlTexture, leftStick, stickRadius * 1.12f, Color.White * 0.12f);
+            DrawCircle(spriteBatch, controlTexture, leftStick, stickRadius * 0.7f, Color.White * 0.08f);
+            DrawCircle(spriteBatch, controlTexture, thumb, stickRadius * 0.42f, Color.White * 0.28f);
+
+            DrawCircle(spriteBatch, controlTexture, rightPad, stickRadius * 1.05f, Color.White * 0.08f);
+            if (aimTouchId != -1)
+            {
+                DrawCircle(spriteBatch, controlTexture, aimTouchPosition, stickRadius * 0.34f, Color.White * 0.18f);
+                if (touchAimDirection != Vector2.Zero)
+                    DrawCircle(spriteBatch, controlTexture, aimTouchOrigin, stickRadius * 0.16f, Color.White * 0.24f);
+            }
         }
 
         private static Vector2 GetVirtualStickDirection(Vector2 origin, Vector2 current, float maxDistance)
@@ -260,48 +286,16 @@ namespace SpaceBurst
             return delta / maxDistance;
         }
 
-        private static Vector2 GetDirectionToPoint(Vector2 origin, Vector2 target)
+        private static Vector2 GetMovementStickOrigin(Rectangle gameplayBounds, float radius)
         {
-            Vector2 direction = target - origin;
-            return direction == Vector2.Zero ? Vector2.Zero : Vector2.Normalize(direction);
+            float margin = radius * 0.7f;
+            return new Vector2(gameplayBounds.Left + margin + radius, gameplayBounds.Bottom - margin - radius);
         }
 
-        public static void DrawTouchControls(SpriteBatch spriteBatch, Texture2D controlTexture)
+        private static Vector2 GetAimStickOrigin(Rectangle gameplayBounds, float radius)
         {
-            if (controlTexture == null)
-                return;
-
-            Rectangle gameplayBounds = Game1.RenderBounds;
-            float stickRadius = GetStickRadius(gameplayBounds);
-            Vector2 stickCenter = GetStickOrigin(gameplayBounds);
-            Vector2 stickThumb = movementTouchId == -1 ? stickCenter : movementTouchPosition;
-
-            DrawCircle(spriteBatch, controlTexture, stickCenter, stickRadius * 1.15f, Color.White * 0.12f);
-            DrawCircle(spriteBatch, controlTexture, stickCenter, stickRadius * 0.78f, Color.White * 0.08f);
-            DrawCircle(spriteBatch, controlTexture, stickThumb, stickRadius * 0.46f, Color.White * 0.28f);
-
-            if (aimTouchId != -1)
-            {
-                DrawCircle(spriteBatch, controlTexture, aimTouchPosition, stickRadius * 0.32f, Color.White * 0.18f);
-                DrawCircle(spriteBatch, controlTexture, aimTouchPosition, stickRadius * 0.16f, Color.White * 0.3f);
-            }
-        }
-
-        private static Rectangle GetMovementZone(Rectangle gameplayBounds)
-        {
-            int width = (int)(gameplayBounds.Width * StickZoneWidthFactor);
-            int height = (int)(gameplayBounds.Height * StickZoneHeightFactor);
-            return new Rectangle(gameplayBounds.Left, gameplayBounds.Bottom - height, width, height);
-        }
-
-        private static Vector2 GetStickOrigin(Rectangle gameplayBounds)
-        {
-            float radius = GetStickRadius(gameplayBounds);
-            float margin = radius * 0.6f;
-
-            return new Vector2(
-                gameplayBounds.Left + margin + radius,
-                gameplayBounds.Bottom - margin - radius);
+            float margin = radius * 0.7f;
+            return new Vector2(gameplayBounds.Right - margin - radius, gameplayBounds.Bottom - margin - radius);
         }
 
         private static float GetStickRadius(Rectangle gameplayBounds)
@@ -334,6 +328,10 @@ namespace SpaceBurst
                 scale,
                 SpriteEffects.None,
                 0f);
+        }
+#else
+        public static void DrawTouchControls(SpriteBatch spriteBatch, Texture2D controlTexture)
+        {
         }
 #endif
     }

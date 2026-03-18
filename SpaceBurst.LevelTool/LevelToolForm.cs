@@ -1,46 +1,32 @@
+using SpaceBurst.RuntimeData;
 using System.Drawing.Drawing2D;
-using System.Linq;
 using System.Numerics;
 using System.Text.RegularExpressions;
-using SpaceBurst.RuntimeData;
 using WinFormsTimer = System.Windows.Forms.Timer;
 
 namespace SpaceBurst.LevelTool
 {
-    public sealed partial class LevelToolForm : Form
+    public sealed class LevelToolForm : Form
     {
         private readonly string repoRoot;
         private readonly string levelsDirectory;
         private readonly Dictionary<string, EnemyArchetypeDefinition> archetypes;
 
-        private readonly ComboBox stageComboBox = new ComboBox();
-        private readonly Button loadStageButton = new Button();
-        private readonly Button openButton = new Button();
-        private readonly Button saveButton = new Button();
-        private readonly Button validateButton = new Button();
-        private readonly Button playPauseButton = new Button();
-        private readonly TrackBar timelineTrackBar = new TrackBar();
-        private readonly Label timelineLabel = new Label();
-        private readonly TextBox levelNameTextBox = new TextBox();
-        private readonly NumericUpDown introSecondsUpDown = new NumericUpDown();
-        private readonly ListBox wavesListBox = new ListBox();
-        private readonly Button addWaveButton = new Button();
-        private readonly Button removeWaveButton = new Button();
-        private readonly TextBox waveLabelTextBox = new TextBox();
-        private readonly NumericUpDown waveStartUpDown = new NumericUpDown();
-        private readonly CheckBox checkpointCheckBox = new CheckBox();
-        private readonly ListBox groupsListBox = new ListBox();
-        private readonly Button addGroupButton = new Button();
-        private readonly Button removeGroupButton = new Button();
-        private readonly PropertyGrid groupPropertyGrid = new PropertyGrid();
-        private readonly PropertyGrid bossPropertyGrid = new PropertyGrid();
-        private readonly TextBox validationTextBox = new TextBox();
-        private readonly LevelPreviewPanel previewPanel = new LevelPreviewPanel();
-        private readonly WinFormsTimer playbackTimer = new WinFormsTimer();
+        private readonly ComboBox stageComboBox = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 72 };
+        private readonly TrackBar timelineTrackBar = new() { Dock = DockStyle.Fill, TickStyle = TickStyle.None, Maximum = 600 };
+        private readonly Label timelineLabel = new() { AutoSize = true, Padding = new Padding(0, 8, 0, 0) };
+        private readonly PropertyGrid stageGrid = new() { Dock = DockStyle.Fill };
+        private readonly PropertyGrid sectionGrid = new() { Dock = DockStyle.Fill };
+        private readonly PropertyGrid groupGrid = new() { Dock = DockStyle.Fill };
+        private readonly PropertyGrid bossGrid = new() { Dock = DockStyle.Fill };
+        private readonly ListBox sectionsList = new() { Dock = DockStyle.Fill };
+        private readonly ListBox groupsList = new() { Dock = DockStyle.Fill };
+        private readonly TextBox validationBox = new() { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
+        private readonly PreviewPanel previewPanel = new() { Dock = DockStyle.Fill };
+        private readonly WinFormsTimer playbackTimer = new() { Interval = 100 };
 
-        private LevelDefinition currentLevel;
-        private string currentFilePath;
-        private bool suppressUiEvents;
+        private StageDefinition currentStage;
+        private string currentFilePath = string.Empty;
 
         public LevelToolForm()
         {
@@ -52,542 +38,303 @@ namespace SpaceBurst.LevelTool
 
             Text = "SpaceBurst Level Tool";
             StartPosition = FormStartPosition.CenterScreen;
-            MinimumSize = new Size(1280, 820);
-            Width = 1440;
-            Height = 900;
+            Width = 1480;
+            Height = 920;
+            MinimumSize = new Size(1320, 840);
 
-            InitializeLayout();
-            InitializeEvents();
+            BuildUi();
+            WireEvents();
 
-            for (int stage = 1; stage <= 50; stage++)
-                stageComboBox.Items.Add(stage.ToString("00"));
+            for (int i = 1; i <= 50; i++)
+                stageComboBox.Items.Add(i.ToString("00"));
             stageComboBox.SelectedIndex = 0;
 
             previewPanel.Archetypes = archetypes;
-            playbackTimer.Interval = 100;
-            playbackTimer.Tick += PlaybackTimerTick;
-
-            LoadLevel(GetStageFilePath(1));
+            LoadStage(GetStageFilePath(1));
         }
 
-        private void InitializeLayout()
+        private void BuildUi()
         {
-            var root = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 2,
-            };
+            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
             Controls.Add(root);
 
-            var toolbar = new TableLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                ColumnCount = 9,
-                Padding = new Padding(8),
-            };
-            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            var toolbar = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 9, Padding = new Padding(8) };
+            for (int i = 0; i < 7; i++)
+                toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
             toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             root.Controls.Add(toolbar, 0, 0);
 
-            stageComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
-            stageComboBox.Width = 70;
-            loadStageButton.Text = "Load Stage";
-            openButton.Text = "Open...";
-            saveButton.Text = "Save";
-            validateButton.Text = "Validate";
-            playPauseButton.Text = "Play";
-
-            timelineTrackBar.Dock = DockStyle.Fill;
-            timelineTrackBar.Minimum = 0;
-            timelineTrackBar.Maximum = 600;
-            timelineTrackBar.TickStyle = TickStyle.None;
-
-            timelineLabel.AutoSize = true;
-            timelineLabel.TextAlign = ContentAlignment.MiddleRight;
-            timelineLabel.Padding = new Padding(0, 8, 0, 0);
+            var loadButton = new Button { Text = "Load" };
+            var openButton = new Button { Text = "Open..." };
+            var saveButton = new Button { Text = "Save" };
+            var validateButton = new Button { Text = "Validate" };
+            var playButton = new Button { Text = "Play" };
+            playButton.Name = "PlayButton";
 
             toolbar.Controls.Add(new Label { Text = "Stage", AutoSize = true, Padding = new Padding(0, 8, 4, 0) }, 0, 0);
             toolbar.Controls.Add(stageComboBox, 1, 0);
-            toolbar.Controls.Add(loadStageButton, 2, 0);
+            toolbar.Controls.Add(loadButton, 2, 0);
             toolbar.Controls.Add(openButton, 3, 0);
             toolbar.Controls.Add(saveButton, 4, 0);
             toolbar.Controls.Add(validateButton, 5, 0);
-            toolbar.Controls.Add(playPauseButton, 6, 0);
+            toolbar.Controls.Add(playButton, 6, 0);
             toolbar.Controls.Add(timelineTrackBar, 7, 0);
             toolbar.Controls.Add(timelineLabel, 8, 0);
 
-            var mainSplit = new SplitContainer
-            {
-                Dock = DockStyle.Fill,
-                Panel1MinSize = 100,
-                Panel2MinSize = 100,
-            };
+            var mainSplit = new SplitContainer { Dock = DockStyle.Fill };
             root.Controls.Add(mainSplit, 0, 1);
 
-            var editorLayout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 7,
-                Padding = new Padding(8),
-            };
-            editorLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            editorLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            editorLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 45f));
-            editorLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            editorLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            editorLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 55f));
-            editorLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            mainSplit.Panel1.Controls.Add(editorLayout);
+            var leftSplit = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal };
+            mainSplit.Panel1.Controls.Add(leftSplit);
 
-            var levelFields = new TableLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                ColumnCount = 2,
-            };
-            levelFields.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            levelFields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            var editors = new TabControl { Dock = DockStyle.Fill };
+            editors.TabPages.Add(new TabPage("Stage") { Controls = { stageGrid } });
+            editors.TabPages.Add(new TabPage("Section") { Controls = { sectionGrid } });
+            leftSplit.Panel1.Controls.Add(editors);
 
-            introSecondsUpDown.DecimalPlaces = 2;
-            introSecondsUpDown.Increment = 0.05m;
-            introSecondsUpDown.Maximum = 10m;
-            introSecondsUpDown.Minimum = 0m;
+            var listsSplit = new SplitContainer { Dock = DockStyle.Fill };
+            leftSplit.Panel2.Controls.Add(listsSplit);
 
-            levelFields.Controls.Add(new Label { Text = "Level Name", AutoSize = true, Padding = new Padding(0, 7, 8, 0) }, 0, 0);
-            levelFields.Controls.Add(levelNameTextBox, 1, 0);
-            levelFields.Controls.Add(new Label { Text = "Intro Seconds", AutoSize = true, Padding = new Padding(0, 7, 8, 0) }, 0, 1);
-            levelFields.Controls.Add(introSecondsUpDown, 1, 1);
-            editorLayout.Controls.Add(levelFields, 0, 0);
+            listsSplit.Panel1.Controls.Add(BuildListPane("Sections", sectionsList, "Add Section", "Remove Section"));
+            listsSplit.Panel2.Controls.Add(BuildListPane("Groups", groupsList, "Add Group", "Remove Group"));
 
-            editorLayout.Controls.Add(new Label { Text = "Waves", AutoSize = true, Padding = new Padding(0, 4, 0, 4) }, 0, 1);
+            var rightTabs = new TabControl { Dock = DockStyle.Fill };
+            rightTabs.TabPages.Add(new TabPage("Preview") { Controls = { previewPanel } });
+            rightTabs.TabPages.Add(new TabPage("Group") { Controls = { groupGrid } });
+            rightTabs.TabPages.Add(new TabPage("Boss") { Controls = { bossGrid } });
+            rightTabs.TabPages.Add(new TabPage("Validation") { Controls = { validationBox } });
+            mainSplit.Panel2.Controls.Add(rightTabs);
 
-            wavesListBox.Dock = DockStyle.Fill;
-            editorLayout.Controls.Add(wavesListBox, 0, 2);
-
-            var waveButtons = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                FlowDirection = FlowDirection.LeftToRight,
-            };
-            addWaveButton.Text = "Add Wave";
-            removeWaveButton.Text = "Remove Wave";
-            waveButtons.Controls.Add(addWaveButton);
-            waveButtons.Controls.Add(removeWaveButton);
-            editorLayout.Controls.Add(waveButtons, 0, 3);
-
-            var waveFields = new TableLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                ColumnCount = 2,
-            };
-            waveFields.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            waveFields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-
-            waveStartUpDown.DecimalPlaces = 2;
-            waveStartUpDown.Increment = 0.1m;
-            waveStartUpDown.Maximum = 300m;
-            waveStartUpDown.Minimum = 0m;
-
-            checkpointCheckBox.Text = "Checkpoint";
-            checkpointCheckBox.AutoSize = true;
-
-            waveFields.Controls.Add(new Label { Text = "Wave Label", AutoSize = true, Padding = new Padding(0, 7, 8, 0) }, 0, 0);
-            waveFields.Controls.Add(waveLabelTextBox, 1, 0);
-            waveFields.Controls.Add(new Label { Text = "Start Seconds", AutoSize = true, Padding = new Padding(0, 7, 8, 0) }, 0, 1);
-            waveFields.Controls.Add(waveStartUpDown, 1, 1);
-            waveFields.Controls.Add(checkpointCheckBox, 1, 2);
-            editorLayout.Controls.Add(waveFields, 0, 4);
-
-            editorLayout.Controls.Add(new Label { Text = "Spawn Groups", AutoSize = true, Padding = new Padding(0, 4, 0, 4) }, 0, 5);
-
-            var groupsLayout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 2,
-            };
-            groupsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-            groupsLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-
-            groupsListBox.Dock = DockStyle.Fill;
-            groupsLayout.Controls.Add(groupsListBox, 0, 0);
-
-            var groupButtons = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                FlowDirection = FlowDirection.LeftToRight,
-            };
-            addGroupButton.Text = "Add Group";
-            removeGroupButton.Text = "Remove Group";
-            groupButtons.Controls.Add(addGroupButton);
-            groupButtons.Controls.Add(removeGroupButton);
-            groupsLayout.Controls.Add(groupButtons, 0, 1);
-            editorLayout.Controls.Add(groupsLayout, 0, 6);
-
-            var rightSplit = new SplitContainer
-            {
-                Dock = DockStyle.Fill,
-                Orientation = Orientation.Horizontal,
-                Panel1MinSize = 100,
-                Panel2MinSize = 100,
-            };
-            mainSplit.Panel2.Controls.Add(rightSplit);
-
-            previewPanel.Dock = DockStyle.Fill;
-            rightSplit.Panel1.Controls.Add(previewPanel);
-
-            var bottomTabs = new TabControl
-            {
-                Dock = DockStyle.Fill,
-            };
-            rightSplit.Panel2.Controls.Add(bottomTabs);
-
-            groupPropertyGrid.Dock = DockStyle.Fill;
-            bossPropertyGrid.Dock = DockStyle.Fill;
-
-            validationTextBox.Dock = DockStyle.Fill;
-            validationTextBox.Multiline = true;
-            validationTextBox.ReadOnly = true;
-            validationTextBox.ScrollBars = ScrollBars.Vertical;
-            validationTextBox.Font = new Font(FontFamily.GenericMonospace, 9f);
-
-            bottomTabs.TabPages.Add(new TabPage("Spawn Group") { Controls = { groupPropertyGrid } });
-            bottomTabs.TabPages.Add(new TabPage("Boss") { Controls = { bossPropertyGrid } });
-            bottomTabs.TabPages.Add(new TabPage("Validation") { Controls = { validationTextBox } });
-        }
-
-        private void InitializeEvents()
-        {
-            loadStageButton.Click += (_, __) => LoadLevel(GetStageFilePath(GetSelectedStageNumber()));
-            openButton.Click += (_, __) => OpenLevelFromDialog();
-            saveButton.Click += (_, __) => SaveCurrentLevel();
+            loadButton.Click += (_, __) => LoadStage(GetStageFilePath(GetSelectedStageNumber()));
+            openButton.Click += (_, __) => OpenStageFromDialog();
+            saveButton.Click += (_, __) => SaveStage();
             validateButton.Click += (_, __) => RefreshValidation();
-
-            playPauseButton.Click += (_, __) =>
+            playButton.Click += (_, __) =>
             {
                 if (playbackTimer.Enabled)
                 {
                     playbackTimer.Stop();
-                    playPauseButton.Text = "Play";
+                    playButton.Text = "Play";
                 }
                 else
                 {
                     playbackTimer.Start();
-                    playPauseButton.Text = "Pause";
+                    playButton.Text = "Pause";
                 }
             };
+        }
 
+        private Control BuildListPane(string title, ListBox listBox, string addLabel, string removeLabel)
+        {
+            var panel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, Padding = new Padding(8) };
+            panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            panel.Controls.Add(new Label { Text = title, AutoSize = true, Padding = new Padding(0, 0, 0, 4) }, 0, 0);
+            panel.Controls.Add(listBox, 0, 1);
+            var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true };
+            buttons.Controls.Add(new Button { Text = addLabel, Name = addLabel });
+            buttons.Controls.Add(new Button { Text = removeLabel, Name = removeLabel });
+            panel.Controls.Add(buttons, 0, 2);
+            return panel;
+        }
+
+        private void WireEvents()
+        {
             timelineTrackBar.Scroll += (_, __) => RefreshTimelineAndPreview();
-
-            levelNameTextBox.TextChanged += (_, __) =>
+            playbackTimer.Tick += (_, __) =>
             {
-                if (suppressUiEvents || currentLevel == null)
-                    return;
-
-                currentLevel.Name = levelNameTextBox.Text;
-                RefreshValidation();
+                timelineTrackBar.Value = timelineTrackBar.Value >= timelineTrackBar.Maximum ? 0 : timelineTrackBar.Value + 1;
+                RefreshTimelineAndPreview();
             };
 
-            introSecondsUpDown.ValueChanged += (_, __) =>
+            stageGrid.PropertyValueChanged += (_, __) => AfterEdit();
+            sectionGrid.PropertyValueChanged += (_, __) => AfterEdit();
+            groupGrid.PropertyValueChanged += (_, __) => AfterEdit();
+            bossGrid.PropertyValueChanged += (_, __) => AfterEdit();
+
+            sectionsList.SelectedIndexChanged += (_, __) =>
             {
-                if (suppressUiEvents || currentLevel == null)
-                    return;
-
-                currentLevel.IntroSeconds = (float)introSecondsUpDown.Value;
-                RefreshValidation();
-            };
-
-            wavesListBox.SelectedIndexChanged += (_, __) => PopulateWaveControls();
-
-            addWaveButton.Click += (_, __) =>
-            {
-                if (currentLevel == null)
-                    return;
-
-                float startSeconds = currentLevel.Waves.Count == 0 ? 0.8f : currentLevel.Waves.Max(x => x.StartSeconds) + 8f;
-                currentLevel.Waves.Add(new WaveDefinition
-                {
-                    Label = string.Concat("Wave ", (currentLevel.Waves.Count + 1).ToString()),
-                    StartSeconds = startSeconds,
-                    Groups = new List<SpawnGroupDefinition> { CreateDefaultGroup() },
-                });
-
-                SortWaves();
-                RefreshWaveList();
-                wavesListBox.SelectedIndex = Math.Max(0, currentLevel.Waves.FindIndex(x => Math.Abs(x.StartSeconds - startSeconds) < 0.001f));
-                RefreshValidation();
-            };
-
-            removeWaveButton.Click += (_, __) =>
-            {
-                if (currentLevel == null || wavesListBox.SelectedIndex < 0 || currentLevel.Waves.Count <= 1)
-                    return;
-
-                int removedIndex = wavesListBox.SelectedIndex;
-                currentLevel.Waves.RemoveAt(removedIndex);
-                RefreshWaveList();
-                wavesListBox.SelectedIndex = Math.Min(Math.Max(0, removedIndex), wavesListBox.Items.Count - 1);
-                RefreshValidation();
-            };
-
-            waveLabelTextBox.TextChanged += (_, __) => ApplyWaveEdits();
-            waveStartUpDown.ValueChanged += (_, __) => ApplyWaveEdits();
-            checkpointCheckBox.CheckedChanged += (_, __) => ApplyWaveEdits();
-
-            groupsListBox.SelectedIndexChanged += (_, __) => PopulateGroupEditors();
-
-            addGroupButton.Click += (_, __) =>
-            {
-                WaveDefinition wave = GetSelectedWave();
-                if (wave == null)
-                    return;
-
-                wave.Groups.Add(CreateDefaultGroup());
+                sectionGrid.SelectedObject = SelectedSection();
                 RefreshGroupList();
-                groupsListBox.SelectedIndex = wave.Groups.Count - 1;
-                RefreshValidation();
-            };
-
-            removeGroupButton.Click += (_, __) =>
-            {
-                WaveDefinition wave = GetSelectedWave();
-                if (wave == null || groupsListBox.SelectedIndex < 0 || wave.Groups.Count <= 1)
-                    return;
-
-                int removedIndex = groupsListBox.SelectedIndex;
-                wave.Groups.RemoveAt(removedIndex);
-                RefreshGroupList();
-                groupsListBox.SelectedIndex = Math.Min(Math.Max(0, removedIndex), groupsListBox.Items.Count - 1);
-                RefreshValidation();
-            };
-
-            groupPropertyGrid.PropertyValueChanged += (_, __) =>
-            {
-                RefreshGroupList();
+                previewPanel.SelectedSectionIndex = sectionsList.SelectedIndex;
                 RefreshPreview();
-                RefreshValidation();
             };
 
-            bossPropertyGrid.PropertyValueChanged += (_, __) =>
+            groupsList.SelectedIndexChanged += (_, __) =>
             {
-                UpdateTimelineMaximum();
+                SectionDefinition section = SelectedSection();
+                groupGrid.SelectedObject = section != null && groupsList.SelectedIndex >= 0 && groupsList.SelectedIndex < section.Groups.Count ? section.Groups[groupsList.SelectedIndex] : null;
                 RefreshPreview();
-                RefreshValidation();
-            };
-        }
-
-        private void PlaybackTimerTick(object sender, EventArgs e)
-        {
-            if (timelineTrackBar.Value >= timelineTrackBar.Maximum)
-            {
-                timelineTrackBar.Value = 0;
-                playbackTimer.Stop();
-                playPauseButton.Text = "Play";
-            }
-            else
-            {
-                timelineTrackBar.Value = Math.Min(timelineTrackBar.Maximum, timelineTrackBar.Value + 1);
-            }
-
-            RefreshTimelineAndPreview();
-        }
-
-        private void OpenLevelFromDialog()
-        {
-            using var dialog = new OpenFileDialog
-            {
-                InitialDirectory = levelsDirectory,
-                Filter = "Level JSON (*.json)|*.json",
-                Title = "Open Level JSON",
             };
 
-            if (dialog.ShowDialog(this) == DialogResult.OK)
-                LoadLevel(dialog.FileName);
+            BindNamedButton(this, "Add Section", (_, __) => AddSection());
+            BindNamedButton(this, "Remove Section", (_, __) => RemoveSection());
+            BindNamedButton(this, "Add Group", (_, __) => AddGroup());
+            BindNamedButton(this, "Remove Group", (_, __) => RemoveGroup());
         }
 
-        private void LoadLevel(string path)
+        private static void BindNamedButton(Control root, string name, EventHandler handler)
         {
-            currentLevel = LevelSerializer.LoadLevelFromFile(path);
+            foreach (Control child in root.Controls)
+            {
+                if (child is Button button && button.Name == name)
+                    button.Click += handler;
+
+                BindNamedButton(child, name, handler);
+            }
+        }
+
+        private void LoadStage(string path)
+        {
+            currentStage = LevelSerializer.LoadLevelFromFile(path);
             currentFilePath = path;
-
-            suppressUiEvents = true;
-            levelNameTextBox.Text = currentLevel.Name;
-            introSecondsUpDown.Value = (decimal)currentLevel.IntroSeconds;
-            suppressUiEvents = false;
-
+            stageGrid.SelectedObject = currentStage;
+            bossGrid.SelectedObject = currentStage.Boss;
             UpdateStageSelectionFromPath(path);
-            RefreshWaveList();
-            wavesListBox.SelectedIndex = currentLevel.Waves.Count > 0 ? 0 : -1;
-            bossPropertyGrid.SelectedObject = currentLevel.Boss;
-            UpdateTimelineMaximum();
-            RefreshTimelineAndPreview();
+            RefreshSectionList();
+            sectionsList.SelectedIndex = currentStage.Sections.Count > 0 ? 0 : -1;
+            RefreshTimelineMaximum();
             RefreshValidation();
-            Text = string.Concat("SpaceBurst Level Tool - ", Path.GetFileName(path));
+            RefreshPreview();
+            Text = $"SpaceBurst Level Tool - {Path.GetFileName(path)}";
         }
 
-        private void SaveCurrentLevel()
+        private void SaveStage()
         {
-            if (currentLevel == null)
+            if (currentStage == null)
                 return;
 
-            ApplyWaveEdits();
-            SortWaves();
-            LevelSerializer.SaveLevelToFile(currentFilePath ?? GetStageFilePath(currentLevel.LevelNumber), currentLevel);
-            RefreshWaveList();
+            SortSections();
+            LevelSerializer.SaveLevelToFile(string.IsNullOrEmpty(currentFilePath) ? GetStageFilePath(currentStage.StageNumber) : currentFilePath, currentStage);
+            RefreshSectionList();
             RefreshValidation();
         }
 
-        private void PopulateWaveControls()
+        private void OpenStageFromDialog()
         {
-            WaveDefinition wave = GetSelectedWave();
-            suppressUiEvents = true;
-            if (wave == null)
-            {
-                waveLabelTextBox.Text = string.Empty;
-                waveStartUpDown.Value = 0m;
-                checkpointCheckBox.Checked = false;
-            }
-            else
-            {
-                waveLabelTextBox.Text = wave.Label ?? string.Empty;
-                waveStartUpDown.Value = (decimal)wave.StartSeconds;
-                checkpointCheckBox.Checked = wave.Checkpoint;
-            }
-            suppressUiEvents = false;
+            using var dialog = new OpenFileDialog { InitialDirectory = levelsDirectory, Filter = "Stage JSON (*.json)|*.json", Title = "Open Stage JSON" };
+            if (dialog.ShowDialog(this) == DialogResult.OK)
+                LoadStage(dialog.FileName);
+        }
 
+        private void AddSection()
+        {
+            if (currentStage == null)
+                return;
+
+            float start = currentStage.Sections.Count == 0 ? 0.75f : currentStage.Sections.Max(x => x.StartSeconds) + 13f;
+            currentStage.Sections.Add(new SectionDefinition
+            {
+                Label = $"Section {currentStage.Sections.Count + 1}",
+                StartSeconds = start,
+                DurationSeconds = 11.8f,
+                Groups = new List<SpawnGroupDefinition> { DefaultGroup() },
+            });
+            AfterEdit();
+            sectionsList.SelectedIndex = currentStage.Sections.Count - 1;
+        }
+
+        private void RemoveSection()
+        {
+            if (currentStage == null || sectionsList.SelectedIndex < 0 || currentStage.Sections.Count <= 1)
+                return;
+
+            int index = sectionsList.SelectedIndex;
+            currentStage.Sections.RemoveAt(index);
+            AfterEdit();
+            sectionsList.SelectedIndex = Math.Min(index, sectionsList.Items.Count - 1);
+        }
+
+        private void AddGroup()
+        {
+            SectionDefinition section = SelectedSection();
+            if (section == null)
+                return;
+
+            section.Groups.Add(DefaultGroup());
+            AfterEdit();
+            groupsList.SelectedIndex = section.Groups.Count - 1;
+        }
+
+        private void RemoveGroup()
+        {
+            SectionDefinition section = SelectedSection();
+            if (section == null || groupsList.SelectedIndex < 0 || section.Groups.Count <= 1)
+                return;
+
+            int index = groupsList.SelectedIndex;
+            section.Groups.RemoveAt(index);
+            AfterEdit();
+            groupsList.SelectedIndex = Math.Min(index, groupsList.Items.Count - 1);
+        }
+
+        private void AfterEdit()
+        {
+            SortSections();
+            RefreshSectionList();
             RefreshGroupList();
-            previewPanel.SelectedWaveIndex = wavesListBox.SelectedIndex;
-            RefreshPreview();
-        }
-
-        private void ApplyWaveEdits()
-        {
-            if (suppressUiEvents)
-                return;
-
-            WaveDefinition wave = GetSelectedWave();
-            if (wave == null)
-                return;
-
-            wave.Label = waveLabelTextBox.Text;
-            wave.StartSeconds = (float)waveStartUpDown.Value;
-            wave.Checkpoint = checkpointCheckBox.Checked;
-
-            SortWaves();
-            RefreshWaveList();
-            SelectWaveByReference(wave);
-            UpdateTimelineMaximum();
-            RefreshPreview();
+            RefreshTimelineMaximum();
             RefreshValidation();
+            RefreshPreview();
         }
 
-        private void RefreshWaveList()
+        private void RefreshSectionList()
         {
-            int selectedIndex = wavesListBox.SelectedIndex;
-
-            wavesListBox.BeginUpdate();
-            wavesListBox.Items.Clear();
-            if (currentLevel != null)
+            int selected = sectionsList.SelectedIndex;
+            sectionsList.BeginUpdate();
+            sectionsList.Items.Clear();
+            if (currentStage != null)
             {
-                for (int i = 0; i < currentLevel.Waves.Count; i++)
-                {
-                    WaveDefinition wave = currentLevel.Waves[i];
-                    string checkpoint = wave.Checkpoint ? " [CP]" : string.Empty;
-                    wavesListBox.Items.Add(string.Concat(wave.StartSeconds.ToString("0.0"), "s  ", wave.Label ?? string.Concat("Wave ", (i + 1).ToString()), checkpoint));
-                }
+                foreach (SectionDefinition section in currentStage.Sections)
+                    sectionsList.Items.Add($"{section.StartSeconds:0.0}s  {section.Label}{(section.Checkpoint ? " [CP]" : string.Empty)}");
             }
-            wavesListBox.EndUpdate();
-
-            if (wavesListBox.Items.Count == 0)
-                return;
-
-            wavesListBox.SelectedIndex = Math.Clamp(selectedIndex, 0, wavesListBox.Items.Count - 1);
+            sectionsList.EndUpdate();
+            if (sectionsList.Items.Count > 0)
+                sectionsList.SelectedIndex = Math.Clamp(selected, 0, sectionsList.Items.Count - 1);
         }
 
         private void RefreshGroupList()
         {
-            WaveDefinition wave = GetSelectedWave();
-
-            groupsListBox.BeginUpdate();
-            groupsListBox.Items.Clear();
-            if (wave != null)
+            int selected = groupsList.SelectedIndex;
+            groupsList.BeginUpdate();
+            groupsList.Items.Clear();
+            SectionDefinition section = SelectedSection();
+            if (section != null)
             {
-                foreach (SpawnGroupDefinition group in wave.Groups)
-                    groupsListBox.Items.Add(DescribeGroup(group));
+                foreach (SpawnGroupDefinition group in section.Groups)
+                    groupsList.Items.Add($"{group.ArchetypeId} x{group.Count} {(group.TargetY.HasValue ? group.TargetY.Value.ToString("0.00") : $"Lane {group.Lane}")}");
             }
-            groupsListBox.EndUpdate();
-
-            if (groupsListBox.Items.Count > 0)
-                groupsListBox.SelectedIndex = Math.Clamp(groupsListBox.SelectedIndex, 0, groupsListBox.Items.Count - 1);
-            else
-                groupPropertyGrid.SelectedObject = null;
-
-            RefreshPreview();
-        }
-
-        private void PopulateGroupEditors()
-        {
-            WaveDefinition wave = GetSelectedWave();
-            if (wave == null || groupsListBox.SelectedIndex < 0 || groupsListBox.SelectedIndex >= wave.Groups.Count)
-            {
-                groupPropertyGrid.SelectedObject = null;
-                return;
-            }
-
-            groupPropertyGrid.SelectedObject = wave.Groups[groupsListBox.SelectedIndex];
-            RefreshPreview();
+            groupsList.EndUpdate();
+            if (groupsList.Items.Count > 0)
+                groupsList.SelectedIndex = Math.Clamp(selected, 0, groupsList.Items.Count - 1);
         }
 
         private void RefreshValidation()
         {
-            if (currentLevel == null)
+            if (currentStage == null)
                 return;
 
-            List<ValidationIssue> issues = LevelValidator.ValidateLevel(currentLevel, archetypes);
-            validationTextBox.Text = issues.Count == 0
-                ? "No validation issues."
-                : string.Join(Environment.NewLine, issues.Select(x => x.ToString()));
-
-            RefreshPreview();
+            List<ValidationIssue> issues = LevelValidator.ValidateStage(currentStage, archetypes);
+            validationBox.Text = issues.Count == 0 ? "No validation issues." : string.Join(Environment.NewLine, issues.Select(x => x.ToString()));
         }
 
-        private void RefreshPreview()
+        private void RefreshTimelineMaximum()
         {
-            previewPanel.Level = currentLevel;
-            previewPanel.CurrentTimeSeconds = timelineTrackBar.Value / 10f;
-            previewPanel.SelectedWaveIndex = wavesListBox.SelectedIndex;
-            previewPanel.Invalidate();
-        }
-
-        private void RefreshTimelineAndPreview()
-        {
-            timelineLabel.Text = string.Concat("Time ", (timelineTrackBar.Value / 10f).ToString("0.0"), "s");
-            RefreshPreview();
-        }
-
-        private void UpdateTimelineMaximum()
-        {
-            float duration = 8f;
-            if (currentLevel != null && currentLevel.Waves.Count > 0)
+            float duration = 12f;
+            if (currentStage != null && currentStage.Sections.Count > 0)
             {
-                duration = currentLevel.Waves.Max(x => x.StartSeconds + GetWaveDuration(x)) + 6f;
-                if (currentLevel.Boss != null)
-                    duration += 14f;
+                duration = currentStage.Sections.Max(section =>
+                {
+                    float tail = section.Groups.Count == 0 ? section.DurationSeconds : section.Groups.Max(group => group.StartSeconds + LevelMath.EstimateGroupLifetimeSeconds(group, archetypes[group.ArchetypeId], 1280f));
+                    return section.StartSeconds + Math.Max(section.DurationSeconds, tail);
+                }) + 4f;
+
+                if (currentStage.Boss != null)
+                    duration += currentStage.Boss.IntroSeconds + 12f;
             }
 
             timelineTrackBar.Maximum = Math.Max(80, (int)Math.Ceiling(duration * 10f));
@@ -596,128 +343,91 @@ namespace SpaceBurst.LevelTool
             RefreshTimelineAndPreview();
         }
 
-        private float GetWaveDuration(WaveDefinition wave)
+        private void RefreshTimelineAndPreview()
         {
-            if (wave == null || wave.Groups.Count == 0)
-                return 0f;
-
-            return wave.Groups.Max(x => x.TravelDuration + x.DelayBetweenSpawns * Math.Max(0, x.Count - 1));
+            timelineLabel.Text = $"Time {timelineTrackBar.Value / 10f:0.0}s";
+            RefreshPreview();
         }
 
-        private void SortWaves()
+        private void RefreshPreview()
         {
-            if (currentLevel == null)
+            previewPanel.Stage = currentStage;
+            previewPanel.CurrentTimeSeconds = timelineTrackBar.Value / 10f;
+            previewPanel.Invalidate();
+        }
+
+        private void SortSections()
+        {
+            if (currentStage == null)
                 return;
 
-            currentLevel.Waves = currentLevel.Waves
-                .OrderBy(x => x.StartSeconds)
-                .ThenBy(x => x.Label ?? string.Empty)
-                .ToList();
+            currentStage.Sections = currentStage.Sections.OrderBy(x => x.StartSeconds).ThenBy(x => x.Label ?? string.Empty).ToList();
+            currentStage.CheckpointMarkers = currentStage.Sections.Where(x => x.Checkpoint).Select(x => x.StartSeconds).ToList();
         }
 
-        private void SelectWaveByReference(WaveDefinition wave)
+        private SectionDefinition SelectedSection()
         {
-            int index = currentLevel?.Waves.IndexOf(wave) ?? -1;
-            if (index >= 0)
-                wavesListBox.SelectedIndex = index;
+            return currentStage == null || sectionsList.SelectedIndex < 0 || sectionsList.SelectedIndex >= currentStage.Sections.Count
+                ? null
+                : currentStage.Sections[sectionsList.SelectedIndex];
         }
 
-        private WaveDefinition GetSelectedWave()
-        {
-            if (currentLevel == null || wavesListBox.SelectedIndex < 0 || wavesListBox.SelectedIndex >= currentLevel.Waves.Count)
-                return null;
-
-            return currentLevel.Waves[wavesListBox.SelectedIndex];
-        }
-
-        private SpawnGroupDefinition CreateDefaultGroup()
+        private static SpawnGroupDefinition DefaultGroup()
         {
             return new SpawnGroupDefinition
             {
                 ArchetypeId = "Walker",
+                StartSeconds = 0f,
+                Lane = 2,
                 Count = 3,
-                Formation = FormationType.Line,
-                EntrySide = EntrySide.Top,
-                PathType = PathType.Straight,
-                AnchorX = 0.3f,
-                AnchorY = 0.2f,
-                Spacing = 68f,
-                DelayBetweenSpawns = 0.16f,
-                TravelDuration = 3.2f,
+                SpawnLeadDistance = 240f,
+                SpawnIntervalSeconds = 0.22f,
+                SpacingX = 84f,
                 SpeedMultiplier = 1f,
+                MovePatternOverride = MovePattern.StraightFlyIn,
+                FirePatternOverride = FirePattern.None,
+                Amplitude = 30f,
+                Frequency = 1f,
             };
         }
 
-        private string DescribeGroup(SpawnGroupDefinition group)
-        {
-            return string.Concat(
-                group.ArchetypeId,
-                " x",
-                group.Count.ToString(),
-                "  ",
-                group.Formation.ToString(),
-                " / ",
-                group.PathType.ToString(),
-                " @ ",
-                group.AnchorX.ToString("0.00"),
-                ", ",
-                group.AnchorY.ToString("0.00"));
-        }
+        private int GetSelectedStageNumber() => stageComboBox.SelectedItem == null ? 1 : int.Parse(stageComboBox.SelectedItem.ToString() ?? "1");
 
-        private int GetSelectedStageNumber()
-        {
-            if (stageComboBox.SelectedItem == null)
-                return 1;
-
-            return int.Parse(stageComboBox.SelectedItem.ToString() ?? "1");
-        }
-
-        private string GetStageFilePath(int stageNumber)
-        {
-            return Path.Combine(levelsDirectory, string.Concat("level-", stageNumber.ToString("00"), ".json"));
-        }
+        private string GetStageFilePath(int stageNumber) => Path.Combine(levelsDirectory, $"level-{stageNumber:00}.json");
 
         private void UpdateStageSelectionFromPath(string path)
         {
             Match match = Regex.Match(Path.GetFileName(path), @"level-(\d+)\.json", RegexOptions.IgnoreCase);
-            if (match.Success && int.TryParse(match.Groups[1].Value, out int stageNumber))
-            {
-                string stageText = stageNumber.ToString("00");
-                int index = stageComboBox.Items.IndexOf(stageText);
-                if (index >= 0)
-                    stageComboBox.SelectedIndex = index;
-            }
+            if (!match.Success || !int.TryParse(match.Groups[1].Value, out int stageNumber))
+                return;
+
+            string value = stageNumber.ToString("00");
+            int index = stageComboBox.Items.IndexOf(value);
+            if (index >= 0)
+                stageComboBox.SelectedIndex = index;
         }
 
         private static string FindRepositoryRoot()
         {
-            DirectoryInfo directory = new DirectoryInfo(AppContext.BaseDirectory);
+            DirectoryInfo directory = new(AppContext.BaseDirectory);
             while (directory != null)
             {
-                string solutionPath = Path.Combine(directory.FullName, "SpaceBurst.sln");
-                string levelsPath = Path.Combine(directory.FullName, "Levels");
-                if (File.Exists(solutionPath) && Directory.Exists(levelsPath))
+                if (File.Exists(Path.Combine(directory.FullName, "SpaceBurst.sln")) && Directory.Exists(Path.Combine(directory.FullName, "Levels")))
                     return directory.FullName;
-
                 directory = directory.Parent;
             }
-
             throw new DirectoryNotFoundException("Could not locate the SpaceBurst repository root.");
         }
 
-        private sealed class LevelPreviewPanel : Panel
+        private sealed class PreviewPanel : Panel
         {
-            private static readonly Vector2 previewArenaSize = new Vector2(800f, 600f);
-
+            private static readonly Vector2 ArenaSize = new(1280f, 720f);
             public IDictionary<string, EnemyArchetypeDefinition> Archetypes { get; set; }
-
-            public LevelDefinition Level { get; set; }
-
-            public int SelectedWaveIndex { get; set; }
-
+            public StageDefinition Stage { get; set; }
+            public int SelectedSectionIndex { get; set; }
             public float CurrentTimeSeconds { get; set; }
 
-            public LevelPreviewPanel()
+            public PreviewPanel()
             {
                 DoubleBuffered = true;
                 BackColor = Color.FromArgb(18, 18, 26);
@@ -726,183 +436,133 @@ namespace SpaceBurst.LevelTool
             protected override void OnPaint(PaintEventArgs e)
             {
                 base.OnPaint(e);
-
                 e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
                 e.Graphics.Clear(Color.FromArgb(18, 18, 26));
 
                 RectangleF arena = GetArenaBounds();
                 using var arenaBrush = new SolidBrush(Color.FromArgb(22, 28, 40));
-                using var arenaBorder = new Pen(Color.FromArgb(74, 100, 126), 2f);
-                using var gridPen = new Pen(Color.FromArgb(36, 54, 74), 1f);
+                using var border = new Pen(Color.FromArgb(74, 100, 126), 2f);
+                using var lanePen = new Pen(Color.FromArgb(36, 54, 74), 1f);
+                using var playerWindow = new SolidBrush(Color.FromArgb(26, 90, 132, 180));
 
                 e.Graphics.FillRectangle(arenaBrush, arena);
-                for (int x = 1; x < 8; x++)
+                e.Graphics.FillRectangle(playerWindow, new RectangleF(arena.Left + arena.Width * 0.1f, arena.Top + arena.Height * 0.08f, arena.Width * 0.3f, arena.Height * 0.84f));
+                for (int lane = 0; lane < 5; lane++)
                 {
-                    float xPos = arena.Left + arena.Width * x / 8f;
-                    e.Graphics.DrawLine(gridPen, xPos, arena.Top, xPos, arena.Bottom);
+                    float y = LevelMath.GetLanePosition(ArenaSize, lane);
+                    e.Graphics.DrawLine(lanePen, ToScreen(arena, new Vector2(0f, y)), ToScreen(arena, new Vector2(ArenaSize.X, y)));
                 }
-                for (int y = 1; y < 6; y++)
+                e.Graphics.DrawRectangle(border, Rectangle.Round(arena));
+                DrawSprite(e.Graphics, arena, new ProceduralSpriteDefinition { PrimaryColor = "#D7F5FF", SecondaryColor = "#5AAFCB", AccentColor = "#FFB347", Rows = new List<string> { "....##......", "..######....", ".##++++##...", "##++CC++##..", "##++++++##..", ".##+**+##...", "..######....", "....##......" } }, new Vector2(ArenaSize.X * 0.22f, ArenaSize.Y * 0.5f), 4f);
+
+                if (Stage != null)
                 {
-                    float yPos = arena.Top + arena.Height * y / 6f;
-                    e.Graphics.DrawLine(gridPen, arena.Left, yPos, arena.Right, yPos);
+                    for (int i = 0; i < Stage.Sections.Count; i++)
+                    {
+                        SectionDefinition section = Stage.Sections[i];
+                        foreach (SpawnGroupDefinition group in section.Groups)
+                            DrawGroup(e.Graphics, arena, section, group, i == SelectedSectionIndex ? 1f : 0.45f);
+                    }
+
+                    if (Stage.Boss != null && Archetypes != null && Archetypes.TryGetValue(Stage.Boss.ArchetypeId, out EnemyArchetypeDefinition bossArch))
+                    {
+                        float start = Stage.Sections.Max(x => x.StartSeconds + x.DurationSeconds) + Stage.Boss.IntroSeconds;
+                        if (CurrentTimeSeconds >= start)
+                        {
+                            Vector2 spawn = new(ArenaSize.X + bossArch.SpawnLeadDistance, Stage.Boss.TargetY * ArenaSize.Y);
+                            Vector2 bossPos = LevelMath.SamplePreviewPosition(Stage.Boss.MovePattern, spawn, CurrentTimeSeconds - start, bossArch.MoveSpeed, Stage.Boss.ArenaScrollSpeed, Stage.Boss.TargetY * ArenaSize.Y, bossArch.MovementAmplitude, bossArch.MovementFrequency);
+                            DrawSprite(e.Graphics, arena, bossArch.Sprite, bossPos, 4f * bossArch.RenderScale);
+                        }
+                    }
                 }
-                e.Graphics.DrawRectangle(arenaBorder, Rectangle.Round(arena));
 
-                DrawPlayerStart(e.Graphics, arena);
+                using var textBrush = new SolidBrush(Color.FromArgb(228, 235, 242));
+                string footer = Stage == null ? "No stage loaded" : $"{Stage.Name}    Scroll {Stage.ScrollSpeed:0}    Time {CurrentTimeSeconds:0.0}s";
+                e.Graphics.DrawString(footer, Font, textBrush, new PointF(arena.Left, arena.Bottom + 8f));
+            }
 
-                if (Level == null)
+            private void DrawGroup(Graphics graphics, RectangleF arena, SectionDefinition section, SpawnGroupDefinition group, float emphasis)
+            {
+                if (Archetypes == null || !Archetypes.TryGetValue(group.ArchetypeId, out EnemyArchetypeDefinition arch))
                     return;
 
-                for (int waveIndex = 0; waveIndex < Level.Waves.Count; waveIndex++)
+                float groupStart = section.StartSeconds + group.StartSeconds;
+                float duration = LevelMath.EstimateGroupLifetimeSeconds(group, arch, ArenaSize.X);
+                float elapsed = CurrentTimeSeconds - groupStart;
+                using var pathPen = new Pen(Color.FromArgb((int)(110 * emphasis), 120, 186, 222), emphasis < 0.8f ? 1.2f : 2f);
+
+                for (int i = 0; i < group.Count; i++)
                 {
-                    WaveDefinition wave = Level.Waves[waveIndex];
-                    bool selectedWave = waveIndex == SelectedWaveIndex;
-                    float emphasis = selectedWave ? 1f : 0.48f;
+                    Vector2 spawn = LevelMath.GetSpawnPoint(ArenaSize, group, i);
+                    PointF? last = null;
+                    for (int sample = 0; sample <= 18; sample++)
+                    {
+                        float t = duration * sample / 18f;
+                        Vector2 pos = LevelMath.SamplePreviewPosition(group.MovePatternOverride ?? arch.MovePattern, spawn, t, arch.MoveSpeed * group.SpeedMultiplier, Stage?.ScrollSpeed ?? 0f, LevelMath.ResolveTargetY(ArenaSize, group), group.Amplitude > 0f ? group.Amplitude : arch.MovementAmplitude, group.Frequency > 0f ? group.Frequency : arch.MovementFrequency);
+                        PointF screen = ToScreen(arena, pos);
+                        if (last.HasValue)
+                            graphics.DrawLine(pathPen, last.Value, screen);
+                        last = screen;
+                    }
 
-                    for (int groupIndex = 0; groupIndex < wave.Groups.Count; groupIndex++)
-                        DrawSpawnGroup(e.Graphics, arena, wave, wave.Groups[groupIndex], groupIndex, emphasis);
+                    if (elapsed < i * group.SpawnIntervalSeconds || elapsed > duration + i * group.SpawnIntervalSeconds)
+                        continue;
+
+                    Vector2 current = LevelMath.SamplePreviewPosition(group.MovePatternOverride ?? arch.MovePattern, spawn, Math.Max(0f, elapsed - i * group.SpawnIntervalSeconds), arch.MoveSpeed * group.SpeedMultiplier, Stage?.ScrollSpeed ?? 0f, LevelMath.ResolveTargetY(ArenaSize, group), group.Amplitude > 0f ? group.Amplitude : arch.MovementAmplitude, group.Frequency > 0f ? group.Frequency : arch.MovementFrequency);
+                    DrawSprite(graphics, arena, arch.Sprite, current, 3.5f * arch.RenderScale);
                 }
+            }
 
-                if (Level.Boss != null)
-                    DrawBossPreview(e.Graphics, arena, Level.Boss);
+            private void DrawSprite(Graphics graphics, RectangleF arena, ProceduralSpriteDefinition sprite, Vector2 center, float pixelScale)
+            {
+                if (sprite.Rows == null || sprite.Rows.Count == 0)
+                    return;
 
-                using var textBrush = new SolidBrush(Color.FromArgb(220, 232, 240));
-                string footer = string.Concat(
-                    "Preview time: ",
-                    CurrentTimeSeconds.ToString("0.0"),
-                    "s    ",
-                    Level.Name ?? "Untitled",
-                    "    ",
-                    Level.Waves.Count.ToString(),
-                    " waves");
-                e.Graphics.DrawString(footer, Font, textBrush, new PointF(arena.Left, arena.Bottom + 8f));
+                int width = sprite.Rows.Max(x => x.Length);
+                int height = sprite.Rows.Count;
+                float startX = center.X - width * pixelScale / 2f;
+                float startY = center.Y - height * pixelScale / 2f;
+                Color primary = ParseColor(sprite.PrimaryColor);
+                Color secondary = ParseColor(sprite.SecondaryColor);
+                Color accent = ParseColor(sprite.AccentColor);
+
+                for (int y = 0; y < sprite.Rows.Count; y++)
+                {
+                    string row = sprite.Rows[y];
+                    for (int x = 0; x < row.Length; x++)
+                    {
+                        char glyph = row[x];
+                        if (glyph == '.' || char.IsWhiteSpace(glyph))
+                            continue;
+
+                        Color color = glyph is '+' or 'o' ? secondary : glyph is '*' or 'x' or '@' ? accent : primary;
+                        RectangleF cell = RectangleF.FromLTRB(startX + x * pixelScale, startY + y * pixelScale, startX + (x + 1) * pixelScale, startY + (y + 1) * pixelScale);
+                        using var brush = new SolidBrush(color);
+                        graphics.FillRectangle(brush, ToScreen(arena, cell));
+                    }
+                }
             }
 
             private RectangleF GetArenaBounds()
             {
                 float margin = 24f;
-                float maxWidth = ClientSize.Width - margin * 2f;
-                float maxHeight = ClientSize.Height - margin * 2f - 30f;
-                float scale = Math.Min(maxWidth / previewArenaSize.X, maxHeight / previewArenaSize.Y);
-
-                SizeF size = new SizeF(previewArenaSize.X * scale, previewArenaSize.Y * scale);
-                return new RectangleF(
-                    (ClientSize.Width - size.Width) / 2f,
-                    16f,
-                    size.Width,
-                    size.Height);
+                float scale = Math.Min((ClientSize.Width - margin * 2f) / ArenaSize.X, (ClientSize.Height - margin * 2f - 30f) / ArenaSize.Y);
+                SizeF size = new(ArenaSize.X * scale, ArenaSize.Y * scale);
+                return new RectangleF((ClientSize.Width - size.Width) / 2f, 16f, size.Width, size.Height);
             }
 
-            private void DrawPlayerStart(Graphics graphics, RectangleF arena)
-            {
-                Vector2 center = new Vector2(previewArenaSize.X / 2f, previewArenaSize.Y / 2f);
-                PointF point = ToScreen(arena, center);
-                using var brush = new SolidBrush(Color.FromArgb(250, 248, 248));
-                using var pen = new Pen(Color.FromArgb(252, 168, 60), 2f);
+            private static PointF ToScreen(RectangleF arena, Vector2 value) => new(arena.Left + value.X / ArenaSize.X * arena.Width, arena.Top + value.Y / ArenaSize.Y * arena.Height);
 
-                RectangleF bounds = new RectangleF(point.X - 9f, point.Y - 9f, 18f, 18f);
-                graphics.FillEllipse(brush, bounds);
-                graphics.DrawEllipse(pen, bounds);
-                graphics.DrawString("Player", Font, brush, new PointF(point.X + 12f, point.Y - 8f));
+            private static RectangleF ToScreen(RectangleF arena, RectangleF value)
+            {
+                PointF tl = ToScreen(arena, new Vector2(value.Left, value.Top));
+                PointF br = ToScreen(arena, new Vector2(value.Right, value.Bottom));
+                return RectangleF.FromLTRB(tl.X, tl.Y, br.X, br.Y);
             }
 
-            private void DrawSpawnGroup(Graphics graphics, RectangleF arena, WaveDefinition wave, SpawnGroupDefinition group, int groupIndex, float emphasis)
+            private static Color ParseColor(string hex)
             {
-                IReadOnlyList<Vector2> offsets = LevelMath.GetFormationOffsets(group.Formation, group.Count, group.Spacing);
-                Color baseColor = GetGroupColor(group.ArchetypeId, emphasis);
-                using var pathPen = new Pen(Color.FromArgb((int)(100 * emphasis), baseColor), emphasis < 0.8f ? 1.4f : 2.2f);
-                using var anchorBrush = new SolidBrush(Color.FromArgb((int)(180 * emphasis), baseColor));
-                using var spawnBrush = new SolidBrush(Color.FromArgb((int)(120 * emphasis), baseColor));
-                using var unitBrush = new SolidBrush(Color.FromArgb((int)(230 * emphasis), baseColor));
-
-                float groupElapsed = CurrentTimeSeconds - wave.StartSeconds;
-                bool isActive = groupElapsed >= 0f;
-                float progress = group.TravelDuration <= 0.01f
-                    ? 1f
-                    : Math.Clamp(groupElapsed / group.TravelDuration, 0f, 1f);
-
-                for (int i = 0; i < offsets.Count; i++)
-                {
-                    Vector2 offset = offsets[i];
-                    Vector2 anchor = LevelMath.GetAnchorPoint(previewArenaSize, group.AnchorX, group.AnchorY, offset);
-                    Vector2 spawn = LevelMath.GetSpawnPoint(group.EntrySide, previewArenaSize, anchor, offset, 90f);
-                    PointF anchorPoint = ToScreen(arena, anchor);
-                    PointF spawnPoint = ToScreen(arena, spawn);
-
-                    graphics.FillEllipse(anchorBrush, anchorPoint.X - 4f, anchorPoint.Y - 4f, 8f, 8f);
-                    graphics.FillRectangle(spawnBrush, spawnPoint.X - 3f, spawnPoint.Y - 3f, 6f, 6f);
-
-                    PointF? lastPoint = null;
-                    for (int sample = 0; sample <= 20; sample++)
-                    {
-                        float sampleProgress = sample / 20f;
-                        Vector2 pathPosition = LevelMath.SamplePreviewPath(group.PathType, spawn, anchor, sampleProgress, i);
-                        PointF point = ToScreen(arena, pathPosition);
-                        if (lastPoint.HasValue)
-                            graphics.DrawLine(pathPen, lastPoint.Value, point);
-                        lastPoint = point;
-                    }
-
-                    if (!isActive)
-                        continue;
-
-                    Vector2 current = LevelMath.SamplePreviewPath(group.PathType, spawn, anchor, progress, i);
-                    PointF currentPoint = ToScreen(arena, current);
-                    float radius = GetUnitRadius(group.ArchetypeId);
-                    graphics.FillEllipse(unitBrush, currentPoint.X - radius, currentPoint.Y - radius, radius * 2f, radius * 2f);
-                }
-            }
-
-            private void DrawBossPreview(Graphics graphics, RectangleF arena, BossDefinition boss)
-            {
-                Vector2 anchor = LevelMath.GetAnchorPoint(previewArenaSize, boss.AnchorX, boss.AnchorY, Vector2.Zero);
-                Vector2 spawn = LevelMath.GetSpawnPoint(boss.EntrySide, previewArenaSize, anchor, Vector2.Zero, 120f);
-                float lastWaveEnd = Level.Waves.Count == 0 ? 0f : Level.Waves.Max(x => x.StartSeconds + x.Groups.Max(g => g.TravelDuration));
-                float bossStart = lastWaveEnd + 2f;
-                float progress = Math.Clamp((CurrentTimeSeconds - bossStart) / 3f, 0f, 1f);
-                Vector2 current = Vector2.Lerp(spawn, anchor, progress);
-                PointF spawnPoint = ToScreen(arena, spawn);
-                PointF anchorPoint = ToScreen(arena, anchor);
-                PointF currentPoint = ToScreen(arena, current);
-
-                using var bossPen = new Pen(Color.FromArgb(245, 226, 113, 46), 3f);
-                using var bossBrush = new SolidBrush(Color.FromArgb(220, 226, 113, 46));
-                using var labelBrush = new SolidBrush(Color.FromArgb(232, 255, 243, 228));
-
-                graphics.DrawLine(bossPen, spawnPoint, anchorPoint);
-                float radius = 18f + boss.RenderScale * 6f;
-                graphics.FillEllipse(bossBrush, currentPoint.X - radius, currentPoint.Y - radius, radius * 2f, radius * 2f);
-                graphics.DrawString(string.Concat(boss.DisplayName, " (", boss.HitPoints.ToString(), " HP)"), Font, labelBrush, new PointF(currentPoint.X + radius + 6f, currentPoint.Y - 10f));
-            }
-
-            private Color GetGroupColor(string archetypeId, float emphasis)
-            {
-                Color color = archetypeId switch
-                {
-                    "Walker" => Color.FromArgb(70, 202, 222),
-                    "Interceptor" => Color.FromArgb(250, 209, 72),
-                    "Destroyer" => Color.FromArgb(236, 114, 77),
-                    "Turret" => Color.FromArgb(118, 204, 125),
-                    "Bulwark" => Color.FromArgb(186, 154, 106),
-                    _ => Color.FromArgb(200, 200, 200),
-                };
-
-                return Color.FromArgb(Math.Clamp((int)(255 * emphasis), 80, 255), color);
-            }
-
-            private float GetUnitRadius(string archetypeId)
-            {
-                if (Archetypes != null && Archetypes.TryGetValue(archetypeId, out EnemyArchetypeDefinition archetype))
-                    return Math.Clamp(archetype.CollisionRadius / 3f, 5f, 14f);
-
-                return 8f;
-            }
-
-            private static PointF ToScreen(RectangleF arena, Vector2 value)
-            {
-                return new PointF(
-                    arena.Left + value.X / previewArenaSize.X * arena.Width,
-                    arena.Top + value.Y / previewArenaSize.Y * arena.Height);
+                try { return ColorTranslator.FromHtml(hex); } catch { return Color.White; }
             }
         }
     }
