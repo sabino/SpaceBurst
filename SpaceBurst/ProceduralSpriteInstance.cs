@@ -128,14 +128,30 @@ namespace SpaceBurst
 
         public DamageResult ApplyDamage(Vector2 position, Vector2 worldPoint, float extraScale, DamageMaskDefinition damageMask, int damageAmount)
         {
+            ImpactProfileDefinition impact = damageMask != null ? damageMask.ContactImpact : null;
+            if (impact == null)
+            {
+                impact = new ImpactProfileDefinition
+                {
+                    Kernel = ImpactKernelShape.Diamond3,
+                    BaseCellsRemoved = Math.Max(1, damageMask?.DamageRadius ?? 1),
+                    BonusCellsPerDamage = 1,
+                };
+            }
+
+            return ApplyDamage(position, worldPoint, extraScale, damageMask, impact, damageAmount);
+        }
+
+        public DamageResult ApplyDamage(Vector2 position, Vector2 worldPoint, float extraScale, DamageMaskDefinition damageMask, ImpactProfileDefinition impact, int damageAmount)
+        {
             if (!TryGetCell(position, worldPoint, extraScale, out int cellX, out int cellY))
                 return new DamageResult(0, mask.OccupiedCount, mask.RemainingCoreCount, false);
 
-            var result = DamageMaskMath.ApplyPointDamage(
+            var result = DamageMaskMath.ApplyImpactDamage(
                 mask,
                 cellX,
                 cellY,
-                Math.Max(0, damageMask.DamageRadius),
+                impact,
                 Math.Max(1, damageAmount),
                 damageMask.IntegrityThresholdPercent);
 

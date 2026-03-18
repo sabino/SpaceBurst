@@ -42,6 +42,11 @@ namespace SpaceBurst
             get { return archetype.ScoreValue; }
         }
 
+        public string ArchetypeId
+        {
+            get { return archetype.Id; }
+        }
+
         public float IntegrityRatio
         {
             get
@@ -100,16 +105,20 @@ namespace SpaceBurst
 
         public virtual void ApplyBulletHit(Bullet bullet, Vector2 impactPoint)
         {
-            DamageResult result = sprite.ApplyDamage(Position, impactPoint, RenderScale, damageMask, Math.Max(1, bullet.Damage));
+            DamageResult result = sprite.ApplyDamage(Position, impactPoint, RenderScale, damageMask, bullet.ImpactProfile, Math.Max(1, bullet.Damage));
             flashTimer = 0.08f;
             color = result.CellsRemoved > 0 ? Color.Lerp(Color.White, Color.OrangeRed, 0.2f) : Color.White;
+            if (result.CellsRemoved > 0)
+                EntityManager.SpawnImpactParticles(impactPoint, ColorUtil.ParseHex(archetype.Sprite.AccentColor, Color.Orange), bullet.ImpactProfile.DebrisBurstCount, bullet.ImpactProfile.DebrisSpeed, -bullet.Velocity * 0.08f);
             if (result.Destroyed)
                 Destroy();
         }
 
         public virtual void ApplyContactHit(Vector2 impactPoint, int contactDamage)
         {
-            DamageResult result = sprite.ApplyDamage(Position, impactPoint, RenderScale, damageMask, Math.Max(1, contactDamage));
+            DamageResult result = sprite.ApplyDamage(Position, impactPoint, RenderScale, damageMask, damageMask.ContactImpact, Math.Max(1, contactDamage));
+            if (result.CellsRemoved > 0)
+                EntityManager.SpawnImpactParticles(impactPoint, ColorUtil.ParseHex(archetype.Sprite.AccentColor, Color.OrangeRed), damageMask.ContactImpact.DebrisBurstCount, damageMask.ContactImpact.DebrisSpeed, Vector2.Zero);
             if (result.Destroyed)
                 Destroy();
         }
@@ -128,9 +137,14 @@ namespace SpaceBurst
                 return;
 
             IsExpired = true;
+            EntityManager.SpawnImpactParticles(Position, ColorUtil.ParseHex(archetype.Sprite.AccentColor, Color.OrangeRed), 18 + (IsBoss ? 18 : 0), 180f, new Vector2(-80f, 0f));
             Sound.Explosion.Play(0.45f, Random.NextFloat(-0.2f, 0.2f), 0);
             PlayerStatus.AddPoints(PointValue);
             PlayerStatus.IncreaseMultiplier();
+
+            float bonusChance = Game1.Instance != null ? Game1.Instance.CurrentPowerDropBonusChance : 0f;
+            if (archetype.PowerupEligible && PlayerStatus.RunProgress.Powerups.ShouldDrop(Random, bonusChance, archetype.PowerupWeight, IsBoss))
+                EntityManager.Add(new PowerupPickup(Position));
         }
 
         protected virtual void UpdateMovement(float deltaSeconds)
@@ -214,7 +228,17 @@ namespace SpaceBurst
                 direction.Normalize();
 
             Vector2 spawnPoint = Position + direction * (ApproximateRadius * 0.75f);
-            EntityManager.Add(new Bullet(spawnPoint, direction * 420f, false, Math.Max(1, damageMask.ProjectileDamage)));
+            EntityManager.Add(new Bullet(
+                spawnPoint,
+                direction * 420f,
+                false,
+                Math.Max(1, damageMask.ProjectileDamage),
+                damageMask.ContactImpact,
+                Element.EnemyBulletDefinition,
+                0,
+                3.2f,
+                0f,
+                1f));
             Sound.Shot.Play(0.08f, Random.NextFloat(-0.25f, 0.25f), -0.2f);
         }
     }

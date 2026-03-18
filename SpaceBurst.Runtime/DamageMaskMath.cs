@@ -161,6 +161,61 @@ namespace SpaceBurst.RuntimeData
             return new DamageResult(removed, grid.OccupiedCount, grid.RemainingCoreCount, destroyed);
         }
 
+        public static DamageResult ApplyImpactDamage(MaskGrid grid, int centerX, int centerY, ImpactProfileDefinition impact, int damageAmount, int integrityThresholdPercent)
+        {
+            if (grid == null || impact == null || damageAmount <= 0)
+                return new DamageResult(0, grid?.OccupiedCount ?? 0, grid?.RemainingCoreCount ?? 0, false);
+
+            int removed = 0;
+            int targetCells = Math.Max(1, impact.BaseCellsRemoved + Math.Max(0, damageAmount - 1) * impact.BonusCellsPerDamage);
+            int kernelRadius = GetKernelRadius(impact.Kernel);
+            var kernelCandidates = CollectKernelCandidates(grid, centerX, centerY, impact.Kernel);
+
+            for (int i = 0; i < kernelCandidates.Count && removed < targetCells; i++)
+            {
+                CellCandidate candidate = kernelCandidates[i];
+                if (!grid.IsOccupied(candidate.X, candidate.Y))
+                    continue;
+
+                grid.RemoveCell(candidate.X, candidate.Y);
+                removed++;
+            }
+
+            while (removed < targetCells)
+            {
+                CellCandidate? candidate = FindNearestOccupiedCell(grid, centerX, centerY, kernelRadius + 1);
+                if (!candidate.HasValue)
+                    break;
+
+                grid.RemoveCell(candidate.Value.X, candidate.Value.Y);
+                removed++;
+            }
+
+            if (impact.SplashRadius > 0 && impact.SplashPercent > 0)
+            {
+                int splashCells = (int)Math.Ceiling(targetCells * impact.SplashPercent / 100f);
+                int splashRemoved = 0;
+                while (splashRemoved < splashCells)
+                {
+                    CellCandidate? splashCandidate = FindBestCandidateWithinRadius(
+                        grid,
+                        centerX,
+                        centerY,
+                        impact.SplashRadius,
+                        (x, y) => !IsInKernel(impact.Kernel, centerX, centerY, x, y));
+                    if (!splashCandidate.HasValue)
+                        break;
+
+                    grid.RemoveCell(splashCandidate.Value.X, splashCandidate.Value.Y);
+                    splashRemoved++;
+                    removed++;
+                }
+            }
+
+            bool destroyed = IsDestroyed(grid, integrityThresholdPercent);
+            return new DamageResult(removed, grid.OccupiedCount, grid.RemainingCoreCount, destroyed);
+        }
+
         public static bool Overlaps(MaskGrid left, int leftX, int leftY, MaskGrid right, int rightX, int rightY)
         {
             if (left == null || right == null)
@@ -247,6 +302,101 @@ namespace SpaceBurst.RuntimeData
             }
 
             return null;
+        }
+
+        private static CellCandidate? FindBestCandidateWithinRadius(MaskGrid grid, int centerX, int centerY, int radius, Func<int, int, bool> filter)
+        {
+            var candidates = new List<CellCandidate>();
+            for (int y = centerY - radius; y <= centerY + radius; y++)
+            {
+                for (int x = centerX - radius; x <= centerX + radius; x++)
+                {
+                    if (!grid.IsOccupied(x, y))
+                        continue;
+
+                    int distanceSquared = (x - centerX) * (x - centerX) + (y - centerY) * (y - centerY);
+                    if (distanceSquared > radius * radius)
+                        continue;
+                    if (filter != null && !filter(x, y))
+                        continue;
+
+                    candidates.Add(new CellCandidate(x, y, distanceSquared, grid.IsCore(x, y)));
+                }
+            }
+
+            if (candidates.Count == 0)
+                return null;
+
+            candidates.Sort((left, right) =>
+            {
+                int coreComparison = left.IsCore.CompareTo(right.IsCore);
+                if (coreComparison != 0)
+                    return coreComparison;
+
+                return left.DistanceSquared.CompareTo(right.DistanceSquared);
+            });
+
+            return candidates[0];
+        }
+
+        private static List<CellCandidate> CollectKernelCandidates(MaskGrid grid, int centerX, int centerY, ImpactKernelShape kernel)
+        {
+            var candidates = new List<CellCandidate>();
+            int radius = GetKernelRadius(kernel);
+            for (int y = centerY - radius; y <= centerY + radius; y++)
+            {
+                for (int x = centerX - radius; x <= centerX + radius; x++)
+                {
+                    if (!grid.IsOccupied(x, y) || !IsInKernel(kernel, centerX, centerY, x, y))
+                        continue;
+
+                    int distanceSquared = (x - centerX) * (x - centerX) + (y - centerY) * (y - centerY);
+                    candidates.Add(new CellCandidate(x, y, distanceSquared, grid.IsCore(x, y)));
+                }
+            }
+
+            candidates.Sort((left, right) =>
+            {
+                int coreComparison = left.IsCore.CompareTo(right.IsCore);
+                if (coreComparison != 0)
+                    return coreComparison;
+
+                return left.DistanceSquared.CompareTo(right.DistanceSquared);
+            });
+            return candidates;
+        }
+
+        private static bool IsInKernel(ImpactKernelShape kernel, int centerX, int centerY, int x, int y)
+        {
+            int dx = Math.Abs(x - centerX);
+            int dy = Math.Abs(y - centerY);
+            switch (kernel)
+            {
+                case ImpactKernelShape.Point:
+                    return dx == 0 && dy == 0;
+                case ImpactKernelShape.Cross3:
+                    return dx + dy <= 1 && (dx == 0 || dy == 0);
+                case ImpactKernelShape.Diamond5:
+                    return dx + dy <= 2;
+                case ImpactKernelShape.Blast5:
+                    return dx * dx + dy * dy <= 4;
+                default:
+                    return dx + dy <= 1;
+            }
+        }
+
+        private static int GetKernelRadius(ImpactKernelShape kernel)
+        {
+            switch (kernel)
+            {
+                case ImpactKernelShape.Point:
+                    return 0;
+                case ImpactKernelShape.Diamond5:
+                case ImpactKernelShape.Blast5:
+                    return 2;
+                default:
+                    return 1;
+            }
         }
 
         private readonly struct CellCandidate

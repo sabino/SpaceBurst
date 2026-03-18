@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Media;
+using SpaceBurst.RuntimeData;
 using System;
 
 namespace SpaceBurst
@@ -11,6 +12,7 @@ namespace SpaceBurst
         private const int VirtualBaseHeight = 720;
 
         public static Game1 Instance { get; private set; }
+        public static Texture2D UiPixel { get { return Instance != null ? Instance.uiPixel : null; } }
         public static int VirtualWidth { get { return Instance != null ? Instance.virtualWidth : VirtualBaseWidth; } }
         public static int VirtualHeight { get { return Instance != null ? Instance.virtualHeight : VirtualBaseHeight; } }
         public static Viewport Viewport { get { return new Viewport(0, 0, VirtualWidth, VirtualHeight); } }
@@ -24,6 +26,7 @@ namespace SpaceBurst
         private Matrix scaleMatrix;
         private CampaignDirector campaignDirector;
         private Texture2D uiPixel;
+        private Texture2D radialTexture;
         private int virtualWidth = VirtualBaseWidth;
         private int virtualHeight = VirtualBaseHeight;
 
@@ -44,6 +47,31 @@ namespace SpaceBurst
         public int CurrentBackgroundSeed
         {
             get { return campaignDirector != null ? campaignDirector.CurrentBackgroundSeed : 1; }
+        }
+
+        public BackgroundMoodDefinition CurrentBackgroundMood
+        {
+            get { return campaignDirector != null ? campaignDirector.CurrentBackgroundMood : new BackgroundMoodDefinition(); }
+        }
+
+        public float CurrentDifficultyFactor
+        {
+            get { return campaignDirector != null ? campaignDirector.CurrentDifficultyFactor : 0f; }
+        }
+
+        public RandomEventType ActiveEventType
+        {
+            get { return campaignDirector != null ? campaignDirector.ActiveEventType : RandomEventType.None; }
+        }
+
+        public float ActiveEventIntensity
+        {
+            get { return campaignDirector != null ? campaignDirector.ActiveEventIntensity : 0f; }
+        }
+
+        public float CurrentPowerDropBonusChance
+        {
+            get { return campaignDirector != null ? campaignDirector.CurrentPowerDropBonusChance : 0f; }
         }
 
         public Game1()
@@ -72,11 +100,12 @@ namespace SpaceBurst
         protected override void LoadContent()
         {
             spriteBatch = new SpriteBatch(GraphicsDevice);
-            Element.Load(Content);
+            Element.Load();
             Sound.Load(Content);
 
             uiPixel = new Texture2D(GraphicsDevice, 1, 1);
             uiPixel.SetData(new[] { Color.White });
+            radialTexture = CreateRadialTexture(128);
 
 #if ANDROID
             touchControlTexture = CreateControlTexture(128);
@@ -136,53 +165,16 @@ namespace SpaceBurst
 
         private void DrawBackground(SpriteBatch spriteBatch, Texture2D pixel)
         {
-            Color backColor;
-            Color midColor;
-            Color accentColor;
-
-            switch (CurrentTheme)
-            {
-                case "Solar":
-                    backColor = new Color(16, 10, 16);
-                    midColor = new Color(60, 32, 28);
-                    accentColor = new Color(255, 164, 93);
-                    break;
-
-                case "Ion":
-                    backColor = new Color(10, 18, 24);
-                    midColor = new Color(16, 46, 62);
-                    accentColor = new Color(94, 216, 255);
-                    break;
-
-                default:
-                    backColor = new Color(10, 14, 22);
-                    midColor = new Color(26, 34, 52);
-                    accentColor = new Color(156, 126, 255);
-                    break;
-            }
-
-            spriteBatch.Draw(pixel, new Rectangle(0, 0, VirtualWidth, VirtualHeight), backColor);
-            spriteBatch.Draw(pixel, new Rectangle(0, (int)(VirtualHeight * 0.66f), VirtualWidth, (int)(VirtualHeight * 0.34f)), midColor * 0.5f);
-            spriteBatch.Draw(pixel, new Rectangle((int)(VirtualWidth * 0.1f), 0, (int)(VirtualWidth * 0.3f), VirtualHeight), Color.White * 0.02f);
-
-            DrawStarLayer(spriteBatch, pixel, 0.18f, 84, accentColor * 0.45f, 1);
-            DrawStarLayer(spriteBatch, pixel, 0.34f, 56, Color.White * 0.35f, 2);
-            DrawStarLayer(spriteBatch, pixel, 0.58f, 30, accentColor * 0.75f, 3);
-        }
-
-        private void DrawStarLayer(SpriteBatch spriteBatch, Texture2D pixel, float parallax, int count, Color color, int size)
-        {
-            float time = (float)GameTime.TotalGameTime.TotalSeconds;
-            float offset = (time * CurrentScrollSpeed * parallax) % (VirtualWidth + 64f);
-
-            for (int i = 0; i < count; i++)
-            {
-                float seed = i * 131 + CurrentBackgroundSeed * 47;
-                float baseX = (seed * 19f) % (VirtualWidth + 96f);
-                float x = VirtualWidth + 48f - ((baseX + offset) % (VirtualWidth + 96f));
-                float y = 36f + ((seed * 53f) % (VirtualHeight - 72f));
-                spriteBatch.Draw(pixel, new Rectangle((int)x, (int)y, size, size), color);
-            }
+            BackgroundRenderer.Draw(
+                spriteBatch,
+                pixel,
+                radialTexture,
+                CurrentBackgroundMood,
+                CurrentBackgroundSeed,
+                CurrentScrollSpeed,
+                CurrentDifficultyFactor,
+                ActiveEventType,
+                ActiveEventIntensity);
         }
 
         private void RecalculateScaleMatrix()
@@ -210,7 +202,55 @@ namespace SpaceBurst
         }
 
 #if ANDROID
+        private Texture2D CreateRadialTexture(int size)
+        {
+            var texture = new Texture2D(GraphicsDevice, size, size);
+            var data = new Color[size * size];
+            float radius = (size - 1) / 2f;
+            var center = new Vector2(radius);
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float distance = Vector2.Distance(new Vector2(x, y), center);
+                    if (distance > radius)
+                        continue;
+
+                    float alpha = 1f - distance / radius;
+                    data[y * size + x] = Color.White * alpha * alpha;
+                }
+            }
+
+            texture.SetData(data);
+            return texture;
+        }
+
         private Texture2D CreateControlTexture(int size)
+        {
+            var texture = new Texture2D(GraphicsDevice, size, size);
+            var data = new Color[size * size];
+            float radius = (size - 1) / 2f;
+            var center = new Vector2(radius);
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float distance = Vector2.Distance(new Vector2(x, y), center);
+                    if (distance > radius)
+                        continue;
+
+                    float alpha = 1f - distance / radius;
+                    data[y * size + x] = Color.White * alpha * alpha;
+                }
+            }
+
+            texture.SetData(data);
+            return texture;
+        }
+#else
+        private Texture2D CreateRadialTexture(int size)
         {
             var texture = new Texture2D(GraphicsDevice, size, size);
             var data = new Color[size * size];

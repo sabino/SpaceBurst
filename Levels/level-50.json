@@ -1,138 +1,217 @@
 {
-    "StageNumber":  50,
-    "Name":  "Boss 50: Final Core",
-    "IntroSeconds":  1.45,
-    "ScrollSpeed":  215,
-    "Theme":  "Ion",
-    "BackgroundSeed":  350,
-    "CheckpointMarkers":  [
-                              25.75
-                          ],
-    "Sections":  [
-                     {
-                         "Label":  "Warmup 1",
-                         "StartSeconds":  0.75,
-                         "DurationSeconds":  11.5,
-                         "Checkpoint":  false,
-                         "Groups":  [
-                                        {
-                                            "ArchetypeId":  "Interceptor",
-                                            "StartSeconds":  0,
-                                            "Lane":  0,
-                                            "Count":  9,
-                                            "SpawnLeadDistance":  260,
-                                            "SpawnIntervalSeconds":  0.18,
-                                            "SpacingX":  76,
-                                            "SpeedMultiplier":  1.3,
-                                            "MovePatternOverride":  "SineWave",
-                                            "FirePatternOverride":  "None",
-                                            "Amplitude":  52,
-                                            "Frequency":  1.15
-                                        },
-                                        {
-                                            "ArchetypeId":  "Destroyer",
-                                            "StartSeconds":  4.6,
-                                            "Lane":  2,
-                                            "Count":  7,
-                                            "SpawnLeadDistance":  320,
-                                            "SpawnIntervalSeconds":  0.28,
-                                            "SpacingX":  108,
-                                            "SpeedMultiplier":  1.2,
-                                            "MovePatternOverride":  "Dive",
-                                            "FirePatternOverride":  "ForwardPulse",
-                                            "Amplitude":  48,
-                                            "Frequency":  0.9
-                                        }
-                                    ]
-                     },
-                     {
-                         "Label":  "Warmup 2",
-                         "StartSeconds":  13.25,
-                         "DurationSeconds":  11.5,
-                         "Checkpoint":  false,
-                         "Groups":  [
-                                        {
-                                            "ArchetypeId":  "Interceptor",
-                                            "StartSeconds":  0,
-                                            "Lane":  1,
-                                            "Count":  10,
-                                            "SpawnLeadDistance":  260,
-                                            "SpawnIntervalSeconds":  0.18,
-                                            "SpacingX":  76,
-                                            "SpeedMultiplier":  1.3,
-                                            "MovePatternOverride":  "SineWave",
-                                            "FirePatternOverride":  "None",
-                                            "Amplitude":  64,
-                                            "Frequency":  1.15
-                                        },
-                                        {
-                                            "ArchetypeId":  "Carrier",
-                                            "StartSeconds":  4.6,
-                                            "Lane":  3,
-                                            "Count":  7,
-                                            "SpawnLeadDistance":  320,
-                                            "SpawnIntervalSeconds":  0.28,
-                                            "SpacingX":  108,
-                                            "SpeedMultiplier":  1.2,
-                                            "MovePatternOverride":  "TurretCarrier",
-                                            "FirePatternOverride":  "ForwardPulse",
-                                            "Amplitude":  48,
-                                            "Frequency":  0.9
-                                        }
-                                    ]
-                     },
-                     {
-                         "Label":  "Warmup 3",
-                         "StartSeconds":  25.75,
-                         "DurationSeconds":  11.5,
-                         "Checkpoint":  true,
-                         "Groups":  [
-                                        {
-                                            "ArchetypeId":  "Interceptor",
-                                            "StartSeconds":  0,
-                                            "Lane":  2,
-                                            "Count":  11,
-                                            "SpawnLeadDistance":  260,
-                                            "SpawnIntervalSeconds":  0.18,
-                                            "SpacingX":  76,
-                                            "SpeedMultiplier":  1.3,
-                                            "MovePatternOverride":  "SineWave",
-                                            "FirePatternOverride":  "None",
-                                            "Amplitude":  76,
-                                            "Frequency":  1.15
-                                        },
-                                        {
-                                            "ArchetypeId":  "Destroyer",
-                                            "StartSeconds":  4.6,
-                                            "Lane":  4,
-                                            "Count":  7,
-                                            "SpawnLeadDistance":  320,
-                                            "SpawnIntervalSeconds":  0.28,
-                                            "SpacingX":  108,
-                                            "SpeedMultiplier":  1.2,
-                                            "MovePatternOverride":  "Dive",
-                                            "FirePatternOverride":  "ForwardPulse",
-                                            "Amplitude":  48,
-                                            "Frequency":  0.9
-                                        }
-                                    ]
-                     }
-                 ],
-    "Boss":  {
-                 "Type":  "FinalBoss",
-                 "DisplayName":  "Final Core",
-                 "ArchetypeId":  "BossFinal",
-                 "IntroSeconds":  1.4,
-                 "TargetY":  0.5,
-                 "ArenaScrollSpeed":  42,
-                 "HitPoints":  135,
-                 "PhaseThresholds":  [
-                                         0.84,
-                                         0.6,
-                                         0.36,
-                                         0.18
-                                     ],
-                 "MovePattern":  "BossOrbit",
-                 "FirePattern":  "BossFan"
-             }
+  "StageNumber": 50,
+  "Name": "Boss 50: Final Core",
+  "IntroSeconds": 1.45,
+  "ScrollSpeed": 215,
+  "Theme": "Ion",
+  "BackgroundSeed": 350,
+  "StartingLives": 3,
+  "ShipsPerLife": 2,
+  "BackgroundMood": {
+    "PrimaryColor": "#08141F",
+    "SecondaryColor": "#143A4F",
+    "AccentColor": "#6EE7FF",
+    "GlowColor": "#9DF2D1",
+    "StarDensity": 1.2,
+    "DustDensity": 1.1,
+    "LightIntensity": 0.78,
+    "PlanetPresence": 0.4,
+    "Contrast": 0.86
+  },
+  "CheckpointMarkers": [
+    25.75
+  ],
+  "Sections": [
+    {
+      "Label": "Warmup 1",
+      "StartSeconds": 0.75,
+      "DurationSeconds": 11.5,
+      "Checkpoint": false,
+      "PowerDropBonusChance": 0.03,
+      "Mood": {
+        "PrimaryColor": "#08141F",
+        "SecondaryColor": "#143A4F",
+        "AccentColor": "#6EE7FF",
+        "GlowColor": "#9DF2D1",
+        "StarDensity": 1.2,
+        "DustDensity": 1.1,
+        "LightIntensity": 0.78,
+        "PlanetPresence": 0.4,
+        "Contrast": 0.86
+      },
+      "EventWindows": [
+        {
+          "EventType": "CometSwarm",
+          "StartSeconds": 2.2,
+          "DurationSeconds": 4.2,
+          "Weight": 1,
+          "Intensity": 1.2
+        }
+      ],
+      "Groups": [
+        {
+          "ArchetypeId": "Interceptor",
+          "StartSeconds": 0,
+          "Lane": 0,
+          "TargetY": null,
+          "Count": 9,
+          "SpawnLeadDistance": 260,
+          "SpawnIntervalSeconds": 0.18,
+          "SpacingX": 76,
+          "SpeedMultiplier": 1.3,
+          "MovePatternOverride": "SineWave",
+          "FirePatternOverride": "None",
+          "Amplitude": 52,
+          "Frequency": 1.15
+        },
+        {
+          "ArchetypeId": "Destroyer",
+          "StartSeconds": 4.6,
+          "Lane": 2,
+          "TargetY": null,
+          "Count": 7,
+          "SpawnLeadDistance": 320,
+          "SpawnIntervalSeconds": 0.28,
+          "SpacingX": 108,
+          "SpeedMultiplier": 1.2,
+          "MovePatternOverride": "Dive",
+          "FirePatternOverride": "ForwardPulse",
+          "Amplitude": 48,
+          "Frequency": 0.9
+        }
+      ]
+    },
+    {
+      "Label": "Warmup 2",
+      "StartSeconds": 13.25,
+      "DurationSeconds": 11.5,
+      "Checkpoint": false,
+      "PowerDropBonusChance": 0.04,
+      "Mood": {
+        "PrimaryColor": "#08141F",
+        "SecondaryColor": "#143A4F",
+        "AccentColor": "#6EE7FF",
+        "GlowColor": "#9DF2D1",
+        "StarDensity": 1.2,
+        "DustDensity": 1.1,
+        "LightIntensity": 0.78,
+        "PlanetPresence": 0.4,
+        "Contrast": 0.86
+      },
+      "EventWindows": [],
+      "Groups": [
+        {
+          "ArchetypeId": "Interceptor",
+          "StartSeconds": 0,
+          "Lane": 1,
+          "TargetY": null,
+          "Count": 10,
+          "SpawnLeadDistance": 260,
+          "SpawnIntervalSeconds": 0.18,
+          "SpacingX": 76,
+          "SpeedMultiplier": 1.3,
+          "MovePatternOverride": "SineWave",
+          "FirePatternOverride": "None",
+          "Amplitude": 64,
+          "Frequency": 1.15
+        },
+        {
+          "ArchetypeId": "Carrier",
+          "StartSeconds": 4.6,
+          "Lane": 3,
+          "TargetY": null,
+          "Count": 7,
+          "SpawnLeadDistance": 320,
+          "SpawnIntervalSeconds": 0.28,
+          "SpacingX": 108,
+          "SpeedMultiplier": 1.2,
+          "MovePatternOverride": "TurretCarrier",
+          "FirePatternOverride": "ForwardPulse",
+          "Amplitude": 48,
+          "Frequency": 0.9
+        }
+      ]
+    },
+    {
+      "Label": "Warmup 3",
+      "StartSeconds": 25.75,
+      "DurationSeconds": 11.5,
+      "Checkpoint": true,
+      "PowerDropBonusChance": 0.05,
+      "Mood": {
+        "PrimaryColor": "#0D1D2B",
+        "SecondaryColor": "#1D536F",
+        "AccentColor": "#9CF6FF",
+        "GlowColor": "#D0FFF0",
+        "StarDensity": 1.3,
+        "DustDensity": 1.15,
+        "LightIntensity": 0.84,
+        "PlanetPresence": 0.35,
+        "Contrast": 0.9
+      },
+      "EventWindows": [],
+      "Groups": [
+        {
+          "ArchetypeId": "Interceptor",
+          "StartSeconds": 0,
+          "Lane": 2,
+          "TargetY": null,
+          "Count": 11,
+          "SpawnLeadDistance": 260,
+          "SpawnIntervalSeconds": 0.18,
+          "SpacingX": 76,
+          "SpeedMultiplier": 1.3,
+          "MovePatternOverride": "SineWave",
+          "FirePatternOverride": "None",
+          "Amplitude": 76,
+          "Frequency": 1.15
+        },
+        {
+          "ArchetypeId": "Destroyer",
+          "StartSeconds": 4.6,
+          "Lane": 4,
+          "TargetY": null,
+          "Count": 7,
+          "SpawnLeadDistance": 320,
+          "SpawnIntervalSeconds": 0.28,
+          "SpacingX": 108,
+          "SpeedMultiplier": 1.2,
+          "MovePatternOverride": "Dive",
+          "FirePatternOverride": "ForwardPulse",
+          "Amplitude": 48,
+          "Frequency": 0.9
+        }
+      ]
+    }
+  ],
+  "Boss": {
+    "Type": "FinalBoss",
+    "DisplayName": "Final Core",
+    "ArchetypeId": "BossFinal",
+    "IntroSeconds": 1.4,
+    "TargetY": 0.5,
+    "ArenaScrollSpeed": 42,
+    "HitPoints": 135,
+    "AllowRandomEvents": false,
+    "PhaseThresholds": [
+      0.84,
+      0.6,
+      0.36,
+      0.18
+    ],
+    "HazardOverrides": [],
+    "MoodOverride": {
+      "PrimaryColor": "#112230",
+      "SecondaryColor": "#24647F",
+      "AccentColor": "#B2F7FF",
+      "GlowColor": "#F7FFF5",
+      "StarDensity": 1.35,
+      "DustDensity": 1,
+      "LightIntensity": 0.92,
+      "PlanetPresence": 0.5,
+      "Contrast": 0.95
+    },
+    "MovePattern": "BossOrbit",
+    "FirePattern": "BossFan"
+  }
 }

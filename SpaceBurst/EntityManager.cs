@@ -10,10 +10,12 @@ namespace SpaceBurst
         private static List<Entity> entities = new List<Entity>();
         private static List<Enemy> enemies = new List<Enemy>();
         private static List<Bullet> bullets = new List<Bullet>();
+        private static List<PowerupPickup> powerups = new List<PowerupPickup>();
         private static List<Entity> addedEntities = new List<Entity>();
 
         private static bool isUpdating;
         private static bool queuedPlayerHullDestruction;
+        private static readonly System.Random random = new System.Random();
 
         public static IEnumerable<Enemy> Enemies
         {
@@ -46,6 +48,7 @@ namespace SpaceBurst
             entities.Clear();
             enemies.Clear();
             bullets.Clear();
+            powerups.Clear();
             addedEntities.Clear();
             isUpdating = false;
             queuedPlayerHullDestruction = false;
@@ -88,6 +91,7 @@ namespace SpaceBurst
             entities = entities.Where(x => !x.IsExpired).ToList();
             enemies = enemies.Where(x => !x.IsExpired).ToList();
             bullets = bullets.Where(x => !x.IsExpired).ToList();
+            powerups = powerups.Where(x => !x.IsExpired).ToList();
         }
 
         public static bool ConsumePlayerHullDestruction()
@@ -115,12 +119,15 @@ namespace SpaceBurst
                 enemies.Add(enemy);
             else if (entity is Bullet bullet)
                 bullets.Add(bullet);
+            else if (entity is PowerupPickup powerup)
+                powerups.Add(powerup);
         }
 
         private static void HandleCollisions()
         {
             HandlePlayerAndEnemies();
             HandleBullets();
+            HandlePowerups();
         }
 
         private static void HandlePlayerAndEnemies()
@@ -180,7 +187,7 @@ namespace SpaceBurst
                 if (bullet.TryGetImpactPoint(enemy, out Vector2 impactPoint))
                 {
                     enemy.ApplyBulletHit(bullet, impactPoint);
-                    bullet.IsExpired = true;
+                    bullet.RegisterImpact();
                     return;
                 }
             }
@@ -198,7 +205,38 @@ namespace SpaceBurst
                     queuedPlayerHullDestruction = true;
 
                 Player1.Instance.ApplyKnockback(Player1.Instance.Position - impactPoint, 220f);
-                bullet.IsExpired = true;
+                bullet.RegisterImpact();
+            }
+        }
+
+        private static void HandlePowerups()
+        {
+            if (Player1.Instance.IsDead)
+                return;
+
+            for (int i = 0; i < powerups.Count; i++)
+            {
+                PowerupPickup powerup = powerups[i];
+                if (powerup.IsExpired)
+                    continue;
+
+                if (powerup.OverlapsPlayer())
+                {
+                    Player1.Instance.CollectPowerup();
+                    powerup.IsExpired = true;
+                }
+            }
+        }
+
+        public static void SpawnImpactParticles(Vector2 position, Color color, int count, float speed, Vector2 bias)
+        {
+            int safeCount = System.Math.Max(0, count);
+            for (int i = 0; i < safeCount; i++)
+            {
+                float angle = (float)(random.NextDouble() * MathHelper.TwoPi);
+                Vector2 direction = new Vector2((float)System.Math.Cos(angle), (float)System.Math.Sin(angle));
+                Vector2 velocity = direction * speed * (0.35f + (float)random.NextDouble() * 0.75f) + bias;
+                Add(new ImpactParticle(position, velocity, color, 3f + (float)random.NextDouble() * 3f, 0.2f + (float)random.NextDouble() * 0.28f));
             }
         }
 

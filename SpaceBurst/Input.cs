@@ -82,6 +82,21 @@ namespace SpaceBurst
             return WasKeyPressed(Keys.Escape) || WasButtonPressed(Buttons.Back) || WasButtonPressed(Buttons.B);
         }
 
+        public static bool WasHelpPressed()
+        {
+            return WasKeyPressed(Keys.F1) || WasKeyPressed(Keys.Tab) || WasButtonPressed(Buttons.Y);
+        }
+
+        public static bool WasPreviousStylePressed()
+        {
+            return WasKeyPressed(Keys.Q) || WasButtonPressed(Buttons.LeftShoulder);
+        }
+
+        public static bool WasNextStylePressed()
+        {
+            return WasKeyPressed(Keys.E) || WasButtonPressed(Buttons.RightShoulder);
+        }
+
         public static bool WasNavigateUpPressed()
         {
             return WasKeyPressed(Keys.Up) || WasKeyPressed(Keys.W) || WasButtonPressed(Buttons.DPadUp);
@@ -116,11 +131,11 @@ namespace SpaceBurst
 
             Vector2 direction = gamepadState.ThumbSticks.Left;
             direction.Y *= -1f;
-            if (direction.X > 0f)
-                direction.X = 0f;
 
             if (keyboardState.IsKeyDown(Keys.A))
                 direction.X -= 1f;
+            if (keyboardState.IsKeyDown(Keys.D))
+                direction.X += 1f;
             if (keyboardState.IsKeyDown(Keys.W))
                 direction.Y -= 1f;
             if (keyboardState.IsKeyDown(Keys.S))
@@ -128,9 +143,6 @@ namespace SpaceBurst
 
             if (direction.LengthSquared() > 1f)
                 direction.Normalize();
-
-            if (direction.X > 0f)
-                direction.X = 0f;
 
             return direction;
         }

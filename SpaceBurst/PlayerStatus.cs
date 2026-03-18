@@ -1,51 +1,69 @@
+using SpaceBurst.RuntimeData;
 using System;
 using System.IO;
 
 namespace SpaceBurst
 {
+    enum PlayerDeathOutcome
+    {
+        RespawnInPlace,
+        RestartStage,
+        GameOver,
+    }
+
     static class PlayerStatus
     {
         private const float multiplierExpiryTime = 1.2f;
         private const int maxMultiplier = 20;
-        private const int campaignStartingLives = 4;
         private const int extraLifeScoreStep = 3000;
 
         public static int Lives { get; private set; }
+        public static int Ships { get; private set; }
         public static int Score { get; private set; }
         public static int HighScore { get; private set; }
         public static int Multiplier { get; private set; }
         public static bool IsGameOver { get { return Lives <= 0; } }
+        public static PlayerRunProgress RunProgress { get; } = new PlayerRunProgress();
 
-        private static float multiplierTimeLeft;    // time until the current multiplier expires
-        private static int scoreForExtraLife;       // score required to gain an extra life
+        private static float multiplierTimeLeft;
+        private static int scoreForExtraLife;
 
         private static readonly string highScoreFilename = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "SpaceBurst",
             "highscore.txt");
 
-        // Static constructor
         static PlayerStatus()
         {
             HighScore = LoadHighScore();
-            BeginCampaign();
+            BeginCampaign(null);
         }
 
-        public static void BeginCampaign()
+        public static void BeginCampaign(StageDefinition openingStage)
         {
+            RunProgress.BeginCampaign(openingStage);
             Score = 0;
             Multiplier = 1;
-            Lives = campaignStartingLives;
+            Lives = RunProgress.StartingLives;
+            Ships = RunProgress.ShipsPerLife;
             scoreForExtraLife = extraLifeScoreStep;
-            multiplierTimeLeft = 0;
+            multiplierTimeLeft = 0f;
+        }
+
+        public static void PrepareStage(StageDefinition stage, bool resetLives)
+        {
+            RunProgress.ApplyStageDefaults(stage);
+            if (resetLives)
+                Lives = RunProgress.StartingLives;
+
+            Ships = RunProgress.ShipsPerLife;
         }
 
         public static void Update()
         {
             if (Multiplier > 1)
             {
-                // update the multiplier timer
-                if ((multiplierTimeLeft -= (float)Game1.GameTime.ElapsedGameTime.TotalSeconds) <= 0)
+                if ((multiplierTimeLeft -= (float)Game1.GameTime.ElapsedGameTime.TotalSeconds) <= 0f)
                 {
                     multiplierTimeLeft = multiplierExpiryTime;
                     ResetMultiplier();
@@ -81,9 +99,22 @@ namespace SpaceBurst
             Multiplier = 1;
         }
 
-        public static void RemoveLife()
+        public static PlayerDeathOutcome ConsumeDeath(StageDefinition stage)
         {
+            RunProgress.Weapons.ApplyDeathPenalty();
+
+            if (Ships > 0)
+            {
+                Ships--;
+                return PlayerDeathOutcome.RespawnInPlace;
+            }
+
             Lives--;
+            if (Lives <= 0)
+                return PlayerDeathOutcome.GameOver;
+
+            Ships = stage?.ShipsPerLife > 0 ? stage.ShipsPerLife : RunProgress.ShipsPerLife;
+            return PlayerDeathOutcome.RestartStage;
         }
 
         public static void FinalizeRun()
@@ -94,7 +125,6 @@ namespace SpaceBurst
 
         private static int LoadHighScore()
         {
-            // return the saved high score if possible and return 0 otherwise
             int score;
             return File.Exists(highScoreFilename) && int.TryParse(File.ReadAllText(highScoreFilename), out score) ? score : 0;
         }

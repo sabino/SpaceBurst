@@ -51,6 +51,8 @@ namespace SpaceBurst.RuntimeData
                     issues.Add(new ValidationIssue(path, "MovementAmplitude cannot be negative."));
                 if (archetype.MovementFrequency <= 0f)
                     issues.Add(new ValidationIssue(path, "MovementFrequency must be greater than zero."));
+                if (archetype.PowerupWeight < 0f)
+                    issues.Add(new ValidationIssue(path, "PowerupWeight cannot be negative."));
 
                 issues.AddRange(ValidateSpriteDefinition(archetype.Sprite).Select(x => new ValidationIssue(string.Concat(path, ".Sprite/", x.Path), x.Message)));
                 issues.AddRange(ValidateDamageMask(archetype.DamageMask).Select(x => new ValidationIssue(string.Concat(path, ".DamageMask/", x.Path), x.Message)));
@@ -79,6 +81,10 @@ namespace SpaceBurst.RuntimeData
                 issues.Add(new ValidationIssue("ScrollSpeed", "ScrollSpeed must be greater than zero."));
             if (string.IsNullOrWhiteSpace(stage.Theme))
                 issues.Add(new ValidationIssue("Theme", "Theme is required."));
+            if (stage.StartingLives <= 0)
+                issues.Add(new ValidationIssue("StartingLives", "StartingLives must be greater than zero."));
+            if (stage.ShipsPerLife <= 0)
+                issues.Add(new ValidationIssue("ShipsPerLife", "ShipsPerLife must be greater than zero."));
             if (stage.Sections == null || stage.Sections.Count == 0)
                 issues.Add(new ValidationIssue("Sections", "At least one section is required."));
 
@@ -96,6 +102,8 @@ namespace SpaceBurst.RuntimeData
                         issues.Add(new ValidationIssue("CheckpointMarkers", "Checkpoint markers cannot be negative."));
                 }
             }
+
+            issues.AddRange(ValidateBackgroundMood(stage.BackgroundMood).Select(x => new ValidationIssue(string.Concat("BackgroundMood/", x.Path), x.Message)));
 
             if (stage.Sections != null)
             {
@@ -119,8 +127,37 @@ namespace SpaceBurst.RuntimeData
                         issues.Add(new ValidationIssue(sectionPath, "Sections must be ordered by StartSeconds."));
                     if (section.DurationSeconds <= 0.25f)
                         issues.Add(new ValidationIssue(sectionPath, "DurationSeconds must be greater than 0.25."));
+                    if (section.PowerDropBonusChance < 0f || section.PowerDropBonusChance > 1f)
+                        issues.Add(new ValidationIssue(sectionPath, "PowerDropBonusChance must be between 0 and 1."));
                     if (section.Groups == null || section.Groups.Count == 0)
                         issues.Add(new ValidationIssue(sectionPath, "Each section requires at least one spawn group."));
+
+                    issues.AddRange(ValidateBackgroundMood(section.Mood).Select(x => new ValidationIssue(string.Concat(sectionPath, ".Mood/", x.Path), x.Message)));
+
+                    if (section.EventWindows != null)
+                    {
+                        for (int j = 0; j < section.EventWindows.Count; j++)
+                        {
+                            RandomEventWindowDefinition window = section.EventWindows[j];
+                            string eventPath = string.Concat(sectionPath, ".EventWindows[", j.ToString(), "]");
+                            if (window == null)
+                            {
+                                issues.Add(new ValidationIssue(eventPath, "Event window cannot be null."));
+                                continue;
+                            }
+
+                            if (window.EventType == RandomEventType.None)
+                                issues.Add(new ValidationIssue(eventPath, "EventType must be set."));
+                            if (window.StartSeconds < 0f)
+                                issues.Add(new ValidationIssue(eventPath, "StartSeconds cannot be negative."));
+                            if (window.DurationSeconds <= 0f)
+                                issues.Add(new ValidationIssue(eventPath, "DurationSeconds must be greater than zero."));
+                            if (window.Weight <= 0f)
+                                issues.Add(new ValidationIssue(eventPath, "Weight must be greater than zero."));
+                            if (window.Intensity <= 0f)
+                                issues.Add(new ValidationIssue(eventPath, "Intensity must be greater than zero."));
+                        }
+                    }
 
                     lastStart = section.StartSeconds;
 
@@ -270,7 +307,10 @@ namespace SpaceBurst.RuntimeData
                 issues.Add(new ValidationIssue("DamageRadius", "DamageRadius cannot be negative."));
             if (damageMask.IntegrityThresholdPercent < 1 || damageMask.IntegrityThresholdPercent > 100)
                 issues.Add(new ValidationIssue("IntegrityThresholdPercent", "IntegrityThresholdPercent must be between 1 and 100."));
+            if (damageMask.ContactImpulse < 0f)
+                issues.Add(new ValidationIssue("ContactImpulse", "ContactImpulse cannot be negative."));
 
+            issues.AddRange(ValidateImpactProfile(damageMask.ContactImpact).Select(x => new ValidationIssue(string.Concat("ContactImpact/", x.Path), x.Message)));
             return issues;
         }
 
@@ -292,6 +332,9 @@ namespace SpaceBurst.RuntimeData
                 issues.Add(new ValidationIssue("ArenaScrollSpeed", "ArenaScrollSpeed cannot be negative."));
             if (boss.HitPoints <= 0)
                 issues.Add(new ValidationIssue("HitPoints", "HitPoints must be greater than zero."));
+
+            issues.AddRange(ValidateBackgroundMood(boss.MoodOverride).Select(x => new ValidationIssue(string.Concat("MoodOverride/", x.Path), x.Message)));
+
             if (boss.PhaseThresholds == null || boss.PhaseThresholds.Count == 0)
                 issues.Add(new ValidationIssue("PhaseThresholds", "At least one phase threshold is required."));
             else
@@ -308,6 +351,64 @@ namespace SpaceBurst.RuntimeData
                     last = threshold;
                 }
             }
+
+            return issues;
+        }
+
+        private static List<ValidationIssue> ValidateBackgroundMood(BackgroundMoodDefinition mood)
+        {
+            var issues = new List<ValidationIssue>();
+
+            if (mood == null)
+            {
+                issues.Add(new ValidationIssue("Mood", "Mood is required."));
+                return issues;
+            }
+
+            if (string.IsNullOrWhiteSpace(mood.PrimaryColor))
+                issues.Add(new ValidationIssue("PrimaryColor", "PrimaryColor is required."));
+            if (string.IsNullOrWhiteSpace(mood.SecondaryColor))
+                issues.Add(new ValidationIssue("SecondaryColor", "SecondaryColor is required."));
+            if (string.IsNullOrWhiteSpace(mood.AccentColor))
+                issues.Add(new ValidationIssue("AccentColor", "AccentColor is required."));
+            if (string.IsNullOrWhiteSpace(mood.GlowColor))
+                issues.Add(new ValidationIssue("GlowColor", "GlowColor is required."));
+            if (mood.StarDensity <= 0f)
+                issues.Add(new ValidationIssue("StarDensity", "StarDensity must be greater than zero."));
+            if (mood.DustDensity <= 0f)
+                issues.Add(new ValidationIssue("DustDensity", "DustDensity must be greater than zero."));
+            if (mood.LightIntensity < 0f)
+                issues.Add(new ValidationIssue("LightIntensity", "LightIntensity cannot be negative."));
+            if (mood.PlanetPresence < 0f || mood.PlanetPresence > 1.5f)
+                issues.Add(new ValidationIssue("PlanetPresence", "PlanetPresence must be between 0 and 1.5."));
+            if (mood.Contrast < 0f)
+                issues.Add(new ValidationIssue("Contrast", "Contrast cannot be negative."));
+
+            return issues;
+        }
+
+        private static List<ValidationIssue> ValidateImpactProfile(ImpactProfileDefinition impact)
+        {
+            var issues = new List<ValidationIssue>();
+
+            if (impact == null)
+            {
+                issues.Add(new ValidationIssue("Impact", "Impact profile is required."));
+                return issues;
+            }
+
+            if (impact.BaseCellsRemoved <= 0)
+                issues.Add(new ValidationIssue("BaseCellsRemoved", "BaseCellsRemoved must be greater than zero."));
+            if (impact.BonusCellsPerDamage < 0)
+                issues.Add(new ValidationIssue("BonusCellsPerDamage", "BonusCellsPerDamage cannot be negative."));
+            if (impact.SplashRadius < 0)
+                issues.Add(new ValidationIssue("SplashRadius", "SplashRadius cannot be negative."));
+            if (impact.SplashPercent < 0 || impact.SplashPercent > 100)
+                issues.Add(new ValidationIssue("SplashPercent", "SplashPercent must be between 0 and 100."));
+            if (impact.DebrisBurstCount < 0)
+                issues.Add(new ValidationIssue("DebrisBurstCount", "DebrisBurstCount cannot be negative."));
+            if (impact.DebrisSpeed < 0f)
+                issues.Add(new ValidationIssue("DebrisSpeed", "DebrisSpeed cannot be negative."));
 
             return issues;
         }

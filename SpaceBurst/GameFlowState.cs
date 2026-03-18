@@ -3,7 +3,8 @@ namespace SpaceBurst
     enum GameFlowState
     {
         Title,
-        Options,
+        Help,
+        Paused,
         LevelIntro,
         Playing,
         BossWarning,

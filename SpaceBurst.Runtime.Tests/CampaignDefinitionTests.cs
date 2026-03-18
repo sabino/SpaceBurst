@@ -69,6 +69,56 @@ namespace SpaceBurst.Runtime.Tests
             Assert.Equal(8, result.RemainingOccupied);
         }
 
+        [Fact]
+        public void ImpactDamageRemovesMultipleCellsAndSupportsSplash()
+        {
+            var sprite = new ProceduralSpriteDefinition
+            {
+                Rows = new List<string>
+                {
+                    ".......",
+                    "..###..",
+                    ".#####.",
+                    ".##C##.",
+                    ".#####.",
+                    "..###..",
+                    ".......",
+                },
+                VitalCore = new VitalCoreMaskDefinition
+                {
+                    Rows = new List<string>
+                    {
+                        ".......",
+                        ".......",
+                        ".......",
+                        "...X...",
+                        ".......",
+                        ".......",
+                        ".......",
+                    }
+                }
+            };
+
+            MaskGrid mask = DamageMaskMath.CreateGrid(sprite);
+            DamageResult result = DamageMaskMath.ApplyImpactDamage(
+                mask,
+                3,
+                2,
+                new ImpactProfileDefinition
+                {
+                    Kernel = ImpactKernelShape.Blast5,
+                    BaseCellsRemoved = 4,
+                    BonusCellsPerDamage = 1,
+                    SplashRadius = 1,
+                    SplashPercent = 50,
+                },
+                2,
+                25);
+
+            Assert.True(result.CellsRemoved >= 5);
+            Assert.True(result.RemainingOccupied < mask.InitialOccupiedCount);
+        }
+
         private static string FindRepositoryRoot()
         {
             DirectoryInfo directory = new(AppContext.BaseDirectory);

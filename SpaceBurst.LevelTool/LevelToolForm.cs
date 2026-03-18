@@ -19,6 +19,7 @@ namespace SpaceBurst.LevelTool
         private readonly PropertyGrid sectionGrid = new() { Dock = DockStyle.Fill };
         private readonly PropertyGrid groupGrid = new() { Dock = DockStyle.Fill };
         private readonly PropertyGrid bossGrid = new() { Dock = DockStyle.Fill };
+        private readonly PropertyGrid moodGrid = new() { Dock = DockStyle.Fill };
         private readonly ListBox sectionsList = new() { Dock = DockStyle.Fill };
         private readonly ListBox groupsList = new() { Dock = DockStyle.Fill };
         private readonly TextBox validationBox = new() { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
@@ -105,6 +106,7 @@ namespace SpaceBurst.LevelTool
             rightTabs.TabPages.Add(new TabPage("Preview") { Controls = { previewPanel } });
             rightTabs.TabPages.Add(new TabPage("Group") { Controls = { groupGrid } });
             rightTabs.TabPages.Add(new TabPage("Boss") { Controls = { bossGrid } });
+            rightTabs.TabPages.Add(new TabPage("Mood") { Controls = { moodGrid } });
             rightTabs.TabPages.Add(new TabPage("Validation") { Controls = { validationBox } });
             mainSplit.Panel2.Controls.Add(rightTabs);
 
@@ -159,6 +161,7 @@ namespace SpaceBurst.LevelTool
             sectionsList.SelectedIndexChanged += (_, __) =>
             {
                 sectionGrid.SelectedObject = SelectedSection();
+                moodGrid.SelectedObject = SelectedSection()?.Mood ?? currentStage?.BackgroundMood;
                 RefreshGroupList();
                 previewPanel.SelectedSectionIndex = sectionsList.SelectedIndex;
                 RefreshPreview();
@@ -194,6 +197,7 @@ namespace SpaceBurst.LevelTool
             currentFilePath = path;
             stageGrid.SelectedObject = currentStage;
             bossGrid.SelectedObject = currentStage.Boss;
+            moodGrid.SelectedObject = currentStage.BackgroundMood;
             UpdateStageSelectionFromPath(path);
             RefreshSectionList();
             sectionsList.SelectedIndex = currentStage.Sections.Count > 0 ? 0 : -1;
@@ -437,26 +441,46 @@ namespace SpaceBurst.LevelTool
             {
                 base.OnPaint(e);
                 e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                e.Graphics.Clear(Color.FromArgb(18, 18, 26));
+                e.Graphics.Clear(Color.FromArgb(10, 12, 22));
 
                 RectangleF arena = GetArenaBounds();
-                using var arenaBrush = new SolidBrush(Color.FromArgb(22, 28, 40));
+                BackgroundMoodDefinition mood = Stage?.BackgroundMood ?? new BackgroundMoodDefinition();
+                using var arenaBrush = new SolidBrush(ParseColor(mood.PrimaryColor));
                 using var border = new Pen(Color.FromArgb(74, 100, 126), 2f);
                 using var lanePen = new Pen(Color.FromArgb(36, 54, 74), 1f);
-                using var playerWindow = new SolidBrush(Color.FromArgb(26, 90, 132, 180));
+                using var playerWindow = new SolidBrush(Color.FromArgb(38, 90, 132, 180));
+                using var accentBrush = new SolidBrush(Color.FromArgb(42, ParseColor(mood.AccentColor)));
 
                 e.Graphics.FillRectangle(arenaBrush, arena);
-                e.Graphics.FillRectangle(playerWindow, new RectangleF(arena.Left + arena.Width * 0.1f, arena.Top + arena.Height * 0.08f, arena.Width * 0.3f, arena.Height * 0.84f));
+                e.Graphics.FillRectangle(accentBrush, new RectangleF(arena.Left, arena.Top, arena.Width, arena.Height * 0.12f));
+                e.Graphics.FillRectangle(playerWindow, new RectangleF(arena.Left + arena.Width * 0.06f, arena.Top + arena.Height * 0.06f, arena.Width * 0.88f, arena.Height * 0.88f));
                 for (int lane = 0; lane < 5; lane++)
                 {
                     float y = LevelMath.GetLanePosition(ArenaSize, lane);
                     e.Graphics.DrawLine(lanePen, ToScreen(arena, new Vector2(0f, y)), ToScreen(arena, new Vector2(ArenaSize.X, y)));
                 }
                 e.Graphics.DrawRectangle(border, Rectangle.Round(arena));
-                DrawSprite(e.Graphics, arena, new ProceduralSpriteDefinition { PrimaryColor = "#D7F5FF", SecondaryColor = "#5AAFCB", AccentColor = "#FFB347", Rows = new List<string> { "....##......", "..######....", ".##++++##...", "##++CC++##..", "##++++++##..", ".##+**+##...", "..######....", "....##......" } }, new Vector2(ArenaSize.X * 0.22f, ArenaSize.Y * 0.5f), 4f);
+                DrawSprite(e.Graphics, arena, new ProceduralSpriteDefinition
+                {
+                    PrimaryColor = "#D7F5FF",
+                    SecondaryColor = "#5AAFCB",
+                    AccentColor = "#FFB347",
+                    Rows = new List<string>
+                    {
+                        "....##......",
+                        "..######....",
+                        ".##++++##...",
+                        "##++CC++##..",
+                        "##++++++##..",
+                        ".##+**+##...",
+                        "..######....",
+                        "....##......",
+                    }
+                }, new Vector2(ArenaSize.X * 0.18f, ArenaSize.Y * 0.5f), 4f);
 
                 if (Stage != null)
                 {
+                    DrawEventWindows(e.Graphics, arena);
                     for (int i = 0; i < Stage.Sections.Count; i++)
                     {
                         SectionDefinition section = Stage.Sections[i];
@@ -477,8 +501,36 @@ namespace SpaceBurst.LevelTool
                 }
 
                 using var textBrush = new SolidBrush(Color.FromArgb(228, 235, 242));
-                string footer = Stage == null ? "No stage loaded" : $"{Stage.Name}    Scroll {Stage.ScrollSpeed:0}    Time {CurrentTimeSeconds:0.0}s";
+                string footer = Stage == null
+                    ? "No stage loaded"
+                    : $"{Stage.Name}    Scroll {Stage.ScrollSpeed:0}    Lives {Stage.StartingLives}    Ships {Stage.ShipsPerLife}    Time {CurrentTimeSeconds:0.0}s";
                 e.Graphics.DrawString(footer, Font, textBrush, new PointF(arena.Left, arena.Bottom + 8f));
+            }
+
+            private void DrawEventWindows(Graphics graphics, RectangleF arena)
+            {
+                if (Stage == null || Stage.Sections.Count == 0)
+                    return;
+
+                float totalDuration = Math.Max(1f, Stage.Sections.Max(x => x.StartSeconds + x.DurationSeconds));
+                foreach (SectionDefinition section in Stage.Sections)
+                {
+                    if (section.EventWindows == null)
+                        continue;
+
+                    foreach (RandomEventWindowDefinition window in section.EventWindows)
+                    {
+                        float start = (section.StartSeconds + window.StartSeconds) / totalDuration;
+                        float width = Math.Max(0.01f, window.DurationSeconds / totalDuration);
+                        RectangleF bar = new RectangleF(
+                            arena.Left + arena.Width * start,
+                            arena.Bottom - 14f,
+                            arena.Width * width,
+                            10f);
+                        using var brush = new SolidBrush(Color.FromArgb(180, ParseColor(section.Mood?.AccentColor ?? Stage.BackgroundMood.AccentColor)));
+                        graphics.FillRectangle(brush, bar);
+                    }
+                }
             }
 
             private void DrawGroup(Graphics graphics, RectangleF arena, SectionDefinition section, SpawnGroupDefinition group, float emphasis)
