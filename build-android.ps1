@@ -13,7 +13,11 @@ $contentObj = Join-Path $PSScriptRoot "SpaceBurst\Content\obj\Android"
 $contentOutput = Join-Path $PSScriptRoot "SpaceBurst\Content\bin\Android\Content"
 $mgcb = Join-Path $PSScriptRoot "SpaceBurst\Content\Content.mgcb"
 $apkDirectory = Join-Path $PSScriptRoot "SpaceBurst.Android\bin\$Configuration\$framework"
+$androidObj = Join-Path $PSScriptRoot "SpaceBurst.Android\obj"
+$androidBin = Join-Path $PSScriptRoot "SpaceBurst.Android\bin\$Configuration"
 $adb = Join-Path $AndroidSdkDirectory "platform-tools\adb.exe"
+$env:ANDROID_SDK_ROOT = $AndroidSdkDirectory
+$env:ANDROID_HOME = $AndroidSdkDirectory
 
 dotnet tool restore
 if ($LASTEXITCODE -ne 0) {
@@ -24,7 +28,6 @@ if ($InstallDependencies -or -not (Test-Path $adb)) {
     dotnet build $project `
         -t:InstallAndroidDependencies `
         -f $framework `
-        -p:AndroidSdkDirectory=$AndroidSdkDirectory `
         -p:AcceptAndroidSdkLicenses=True `
         -v minimal
 
@@ -35,6 +38,14 @@ if ($InstallDependencies -or -not (Test-Path $adb)) {
 
 if (Test-Path $contentObj) {
     cmd /c rmdir /s /q "$contentObj"
+}
+
+if (Test-Path $androidObj) {
+    cmd /c rmdir /s /q "$androidObj"
+}
+
+if (Test-Path $androidBin) {
+    cmd /c rmdir /s /q "$androidBin"
 }
 
 dotnet mgcb `
@@ -52,7 +63,6 @@ if ($LASTEXITCODE -ne 0) {
 dotnet build $project `
     -f $framework `
     -c $Configuration `
-    -p:AndroidSdkDirectory=$AndroidSdkDirectory `
     -v minimal
 
 if ($LASTEXITCODE -ne 0) {
