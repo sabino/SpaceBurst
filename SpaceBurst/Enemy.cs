@@ -2,6 +2,8 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using SpaceBurst.RuntimeData;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace SpaceBurst
 {
@@ -248,7 +250,26 @@ namespace SpaceBurst
 
             float bonusChance = Game1.Instance != null ? Game1.Instance.CurrentPowerDropBonusChance : 0f;
             if (archetype.PowerupEligible && PlayerStatus.RunProgress.Powerups.ShouldDrop(Game1.Instance?.GameplayRandom, bonusChance, archetype.PowerupWeight, IsBoss))
-                EntityManager.Add(new PowerupPickup(Position));
+                EntityManager.Add(new PowerupPickup(Position, ResolvePowerupStyle()));
+        }
+
+        protected virtual WeaponStyleId ResolvePowerupStyle()
+        {
+            WeaponInventoryState inventory = PlayerStatus.RunProgress.Weapons;
+            DeterministicRngState rng = Game1.Instance?.GameplayRandom ?? fallbackGameplayRandom;
+
+            WeaponStyleId nextLocked = WeaponCatalog.StyleOrder.FirstOrDefault(style => !inventory.OwnsStyle(style));
+            if (nextLocked != 0 && !inventory.OwnsStyle(nextLocked) && rng.NextDouble() < 0.24)
+                return nextLocked;
+
+            if (rng.NextDouble() < 0.62)
+                return inventory.ActiveStyle;
+
+            IReadOnlyList<WeaponStyleId> ownedStyles = inventory.OwnedStyles;
+            if (ownedStyles.Count > 0)
+                return ownedStyles[rng.NextInt(0, ownedStyles.Count)];
+
+            return inventory.ActiveStyle;
         }
 
         protected virtual void UpdateMovement(float deltaSeconds)

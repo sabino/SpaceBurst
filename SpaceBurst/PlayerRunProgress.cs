@@ -21,6 +21,11 @@ namespace SpaceBurst
             get { return Weapons.StoredUpgradeCharges; }
         }
 
+        public WeaponStyleId PriorityChargeStyle
+        {
+            get { return Weapons.GetPriorityChargeStyle(); }
+        }
+
         public float PowerBudget
         {
             get
@@ -58,19 +63,29 @@ namespace SpaceBurst
             MedalEligible = false;
         }
 
-        public void AddUpgradeCharge(int count = 1)
+        public int GetStoredCharge(WeaponStyleId style)
         {
-            Weapons.AddUpgradeCharge(count);
+            return Weapons.GetStoredCharge(style);
         }
 
-        public bool TryConsumeUpgradeCharge()
+        public void AddUpgradeCharge(WeaponStyleId style, int count = 1)
         {
-            return Weapons.ConsumeUpgradeCharge();
+            Weapons.AddUpgradeCharge(style, count);
+        }
+
+        public bool TryConsumeUpgradeCharge(WeaponStyleId style)
+        {
+            return Weapons.ConsumeUpgradeCharge(style);
         }
 
         public WeaponUpgradeOutcome ApplyWeaponUpgrade()
         {
             return Weapons.ApplyWeaponUpgrade();
+        }
+
+        public WeaponUpgradeOutcome ApplyWeaponUpgrade(WeaponStyleId style, bool activateStyle = false)
+        {
+            return Weapons.ApplyWeaponUpgrade(style, activateStyle);
         }
 
         public void ApplyMobilityUpgrade()

@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using SpaceBurst.RuntimeData;
 using System;
 using System.Collections.Generic;
 
@@ -19,16 +20,26 @@ namespace SpaceBurst
         };
 
         private readonly float bobSeed;
-        private readonly Color primaryColor = new Color(255, 244, 202);
-        private readonly Color secondaryColor = new Color(255, 179, 71);
-        private readonly Color accentColor = new Color(255, 122, 89);
+        private readonly Color primaryColor;
+        private readonly Color secondaryColor;
+        private readonly Color accentColor;
+        private readonly List<string> iconRows;
         private float ageSeconds;
 
-        public PowerupPickup(Vector2 position)
+        public WeaponStyleId StyleId { get; }
+
+        public PowerupPickup(Vector2 position, WeaponStyleId styleId)
         {
             Position = position;
             Velocity = new Vector2(-40f, 0f);
             bobSeed = position.X * 0.013f + position.Y * 0.009f;
+            StyleId = styleId;
+
+            WeaponStyleDefinition style = WeaponCatalog.GetStyle(styleId);
+            primaryColor = ColorUtil.ParseHex(style.PrimaryColor, new Color(255, 244, 202));
+            secondaryColor = ColorUtil.ParseHex(style.SecondaryColor, new Color(255, 179, 71));
+            accentColor = ColorUtil.ParseHex(style.AccentColor, new Color(255, 122, 89));
+            iconRows = style.IconRows;
         }
 
         public override void Update()
@@ -58,7 +69,7 @@ namespace SpaceBurst
         {
             float pulse = 1f + MathF.Sin(ageSeconds * 6f) * 0.08f;
             PixelArtRenderer.DrawRows(spriteBatch, Game1.UiPixel, glyphRows, Position, 4f * pulse, primaryColor, secondaryColor, accentColor, true);
-            BitmapFontRenderer.Draw(spriteBatch, Game1.UiPixel, "P", Position - new Vector2(5f, 10f), Color.Black, 2f * pulse);
+            PixelArtRenderer.DrawRows(spriteBatch, Game1.UiPixel, iconRows, Position + new Vector2(0f, 3f), 1.8f * pulse, primaryColor, secondaryColor, accentColor, true);
         }
 
         public bool OverlapsPlayer()
@@ -73,6 +84,7 @@ namespace SpaceBurst
                 Position = new Vector2Data(Position.X, Position.Y),
                 Velocity = new Vector2Data(Velocity.X, Velocity.Y),
                 AgeSeconds = ageSeconds,
+                StyleId = StyleId,
             };
         }
 
@@ -81,7 +93,7 @@ namespace SpaceBurst
             if (snapshot == null)
                 return null;
 
-            var pickup = new PowerupPickup(new Vector2(snapshot.Position.X, snapshot.Position.Y));
+            var pickup = new PowerupPickup(new Vector2(snapshot.Position.X, snapshot.Position.Y), snapshot.StyleId);
             pickup.Velocity = new Vector2(snapshot.Velocity.X, snapshot.Velocity.Y);
             pickup.ageSeconds = snapshot.AgeSeconds;
             return pickup;

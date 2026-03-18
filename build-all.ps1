@@ -19,6 +19,7 @@ if (-not $commit) {
 }
 
 $artifactsRoot = Join-Path $root "artifacts\release\bundle-$commit"
+$latestRoot = Join-Path $root "artifacts\release\latest"
 $gameOutput = Join-Path $artifactsRoot "game-$WindowsRuntimeIdentifier"
 $levelToolOutput = Join-Path $artifactsRoot "leveltool-$WindowsRuntimeIdentifier"
 $androidOutput = Join-Path $artifactsRoot "android-apk"
@@ -180,7 +181,28 @@ if (-not $SkipAndroid) {
 }
 $summary | Set-Content -Path $summaryPath
 
+if (Test-Path $latestRoot) {
+    Remove-Item $latestRoot -Recurse -Force
+}
+
+New-Item -ItemType Directory -Path $latestRoot | Out-Null
+Copy-Item (Join-Path $artifactsRoot '*') $latestRoot -Recurse -Force
+
+$latestSummaryPath = Join-Path $latestRoot "build-summary.txt"
+$latestSummary = [System.Collections.Generic.List[string]]::new()
+$latestSummary.Add("Commit: $commit")
+$latestSummary.Add("Game EXE: $(Join-Path $latestRoot "game-$WindowsRuntimeIdentifier\SpaceBurst.exe")")
+$latestSummary.Add("Level Tool EXE: $(Join-Path $latestRoot "leveltool-$WindowsRuntimeIdentifier\SpaceBurst.LevelTool.exe")")
+if (-not $SkipAndroid) {
+    $latestApk = Get-ChildItem (Join-Path $latestRoot "android-apk") -Filter "*.apk" | Select-Object -First 1
+    if ($latestApk) {
+        $latestSummary.Add("Android APK: $($latestApk.FullName)")
+    }
+}
+$latestSummary | Set-Content -Path $latestSummaryPath
+
 Write-Host ""
 Write-Host "Artifacts ready:"
 $summary | ForEach-Object { Write-Host $_ }
 Write-Host "Summary: $summaryPath"
+Write-Host "Latest: $latestRoot"

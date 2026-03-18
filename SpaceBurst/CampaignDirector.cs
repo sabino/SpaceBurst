@@ -14,7 +14,7 @@ namespace SpaceBurst
         private const float BossApproachSeconds = 1.0f;
         private const float PlayerSafetyClearRadius = 220f;
         private const float RewindCapacitySeconds = 8f;
-        private const float RewindSnapshotInterval = 1f / 12f;
+        private const float RewindSnapshotInterval = 1f / 30f;
 
         private readonly CampaignRepository repository = new CampaignRepository();
         private readonly OptionsData options;
@@ -40,6 +40,7 @@ namespace SpaceBurst
         private int slotSelection;
         private int helpPageIndex;
         private int draftSelection;
+        private WeaponStyleId draftChargeStyle = WeaponStyleId.Pulse;
         private float stageElapsedSeconds;
         private float stateTimer;
         private float activeEventTimer;
@@ -844,6 +845,7 @@ namespace SpaceBurst
             draftCards.Clear();
             draftTimer = 0f;
             draftSelection = 0;
+            draftChargeStyle = WeaponStyleId.Pulse;
             draftFromTutorial = false;
             pauseReturnState = GameFlowState.Tutorial;
             draftReturnState = returnState;
@@ -892,6 +894,7 @@ namespace SpaceBurst
             draftCards.Clear();
             draftSelection = 0;
             draftTimer = 0f;
+            draftChargeStyle = WeaponStyleId.Pulse;
             draftFromTutorial = false;
             tutorialStep = TutorialStep.Move;
             tutorialProgressSeconds = 0f;
@@ -1065,9 +1068,13 @@ namespace SpaceBurst
                     break;
 
                 case TutorialStep.Fire:
-                    EnsureTutorialTarget(false);
                     if (!EntityManager.HasHostiles)
+                    {
                         AdvanceTutorialStep(TutorialStep.Rewind);
+                        break;
+                    }
+
+                    EnsureTutorialTarget(false);
                     break;
 
                 case TutorialStep.CollectPower:
@@ -1137,7 +1144,7 @@ namespace SpaceBurst
             if (EntityManager.Powerups.Any())
                 return;
 
-            EntityManager.Add(new PowerupPickup(Player1.Instance.Position + new Vector2(150f, -32f)));
+            EntityManager.Add(new PowerupPickup(Player1.Instance.Position + new Vector2(150f, -32f), WeaponStyleId.Spread));
         }
 
         private void OpenUpgradeDraft(GameFlowState returnState, bool tutorialMode)
@@ -1145,8 +1152,9 @@ namespace SpaceBurst
             if (PlayerStatus.RunProgress.StoredUpgradeCharges <= 0)
                 return;
 
+            draftChargeStyle = tutorialMode ? WeaponStyleId.Spread : PlayerStatus.RunProgress.PriorityChargeStyle;
             draftCards.Clear();
-            draftCards.Add(BuildWeaponDraftCard());
+            draftCards.Add(BuildWeaponDraftCard(draftChargeStyle));
             if (tutorialMode)
             {
                 draftCards.Add(CreateDraftCard(UpgradeCardType.MobilityTuning, "THRUSTER TUNE", "MOVE FASTER THROUGH THE FIELD", "#6EC1FF"));
@@ -1178,28 +1186,28 @@ namespace SpaceBurst
             state = GameFlowState.UpgradeDraft;
         }
 
-        private UpgradeDraftCard BuildWeaponDraftCard()
+        private UpgradeDraftCard BuildWeaponDraftCard(WeaponStyleId styleId)
         {
             WeaponInventoryState inventory = PlayerStatus.RunProgress.Weapons;
-            WeaponStyleDefinition activeStyle = WeaponCatalog.GetStyle(inventory.ActiveStyle);
+            WeaponStyleDefinition activeStyle = WeaponCatalog.GetStyle(styleId);
             string description;
-            if (inventory.ActiveLevel < 3)
+            if (!inventory.OwnsStyle(styleId))
             {
-                description = string.Concat("BOOST ", activeStyle.DisplayName, " TO LEVEL ", (inventory.ActiveLevel + 1).ToString());
+                description = string.Concat("UNLOCK ", activeStyle.DisplayName, " AND EQUIP IT");
             }
             else
             {
-                WeaponStyleId nextStyle = WeaponCatalog.StyleOrder.FirstOrDefault(style => !inventory.OwnsStyle(style));
-                if (nextStyle != 0 && !inventory.OwnsStyle(nextStyle))
-                    description = string.Concat("UNLOCK ", WeaponCatalog.GetStyle(nextStyle).DisplayName, " AND AUTO-EQUIP IT");
+                int styleLevel = inventory.GetLevel(styleId);
+                if (styleLevel < 3)
+                    description = string.Concat("BOOST ", activeStyle.DisplayName, " TO LEVEL ", (styleLevel + 1).ToString());
                 else
-                    description = string.Concat("RAISE ", activeStyle.DisplayName, " TO RANK ", (inventory.ActiveRank + 1).ToString());
+                    description = string.Concat("RAISE ", activeStyle.DisplayName, " TO RANK ", (inventory.GetRank(styleId) + 1).ToString());
             }
 
             return new UpgradeDraftCard
             {
                 Type = UpgradeCardType.WeaponSurge,
-                StyleId = inventory.ActiveStyle,
+                StyleId = styleId,
                 Title = string.Concat(activeStyle.DisplayName, " SURGE"),
                 Description = description,
                 AccentColor = activeStyle.AccentColor,
@@ -1219,7 +1227,7 @@ namespace SpaceBurst
                 case UpgradeCardType.LuckyCore:
                     return CreateDraftCard(type, "LUCKY CORE", "IMPROVE DROP MOMENTUM AND EARN SCORE", "#7AE582");
                 default:
-                    return BuildWeaponDraftCard();
+                    return BuildWeaponDraftCard(draftChargeStyle);
             }
         }
 
@@ -1244,7 +1252,7 @@ namespace SpaceBurst
 
             int safeSelection = Math.Clamp(selection, 0, draftCards.Count - 1);
             UpgradeDraftCard card = draftCards[safeSelection];
-            if (!PlayerStatus.RunProgress.TryConsumeUpgradeCharge())
+            if (!PlayerStatus.RunProgress.TryConsumeUpgradeCharge(draftChargeStyle))
             {
                 FinishUpgradeDraft();
                 return;
@@ -1253,7 +1261,7 @@ namespace SpaceBurst
             switch (card.Type)
             {
                 case UpgradeCardType.WeaponSurge:
-                    PlayerStatus.RunProgress.ApplyWeaponUpgrade();
+                    PlayerStatus.RunProgress.ApplyWeaponUpgrade(card.StyleId, true);
                     Player1.Instance.RefreshLoadout();
                     break;
                 case UpgradeCardType.MobilityTuning:
@@ -1275,7 +1283,7 @@ namespace SpaceBurst
 
             if (draftFromTutorial && PlayerStatus.RunProgress.Weapons.OwnedStyles.Count < 2)
             {
-                PlayerStatus.RunProgress.ApplyWeaponUpgrade();
+                PlayerStatus.RunProgress.ApplyWeaponUpgrade(WeaponStyleId.Spread, true);
                 Player1.Instance.RefreshLoadout();
             }
 
@@ -1299,6 +1307,7 @@ namespace SpaceBurst
             draftCards.Clear();
             draftSelection = 0;
             draftTimer = 0f;
+            draftChargeStyle = WeaponStyleId.Pulse;
             bool returnToTutorial = draftFromTutorial;
             draftFromTutorial = false;
             state = draftReturnState;
@@ -1748,7 +1757,7 @@ namespace SpaceBurst
                     DrawHelpPage(spriteBatch, pixel, "CONTROLS\nWASD MOVE  ARROWS AIM  SPACE FIRE\nQ E SWITCH STYLE  R REWIND  ESC PAUSE  F1 HELP\nPRESS ENTER HERE TO REPLAY THE TUTORIAL", 186f);
                     break;
                 case 1:
-                    DrawHelpPage(spriteBatch, pixel, "POWER CORES\nP DROPS BECOME STORED UPGRADE CHARGES\nCHARGES ARE SPENT DURING STAGE TRANSITIONS\nIF TIME RUNS OUT THE HIGHLIGHTED CARD IS AUTO PICKED\nCHARGES PERSIST ACROSS STAGES IN THE RUN", 186f);
+                    DrawHelpPage(spriteBatch, pixel, "POWER CORES\nEACH P CORE MATCHES A WEAPON STYLE\nMATCH YOUR ACTIVE STYLE TO BOOST IT IMMEDIATELY UP TO LEVEL 3\nOTHER CORES STORE STYLE SPECIFIC CHARGES FOR TRANSITION DRAFTS\nIF TIME RUNS OUT THE HIGHLIGHTED CARD IS AUTO PICKED", 186f);
                     DrawWeaponIcons(spriteBatch, pixel, 410f, 0, 5);
                     break;
                 case 2:
@@ -2029,7 +2038,7 @@ namespace SpaceBurst
                 case TutorialStep.CollectPower:
                     stepIndex = 5;
                     title = "COLLECT";
-                    body = "PICK UP THE P CORE. IT STORES A CHARGE FOR THE NEXT DRAFT, NOT AN INSTANT UPGRADE.";
+                    body = "PICK UP THE SPREAD CORE. MATCHING YOUR ACTIVE STYLE BOOSTS IT NOW. OTHER STYLES STORE A CHARGE FOR THE NEXT DRAFT.";
                     break;
                 case TutorialStep.UpgradeDraft:
                     stepIndex = 6;
@@ -2141,6 +2150,7 @@ namespace SpaceBurst
                 BossApproachTimer = bossApproachTimer,
                 DraftTimer = draftTimer,
                 DraftSelection = draftSelection,
+                DraftChargeStyle = draftChargeStyle,
                 DraftFromTutorial = draftFromTutorial,
                 TutorialReplayMode = tutorialReplayMode,
                 TutorialStep = tutorialStep,
@@ -2188,6 +2198,9 @@ namespace SpaceBurst
             stateTimer = save.StateTimer;
             activeEventTimer = save.ActiveEventTimer;
             activeEventSpawnTimer = save.ActiveEventSpawnTimer;
+            float preservedRewindMeter = rewindMeterSeconds;
+            float preservedRewindHold = rewindHoldSeconds;
+            float preservedRewindAccumulator = rewindStepAccumulator;
             rewindMeterSeconds = save.RewindMeterSeconds > 0f ? save.RewindMeterSeconds : RewindCapacitySeconds;
             rewindHoldSeconds = save.RewindHoldSeconds;
             rewindStepAccumulator = save.RewindAccumulatorSeconds;
@@ -2205,6 +2218,7 @@ namespace SpaceBurst
             bossApproachTimer = save.BossApproachTimer;
             draftTimer = save.DraftTimer;
             draftSelection = save.DraftSelection;
+            draftChargeStyle = save.DraftChargeStyle;
             draftFromTutorial = save.DraftFromTutorial;
             tutorialReplayMode = save.TutorialReplayMode;
             tutorialStep = save.TutorialStep;
@@ -2272,6 +2286,9 @@ namespace SpaceBurst
             }
             else
             {
+                rewindMeterSeconds = preservedRewindMeter;
+                rewindHoldSeconds = preservedRewindHold;
+                rewindStepAccumulator = preservedRewindAccumulator;
                 state = save.State == GameFlowState.Tutorial ? GameFlowState.Tutorial : GameFlowState.Playing;
             }
         }

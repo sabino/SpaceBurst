@@ -225,14 +225,25 @@ namespace SpaceBurst
             RestoreAfterRespawn();
         }
 
-        public void CollectPowerup()
+        public void CollectPowerup(WeaponStyleId styleId)
         {
-            PlayerStatus.RunProgress.AddUpgradeCharge();
+            WeaponStyleDefinition style = WeaponCatalog.GetStyle(styleId);
+            bool immediateUpgrade = styleId == ActiveStyle && ActiveWeaponLevel < 3;
+            if (immediateUpgrade)
+            {
+                PlayerStatus.RunProgress.ApplyWeaponUpgrade(styleId);
+                RefreshLoadout();
+            }
+            else
+            {
+                PlayerStatus.RunProgress.AddUpgradeCharge(styleId);
+            }
 
             Sound.Spawn.Play(0.15f, 0.2f, 0.1f);
             invulnerabilityTimer = Math.Max(invulnerabilityTimer, 0.2f);
-            EntityManager.SpawnShockwave(Position, ColorUtil.ParseHex(WeaponCatalog.GetStyle(ActiveStyle).AccentColor, Color.Orange) * 0.2f, 10f, 52f, 0.18f);
-            EntityManager.SpawnFlash(Position, Color.Gold * 0.18f, 14f, 54f, 0.14f);
+            Color accent = ColorUtil.ParseHex(style.AccentColor, Color.Orange);
+            EntityManager.SpawnShockwave(Position, accent * (immediateUpgrade ? 0.28f : 0.18f), 10f, immediateUpgrade ? 74f : 52f, immediateUpgrade ? 0.22f : 0.18f);
+            EntityManager.SpawnFlash(Position, accent * 0.22f, 14f, immediateUpgrade ? 66f : 54f, 0.14f);
         }
 
         public void RefreshLoadout()

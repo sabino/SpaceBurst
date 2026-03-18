@@ -9,6 +9,7 @@ namespace SpaceBurst
         public WeaponStyleId ActiveStyle { get; set; } = WeaponStyleId.Pulse;
         public Dictionary<WeaponStyleId, int> StyleLevels { get; set; } = new Dictionary<WeaponStyleId, int>();
         public Dictionary<WeaponStyleId, int> StyleRanks { get; set; } = new Dictionary<WeaponStyleId, int>();
+        public Dictionary<WeaponStyleId, int> StyleCharges { get; set; } = new Dictionary<WeaponStyleId, int>();
         public int StoredUpgradeCharges { get; set; }
     }
 
@@ -126,6 +127,7 @@ namespace SpaceBurst
         public Vector2Data Position { get; set; } = new Vector2Data();
         public Vector2Data Velocity { get; set; } = new Vector2Data();
         public float AgeSeconds { get; set; }
+        public WeaponStyleId StyleId { get; set; } = WeaponStyleId.Pulse;
     }
 
     sealed class ScheduledSpawnSnapshotData
@@ -189,6 +191,7 @@ namespace SpaceBurst
         public float BossApproachTimer { get; set; }
         public float DraftTimer { get; set; }
         public int DraftSelection { get; set; }
+        public WeaponStyleId DraftChargeStyle { get; set; } = WeaponStyleId.Pulse;
         public bool DraftFromTutorial { get; set; }
         public bool TutorialReplayMode { get; set; }
         public TutorialStep TutorialStep { get; set; } = TutorialStep.Move;

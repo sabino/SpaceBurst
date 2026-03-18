@@ -17,9 +17,13 @@ namespace SpaceBurst
     {
         private readonly Dictionary<WeaponStyleId, int> styleLevels = new Dictionary<WeaponStyleId, int>();
         private readonly Dictionary<WeaponStyleId, int> styleRanks = new Dictionary<WeaponStyleId, int>();
+        private readonly Dictionary<WeaponStyleId, int> styleCharges = new Dictionary<WeaponStyleId, int>();
 
         public WeaponStyleId ActiveStyle { get; private set; } = WeaponStyleId.Pulse;
-        public int StoredUpgradeCharges { get; private set; }
+        public int StoredUpgradeCharges
+        {
+            get { return styleCharges.Values.Sum(); }
+        }
 
         public int ActiveLevel
         {
@@ -46,13 +50,18 @@ namespace SpaceBurst
             get { return styleLevels.Count; }
         }
 
+        public IReadOnlyList<WeaponStyleId> ChargedStyles
+        {
+            get { return WeaponCatalog.StyleOrder.Where(style => GetStoredCharge(style) > 0).ToList(); }
+        }
+
         public void Reset()
         {
             styleLevels.Clear();
             styleRanks.Clear();
+            styleCharges.Clear();
             styleLevels[WeaponStyleId.Pulse] = 0;
             ActiveStyle = WeaponStyleId.Pulse;
-            StoredUpgradeCharges = 0;
         }
 
         public bool OwnsStyle(WeaponStyleId style)
@@ -70,42 +79,84 @@ namespace SpaceBurst
             return styleRanks.TryGetValue(style, out int rank) ? rank : 0;
         }
 
-        public void AddUpgradeCharge(int count = 1)
+        public int GetStoredCharge(WeaponStyleId style)
         {
-            StoredUpgradeCharges = Math.Max(0, StoredUpgradeCharges + count);
+            return styleCharges.TryGetValue(style, out int count) ? count : 0;
         }
 
-        public bool ConsumeUpgradeCharge()
+        public WeaponStyleId GetPriorityChargeStyle()
         {
-            if (StoredUpgradeCharges <= 0)
+            if (GetStoredCharge(ActiveStyle) > 0)
+                return ActiveStyle;
+
+            WeaponStyleId nextLocked = WeaponCatalog.StyleOrder.FirstOrDefault(style => GetStoredCharge(style) > 0 && !OwnsStyle(style));
+            if (nextLocked != 0)
+                return nextLocked;
+
+            WeaponStyleId best = WeaponStyleId.Pulse;
+            int bestCount = 0;
+            foreach (WeaponStyleId style in WeaponCatalog.StyleOrder)
+            {
+                int count = GetStoredCharge(style);
+                if (count > bestCount)
+                {
+                    bestCount = count;
+                    best = style;
+                }
+            }
+
+            return bestCount > 0 ? best : WeaponStyleId.Pulse;
+        }
+
+        public void AddUpgradeCharge(WeaponStyleId style, int count = 1)
+        {
+            if (count <= 0)
+                return;
+
+            styleCharges[style] = GetStoredCharge(style) + count;
+        }
+
+        public bool ConsumeUpgradeCharge(WeaponStyleId style)
+        {
+            int current = GetStoredCharge(style);
+            if (current <= 0)
                 return false;
 
-            StoredUpgradeCharges--;
+            if (current == 1)
+                styleCharges.Remove(style);
+            else
+                styleCharges[style] = current - 1;
             return true;
         }
 
         public WeaponUpgradeOutcome ApplyWeaponUpgrade()
         {
-            int level = ActiveLevel;
-            if (level < 3)
-            {
-                styleLevels[ActiveStyle] = level + 1;
-                return WeaponUpgradeOutcome.LevelUp;
-            }
+            return ApplyWeaponUpgrade(ActiveStyle, false);
+        }
 
-            for (int i = 0; i < WeaponCatalog.StyleOrder.Count; i++)
+        public WeaponUpgradeOutcome ApplyWeaponUpgrade(WeaponStyleId style, bool activateStyle)
+        {
+            if (!OwnsStyle(style))
             {
-                WeaponStyleId nextStyle = WeaponCatalog.StyleOrder[i];
-                if (styleLevels.ContainsKey(nextStyle))
-                    continue;
-
-                styleLevels[nextStyle] = 0;
-                styleRanks[nextStyle] = 0;
-                ActiveStyle = nextStyle;
+                styleLevels[style] = 0;
+                styleRanks[style] = 0;
+                if (activateStyle)
+                    ActiveStyle = style;
                 return WeaponUpgradeOutcome.UnlockedStyle;
             }
 
-            styleRanks[ActiveStyle] = GetRank(ActiveStyle) + 1;
+            int level = GetLevel(style);
+            if (level < 3)
+            {
+                styleLevels[style] = level + 1;
+                if (activateStyle)
+                    ActiveStyle = style;
+                return WeaponUpgradeOutcome.LevelUp;
+            }
+
+            styleRanks[style] = GetRank(style) + 1;
+            if (activateStyle)
+                ActiveStyle = style;
             return WeaponUpgradeOutcome.RankUp;
         }
 
@@ -161,6 +212,7 @@ namespace SpaceBurst
         {
             styleLevels.Remove(style);
             styleRanks.Remove(style);
+            styleCharges.Remove(style);
             IReadOnlyList<WeaponStyleId> styles = OwnedStyles;
             ActiveStyle = styles.Count == 0 ? WeaponStyleId.Pulse : styles[styles.Count - 1];
             if (!styleLevels.ContainsKey(WeaponStyleId.Pulse))
@@ -176,6 +228,7 @@ namespace SpaceBurst
                 ActiveStyle = ActiveStyle,
                 StyleLevels = new Dictionary<WeaponStyleId, int>(styleLevels),
                 StyleRanks = new Dictionary<WeaponStyleId, int>(styleRanks),
+                StyleCharges = new Dictionary<WeaponStyleId, int>(styleCharges),
                 StoredUpgradeCharges = StoredUpgradeCharges,
             };
         }
@@ -196,6 +249,16 @@ namespace SpaceBurst
                     styleRanks[entry.Key] = Math.Max(0, entry.Value);
             }
 
+            styleCharges.Clear();
+            if (snapshot?.StyleCharges != null)
+            {
+                foreach (var entry in snapshot.StyleCharges)
+                {
+                    if (entry.Value > 0)
+                        styleCharges[entry.Key] = entry.Value;
+                }
+            }
+
             if (!styleLevels.ContainsKey(WeaponStyleId.Pulse))
                 styleLevels[WeaponStyleId.Pulse] = 0;
             if (!styleRanks.ContainsKey(WeaponStyleId.Pulse))
@@ -204,7 +267,6 @@ namespace SpaceBurst
             ActiveStyle = snapshot != null && styleLevels.ContainsKey(snapshot.ActiveStyle)
                 ? snapshot.ActiveStyle
                 : WeaponStyleId.Pulse;
-            StoredUpgradeCharges = Math.Max(0, snapshot?.StoredUpgradeCharges ?? 0);
         }
     }
 }

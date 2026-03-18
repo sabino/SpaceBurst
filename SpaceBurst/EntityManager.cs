@@ -297,7 +297,7 @@ namespace SpaceBurst
 
                 if (powerup.OverlapsPlayer())
                 {
-                    Player1.Instance.CollectPowerup();
+                    Player1.Instance.CollectPowerup(powerup.StyleId);
                     powerup.IsExpired = true;
                 }
             }
