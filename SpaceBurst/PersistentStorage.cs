@@ -36,11 +36,59 @@ namespace SpaceBurst
 
         public static OptionsData LoadOptions()
         {
-            return LoadFile(OptionsPath, new OptionsData());
+            try
+            {
+                if (!File.Exists(OptionsPath))
+                    return new OptionsData();
+
+                string json = File.ReadAllText(OptionsPath);
+                OptionsData options = JsonSerializer.Deserialize<OptionsData>(json, jsonOptions) ?? new OptionsData();
+
+                using JsonDocument document = JsonDocument.Parse(json);
+                JsonElement root = document.RootElement;
+
+                if (!root.TryGetProperty(nameof(OptionsData.UiScalePercent), out JsonElement uiScale))
+                    options.UiScalePercent = UiScaleHelper.ClampUiScalePercent(options.UiScalePercent);
+                else
+                    options.UiScalePercent = UiScaleHelper.ClampUiScalePercent(uiScale.GetInt32());
+
+                if (root.TryGetProperty(nameof(OptionsData.WorldScalePercent), out JsonElement worldScale))
+                {
+                    options.WorldScalePercent = UiScaleHelper.ClampWorldScalePercent(worldScale.GetInt32());
+                }
+                else if (root.TryGetProperty("GameScale", out JsonElement legacyGameScale) && legacyGameScale.TryGetSingle(out float legacyScale))
+                {
+                    options.WorldScalePercent = UiScaleHelper.ClampWorldScalePercent((int)System.MathF.Round(legacyScale * 100f));
+                }
+                else
+                {
+                    options.WorldScalePercent = UiScaleHelper.ClampWorldScalePercent(options.WorldScalePercent);
+                }
+
+                if (!root.TryGetProperty(nameof(OptionsData.FontTheme), out _))
+                {
+#if ANDROID
+                    options.FontTheme = FontTheme.Readable;
+#else
+                    options.FontTheme = FontTheme.Compact;
+#endif
+                }
+
+                return options;
+            }
+            catch
+            {
+                return new OptionsData();
+            }
         }
 
         public static void SaveOptions(OptionsData options)
         {
+            if (options == null)
+                return;
+
+            options.UiScalePercent = UiScaleHelper.ClampUiScalePercent(options.UiScalePercent);
+            options.WorldScalePercent = UiScaleHelper.ClampWorldScalePercent(options.WorldScalePercent);
             SaveFile(OptionsPath, options);
         }
 

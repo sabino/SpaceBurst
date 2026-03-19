@@ -25,6 +25,7 @@
 - `R` touch button: rewind
 - Tap the weapon HUD at the top to cycle owned weapon styles
 - Tap the visible `PAUSE` chip in the top stage panel to pause
+- Use the Android back action to close help, options, and save/load screens
 
 ## Tutorial
 
@@ -32,5 +33,8 @@ The first run starts with a tutorial prologue. It teaches movement, aiming, firi
 
 ## Options
 
-- `Game Scale`: adjusts the rendered playfield scale immediately.
+- `UI Scale`: enlarges menus, HUD, tutorial/help text, and touch affordances immediately.
+- `World Scale`: adjusts the rendered playfield zoom without shrinking menu readability.
+- `Font Theme`: switches between `Compact` and `Readable` built-in bitmap typography.
 - Android uses the same visual/audio options as desktop, except display mode is hidden because mobile always uses fullscreen.
+- Android defaults to the `Readable` font theme and uses touch-specific copy instead of keyboard prompts.

@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using SpaceBurst.RuntimeData;
 using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace SpaceBurst
@@ -10,6 +11,8 @@ namespace SpaceBurst
     {
         private const int VirtualBaseWidth = 1280;
         private const int VirtualBaseHeight = 720;
+        private const float MinimumBootVisibleSeconds = 0.9f;
+        private const float ReadyBootHandoffSeconds = 0.4f;
 
         public static Game1 Instance { get; private set; }
         public static Texture2D UiPixel { get { return Instance != null ? Instance.uiPixel : null; } }
@@ -18,14 +21,17 @@ namespace SpaceBurst
         public static int VirtualHeight { get { return Instance != null ? Instance.virtualHeight : VirtualBaseHeight; } }
         public static Viewport Viewport { get { return new Viewport(0, 0, VirtualWidth, VirtualHeight); } }
         public static Vector2 ScreenSize { get { return new Vector2(VirtualWidth, VirtualHeight); } }
-        public static Rectangle RenderBounds { get { return Instance != null ? Instance.renderViewport : new Rectangle(0, 0, VirtualWidth, VirtualHeight); } }
+        public static Rectangle RenderBounds { get { return Instance != null ? Instance.worldRenderViewport : new Rectangle(0, 0, VirtualWidth, VirtualHeight); } }
+        public static Rectangle UiRenderBounds { get { return Instance != null ? Instance.uiRenderViewport : new Rectangle(0, 0, VirtualWidth, VirtualHeight); } }
         public static GameTime GameTime { get; private set; }
 
         private readonly GraphicsDeviceManager graphics;
         private readonly OptionsData startupOptions;
         private SpriteBatch spriteBatch;
-        private Rectangle renderViewport;
-        private Matrix scaleMatrix;
+        private Rectangle worldRenderViewport;
+        private Rectangle uiRenderViewport;
+        private Matrix worldScaleMatrix;
+        private Matrix uiScaleMatrix;
         private CampaignDirector campaignDirector;
         private AudioDirector audioDirector;
         private FeedbackDirector feedbackDirector;
@@ -40,10 +46,43 @@ namespace SpaceBurst
         private bool capturePrepared;
         private bool captureCompleted;
         private float captureDelaySeconds = 1.2f;
+        private BootPhase bootPhase;
+        private bool bootReady;
+        private bool bootComplete;
+        private bool bootExploded;
+        private float bootVisibleSeconds;
+        private float bootReadySeconds;
+        private string bootStatus = "STARTING";
+        private readonly List<BootPixel> bootPixels = new List<BootPixel>();
+        private readonly Random bootVisualRandom = new Random(unchecked(Environment.TickCount * 7919));
+        private Color bootBackgroundColor = Color.Black;
+        private Color bootGlowColorA = Color.CornflowerBlue;
+        private Color bootGlowColorB = Color.Orange;
+        private Color bootPrimaryColor = Color.White;
+        private Color bootSecondaryColor = Color.LightBlue;
+        private Color bootPromptColor = Color.White;
 
 #if ANDROID
         private Texture2D touchControlTexture;
 #endif
+
+        private enum BootPhase
+        {
+            PrepareElements,
+            LoadCampaignRepository,
+            InitializeCameraFeedback,
+            InitializeAudio,
+            FinalizeDirector,
+            Complete,
+        }
+
+        private struct BootPixel
+        {
+            public Vector2 Position;
+            public Vector2 Velocity;
+            public Vector2 Target;
+            public Color Color;
+        }
 
         public float CurrentScrollSpeed
         {
@@ -115,9 +154,36 @@ namespace SpaceBurst
             get { return campaignDirector != null && campaignDirector.EnableNeonOutlines; }
         }
 
-        private float CurrentGameScale
+        private float CurrentWorldScale
         {
-            get { return campaignDirector != null ? campaignDirector.GameScale : startupOptions.GameScale; }
+            get
+            {
+                int percent = campaignDirector != null ? campaignDirector.WorldScalePercent : startupOptions.WorldScalePercent;
+                return UiScaleHelper.GetWorldScale(percent);
+            }
+        }
+
+        private FontTheme CurrentFontTheme
+        {
+            get { return campaignDirector != null ? campaignDirector.FontTheme : startupOptions.FontTheme; }
+        }
+
+        internal float UiLayoutScale
+        {
+            get
+            {
+                int percent = campaignDirector != null ? campaignDirector.UiScalePercent : startupOptions.UiScalePercent;
+                return UiScaleHelper.GetUiLayoutMultiplier(percent);
+            }
+        }
+
+        private float UiTextScale
+        {
+            get
+            {
+                int percent = campaignDirector != null ? campaignDirector.UiScalePercent : startupOptions.UiScalePercent;
+                return UiScaleHelper.GetUiTextMultiplier(percent);
+            }
         }
 
         public VisualPreset VisualPreset
@@ -190,15 +256,13 @@ namespace SpaceBurst
             ConfigureDesktopDisplayMode(startupOptions.DisplayMode, true);
 #endif
             UpdateVirtualResolution();
-            RecalculateScaleMatrix();
+            RecalculateViewportMatrices();
             base.Initialize();
         }
 
         protected override void LoadContent()
         {
             spriteBatch = new SpriteBatch(GraphicsDevice);
-            Element.Load();
-
             uiPixel = new Texture2D(GraphicsDevice, 1, 1);
             uiPixel.SetData(new[] { Color.White });
             radialTexture = CreateRadialTexture(128);
@@ -206,21 +270,24 @@ namespace SpaceBurst
 #if ANDROID
             touchControlTexture = CreateControlTexture(128);
 #endif
-
-            campaignDirector = new CampaignDirector();
-            campaignDirector.Load();
-            cameraRig = new CameraRig();
-            audioDirector = new AudioDirector(AudioQualityPreset);
-            feedbackDirector = new FeedbackDirector(cameraRig, audioDirector);
-
-            PrepareCaptureMode();
+            InitializeBootLoader();
         }
 
         protected override void Update(GameTime gameTime)
         {
             GameTime = gameTime;
-            RecalculateScaleMatrix();
+            BitmapFontRenderer.CurrentTheme = CurrentFontTheme;
+            BitmapFontRenderer.GlobalScaleMultiplier = UiTextScale;
+            RecalculateViewportMatrices();
             Input.Update();
+
+            if (!bootComplete)
+            {
+                UpdateBootLoader((float)gameTime.ElapsedGameTime.TotalSeconds);
+                base.Update(gameTime);
+                return;
+            }
+
             campaignDirector.Update();
             GameAudioState audioState = new GameAudioState(
                 campaignDirector.CurrentState,
@@ -247,12 +314,20 @@ namespace SpaceBurst
         {
             GraphicsDevice.Clear(Color.Black);
 
+            if (!bootComplete)
+            {
+                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, uiScaleMatrix);
+                DrawBootLoader(spriteBatch, uiPixel);
+                spriteBatch.End();
+                return;
+            }
+
             if (campaignDirector.ShouldDrawWorld)
             {
                 if (VisualPreset == VisualPreset.Low)
                 {
-                    Matrix worldScaleMatrix = Matrix.CreateTranslation(CameraOffset.X, CameraOffset.Y, 0f) * scaleMatrix;
-                    spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, worldScaleMatrix);
+                    Matrix worldMatrix = Matrix.CreateTranslation(CameraOffset.X, CameraOffset.Y, 0f) * worldScaleMatrix;
+                    spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, worldMatrix);
                     DrawBackground(spriteBatch, uiPixel);
                     EntityManager.Draw(spriteBatch);
                     spriteBatch.End();
@@ -274,7 +349,7 @@ namespace SpaceBurst
                 }
             }
 
-            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, scaleMatrix);
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, uiScaleMatrix);
             campaignDirector.DrawUi(spriteBatch, uiPixel);
             spriteBatch.End();
 
@@ -297,11 +372,21 @@ namespace SpaceBurst
 
         public static Vector2 ScreenToWorld(Vector2 screenPosition)
         {
-            if (Instance == null || Instance.renderViewport.Width == 0 || Instance.renderViewport.Height == 0)
+            if (Instance == null || Instance.worldRenderViewport.Width == 0 || Instance.worldRenderViewport.Height == 0)
                 return screenPosition;
 
-            float x = (screenPosition.X - Instance.renderViewport.X) * VirtualWidth / Instance.renderViewport.Width;
-            float y = (screenPosition.Y - Instance.renderViewport.Y) * VirtualHeight / Instance.renderViewport.Height;
+            float x = (screenPosition.X - Instance.worldRenderViewport.X) * VirtualWidth / Instance.worldRenderViewport.Width;
+            float y = (screenPosition.Y - Instance.worldRenderViewport.Y) * VirtualHeight / Instance.worldRenderViewport.Height;
+            return Vector2.Clamp(new Vector2(x, y), Vector2.Zero, ScreenSize);
+        }
+
+        public static Vector2 ScreenToUi(Vector2 screenPosition)
+        {
+            if (Instance == null || Instance.uiRenderViewport.Width == 0 || Instance.uiRenderViewport.Height == 0)
+                return screenPosition;
+
+            float x = (screenPosition.X - Instance.uiRenderViewport.X) * VirtualWidth / Instance.uiRenderViewport.Width;
+            float y = (screenPosition.Y - Instance.uiRenderViewport.Y) * VirtualHeight / Instance.uiRenderViewport.Height;
             return Vector2.Clamp(new Vector2(x, y), Vector2.Zero, ScreenSize);
         }
 
@@ -327,7 +412,7 @@ namespace SpaceBurst
 
         private void DrawWorldComposite()
         {
-            Rectangle destination = renderViewport;
+            Rectangle destination = worldRenderViewport;
             float warp = campaignDirector != null ? campaignDirector.TransitionWarpStrength : 0f;
             float pulse = MathHelper.Clamp((cameraRig != null ? cameraRig.PulseStrength : 0f) + ImpactPulse * 0.35f, 0f, 1f);
             if (pulse > 0f)
@@ -358,23 +443,37 @@ namespace SpaceBurst
             spriteBatch.End();
         }
 
-        private void RecalculateScaleMatrix()
+        private void RecalculateViewportMatrices()
         {
             UpdateVirtualResolution();
 
             Viewport viewport = GraphicsDevice.Viewport;
             float fitScale = Math.Min(viewport.Width / (float)virtualWidth, viewport.Height / (float)virtualHeight);
-            float scale = fitScale * MathHelper.Clamp(CurrentGameScale, 0.8f, 1.2f);
-            if (scale <= 0f)
-                scale = 1f;
+            float uiScale = fitScale;
+            float worldScale = fitScale * CurrentWorldScale;
+            if (uiScale <= 0f)
+                uiScale = 1f;
+            if (worldScale <= 0f)
+                worldScale = 1f;
 
-            int width = (int)(virtualWidth * scale);
-            int height = (int)(virtualHeight * scale);
+            uiRenderViewport = CreateViewport(viewport, uiScale);
+            worldRenderViewport = CreateViewport(viewport, worldScale);
+            uiScaleMatrix = Matrix.CreateScale(uiScale, uiScale, 1f) * Matrix.CreateTranslation(uiRenderViewport.X, uiRenderViewport.Y, 0f);
+            worldScaleMatrix = Matrix.CreateScale(worldScale, worldScale, 1f) * Matrix.CreateTranslation(worldRenderViewport.X, worldRenderViewport.Y, 0f);
+        }
+
+        private Rectangle CreateViewport(Viewport viewport, float scale)
+        {
+            int width = (int)MathF.Round(virtualWidth * scale);
+            int height = (int)MathF.Round(virtualHeight * scale);
             int x = (viewport.Width - width) / 2;
             int y = (viewport.Height - height) / 2;
+            return new Rectangle(x, y, width, height);
+        }
 
-            renderViewport = new Rectangle(x, y, width, height);
-            scaleMatrix = Matrix.CreateScale(scale, scale, 1f) * Matrix.CreateTranslation(renderViewport.X, renderViewport.Y, 0f);
+        private int UiPx(int value)
+        {
+            return Math.Max(1, (int)MathF.Round(value * UiLayoutScale));
         }
 
         private void UpdateVirtualResolution()
@@ -403,6 +502,247 @@ namespace SpaceBurst
 
             if (worldRenderTarget == null)
                 worldRenderTarget = new RenderTarget2D(GraphicsDevice, virtualWidth, virtualHeight, false, SurfaceFormat.Color, DepthFormat.None, 0, RenderTargetUsage.DiscardContents);
+        }
+
+        private void InitializeBootLoader()
+        {
+            bootPhase = BootPhase.PrepareElements;
+            bootReady = false;
+            bootComplete = false;
+            bootExploded = false;
+            bootVisibleSeconds = 0f;
+            bootReadySeconds = 0f;
+            bootStatus = "STARTING";
+            RandomizeBootPalette();
+            BuildBootPixels();
+        }
+
+        private void UpdateBootLoader(float deltaSeconds)
+        {
+            bootVisibleSeconds += deltaSeconds;
+            UpdateBootPixels(deltaSeconds);
+
+            if (Input.WasPrimaryActionPressed() && GetBootLogoBounds().Contains(Input.PointerPosition))
+                TriggerBootExplosion();
+
+            if (!bootReady)
+            {
+                RunNextBootPhase();
+                return;
+            }
+
+            bootReadySeconds += deltaSeconds;
+            if (bootVisibleSeconds >= MinimumBootVisibleSeconds && (Input.WasPrimaryActionPressed() || bootExploded || bootReadySeconds >= ReadyBootHandoffSeconds))
+                bootComplete = true;
+        }
+
+        private void RunNextBootPhase()
+        {
+            switch (bootPhase)
+            {
+                case BootPhase.PrepareElements:
+                    bootStatus = "PROCEDURAL ELEMENT SETUP";
+                    Element.Load();
+                    bootPhase = BootPhase.LoadCampaignRepository;
+                    break;
+                case BootPhase.LoadCampaignRepository:
+                    bootStatus = "CAMPAIGN LOAD AND VALIDATION";
+                    campaignDirector = new CampaignDirector();
+                    campaignDirector.LoadRepository();
+                    bootPhase = BootPhase.InitializeCameraFeedback;
+                    break;
+                case BootPhase.InitializeCameraFeedback:
+                    bootStatus = "CAMERA AND FEEDBACK";
+                    cameraRig = new CameraRig();
+                    bootPhase = BootPhase.InitializeAudio;
+                    break;
+                case BootPhase.InitializeAudio:
+                    bootStatus = "PROCEDURAL AUDIO SYNTHESIS";
+                    audioDirector = new AudioDirector(AudioQualityPreset);
+                    feedbackDirector = new FeedbackDirector(cameraRig, audioDirector);
+                    bootPhase = BootPhase.FinalizeDirector;
+                    break;
+                case BootPhase.FinalizeDirector:
+                    bootStatus = "FINAL DIRECTOR HANDOFF";
+                    campaignDirector.FinishBootToTitle();
+                    PrepareCaptureMode();
+                    bootPhase = BootPhase.Complete;
+                    bootReady = true;
+                    break;
+                default:
+                    bootReady = true;
+                    break;
+            }
+        }
+
+        private void DrawBootLoader(SpriteBatch spriteBatch, Texture2D pixel)
+        {
+            Rectangle full = new Rectangle(0, 0, VirtualWidth, VirtualHeight);
+            spriteBatch.Draw(pixel, full, bootBackgroundColor);
+
+            float time = (float)GameTime.TotalGameTime.TotalSeconds;
+            for (int i = 0; i < 80; i++)
+            {
+                float xSeed = MathF.Abs(MathF.Sin(i * 13.117f + 0.71f));
+                float ySeed = MathF.Abs(MathF.Sin(i * 29.137f + 2.31f));
+                float twinkle = 0.35f + 0.65f * MathF.Abs(MathF.Sin(time * (0.72f + i * 0.03f) + i));
+                int x = (int)(xSeed * (VirtualWidth - 8));
+                int y = (int)(16f + ySeed * (VirtualHeight - 32f));
+                int size = i % 11 == 0 ? 3 : 2;
+                spriteBatch.Draw(pixel, new Rectangle(x, y, size, size), Color.White * (0.1f + twinkle * 0.14f));
+            }
+
+            if (radialTexture != null)
+            {
+                Vector2 origin = new Vector2(radialTexture.Width / 2f, radialTexture.Height / 2f);
+                spriteBatch.Draw(radialTexture, new Vector2(VirtualWidth * 0.2f, VirtualHeight * 0.24f), null, bootGlowColorA * 0.18f, 0f, origin, 2.8f, SpriteEffects.None, 0f);
+                spriteBatch.Draw(radialTexture, new Vector2(VirtualWidth * 0.82f, VirtualHeight * 0.22f), null, bootGlowColorB * 0.16f, 0f, origin, 2.45f, SpriteEffects.None, 0f);
+                spriteBatch.Draw(radialTexture, new Vector2(VirtualWidth * 0.56f, VirtualHeight * 0.72f), null, Color.Lerp(bootGlowColorA, bootGlowColorB, 0.45f) * 0.08f, 0f, origin, 3.1f, SpriteEffects.None, 0f);
+            }
+
+            Rectangle logoBounds = GetBootLogoBounds();
+            float fade = MathHelper.Clamp(bootVisibleSeconds / 0.42f, 0f, 1f);
+            for (int i = 0; i < bootPixels.Count; i++)
+            {
+                BootPixel px = bootPixels[i];
+                spriteBatch.Draw(pixel, new Rectangle((int)px.Position.X, (int)px.Position.Y, 4, 4), px.Color * fade);
+            }
+
+            BitmapFontRenderer.DrawCentered(spriteBatch, pixel, "SABINO SOFTWARE", new Vector2(ScreenSize.X / 2f, logoBounds.Y + UiLayoutScale * 58f), bootPrimaryColor * fade, 2.35f);
+            BitmapFontRenderer.DrawCentered(spriteBatch, pixel, "GENERATING PROCEDURAL SYSTEMS", new Vector2(ScreenSize.X / 2f, logoBounds.Bottom + UiLayoutScale * 18f), bootSecondaryColor * (0.9f * fade), 1.05f);
+            BitmapFontRenderer.DrawCentered(spriteBatch, pixel, bootStatus, new Vector2(ScreenSize.X / 2f, logoBounds.Bottom + UiLayoutScale * 56f), Color.White * (0.75f * fade), 0.95f);
+
+            Rectangle progressBounds = new Rectangle((int)(VirtualWidth * 0.5f - UiLayoutScale * 180f), (int)(logoBounds.Bottom + UiLayoutScale * 86f), (int)(UiLayoutScale * 360f), UiPx(10));
+            spriteBatch.Draw(pixel, progressBounds, Color.White * 0.12f);
+            float progress = bootReady ? 1f : ((float)bootPhase + 0.15f) / (int)BootPhase.Complete;
+            spriteBatch.Draw(pixel, new Rectangle(progressBounds.X, progressBounds.Y, Math.Max(1, (int)MathF.Round(progressBounds.Width * progress)), progressBounds.Height), Color.Lerp(bootGlowColorA, bootGlowColorB, 0.4f));
+
+            float promptPulse = 0.4f + 0.6f * MathF.Abs(MathF.Sin(time * 4.1f));
+            string prompt = bootReady
+#if ANDROID
+                ? "TAP THE LOGO TO BURST TO THE MENU"
+                : "TAP THE LOGO TO SPARK THE LOADER";
+#else
+                ? "TAP OR CLICK THE LOGO TO BURST TO THE MENU"
+                : "TAP OR CLICK THE LOGO TO SPARK THE LOADER";
+#endif
+            BitmapFontRenderer.DrawCentered(spriteBatch, pixel, prompt, new Vector2(ScreenSize.X / 2f, VirtualHeight - UiLayoutScale * 96f), bootPromptColor * ((0.35f + promptPulse * 0.35f) * fade), 0.95f);
+            spriteBatch.Draw(pixel, full, Color.Black * (1f - fade));
+        }
+
+        private void UpdateBootPixels(float deltaSeconds)
+        {
+            for (int i = 0; i < bootPixels.Count; i++)
+            {
+                BootPixel pixel = bootPixels[i];
+                Vector2 toTarget = pixel.Target - pixel.Position;
+                float attraction = bootExploded && bootReady ? 0.04f : 0.18f;
+                pixel.Velocity += toTarget * attraction * deltaSeconds * 60f;
+                pixel.Velocity *= bootExploded && bootReady ? 0.985f : 0.92f;
+                pixel.Position += pixel.Velocity * deltaSeconds;
+                bootPixels[i] = pixel;
+            }
+        }
+
+        private void TriggerBootExplosion()
+        {
+            Rectangle logoBounds = GetBootLogoBounds();
+            Vector2 origin = new Vector2(logoBounds.Center.X, logoBounds.Center.Y);
+            bootExploded = true;
+            for (int i = 0; i < bootPixels.Count; i++)
+            {
+                BootPixel pixel = bootPixels[i];
+                Vector2 direction = pixel.Position - origin;
+                if (direction == Vector2.Zero)
+                    direction = new Vector2(0f, -1f);
+                direction.Normalize();
+                pixel.Velocity = direction * (180f + (i % 17) * 10f);
+                bootPixels[i] = pixel;
+            }
+        }
+
+        private void BuildBootPixels()
+        {
+            bootPixels.Clear();
+            Rectangle logo = GetBootLogoBounds();
+            int columns = 56;
+            int rows = 18;
+            float spacingX = logo.Width / (float)columns;
+            float spacingY = logo.Height / (float)rows;
+
+            for (int y = 0; y < rows; y++)
+            {
+                for (int x = 0; x < columns; x++)
+                {
+                    if ((x + y) % 3 == 1)
+                        continue;
+
+                    Vector2 target = new Vector2(logo.Left + spacingX * (x + 0.5f), logo.Top + spacingY * (y + 0.5f));
+                    float seed = MathF.Abs(MathF.Sin((x + 1) * 11.73f + (y + 1) * 17.19f));
+                    Vector2 start = new Vector2(target.X, -64f - seed * 320f - y * 8f);
+                    bootPixels.Add(new BootPixel
+                    {
+                        Position = start,
+                        Velocity = new Vector2(0f, 64f + seed * 48f),
+                        Target = target,
+                        Color = (x + y) % 2 == 0 ? bootPrimaryColor : bootSecondaryColor,
+                    });
+                }
+            }
+        }
+
+        private Rectangle GetBootLogoBounds()
+        {
+            int width = Math.Min(VirtualWidth - UiPx(280), UiPx(760));
+            int height = Math.Min(VirtualHeight / 3, UiPx(210));
+            return new Rectangle((VirtualWidth - width) / 2, UiPx(96), width, height);
+        }
+
+        private void RandomizeBootPalette()
+        {
+            switch (bootVisualRandom.Next(5))
+            {
+                case 0:
+                    bootBackgroundColor = new Color(8, 12, 26);
+                    bootGlowColorA = new Color(88, 196, 255);
+                    bootGlowColorB = new Color(255, 188, 96);
+                    bootPrimaryColor = Color.White;
+                    bootSecondaryColor = new Color(88, 196, 255);
+                    bootPromptColor = new Color(255, 188, 96);
+                    break;
+                case 1:
+                    bootBackgroundColor = new Color(14, 8, 24);
+                    bootGlowColorA = new Color(201, 116, 255);
+                    bootGlowColorB = new Color(86, 237, 193);
+                    bootPrimaryColor = Color.White;
+                    bootSecondaryColor = new Color(201, 116, 255);
+                    bootPromptColor = new Color(86, 237, 193);
+                    break;
+                case 2:
+                    bootBackgroundColor = new Color(8, 16, 18);
+                    bootGlowColorA = new Color(123, 229, 176);
+                    bootGlowColorB = new Color(244, 232, 120);
+                    bootPrimaryColor = Color.White;
+                    bootSecondaryColor = new Color(123, 229, 176);
+                    bootPromptColor = new Color(244, 232, 120);
+                    break;
+                case 3:
+                    bootBackgroundColor = new Color(16, 10, 18);
+                    bootGlowColorA = new Color(255, 132, 165);
+                    bootGlowColorB = new Color(116, 170, 255);
+                    bootPrimaryColor = Color.White;
+                    bootSecondaryColor = new Color(255, 132, 165);
+                    bootPromptColor = new Color(116, 170, 255);
+                    break;
+                default:
+                    bootBackgroundColor = new Color(6, 14, 30);
+                    bootGlowColorA = new Color(92, 160, 255);
+                    bootGlowColorB = new Color(152, 246, 255);
+                    bootPrimaryColor = Color.White;
+                    bootSecondaryColor = new Color(152, 246, 255);
+                    bootPromptColor = new Color(92, 160, 255);
+                    break;
+            }
         }
 
         protected override void UnloadContent()

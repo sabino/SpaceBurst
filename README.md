@@ -40,6 +40,7 @@ License: **The Unlicense**
 - `R` touch button: rewind
 - Tap the weapon HUD at the top to cycle owned weapon styles
 - Tap the visible `PAUSE` chip in the top stage panel to pause
+- Use the Android back action to close menus such as Options, Help, and Save/Load
 
 ## Saves, Rewind, and Progression
 
@@ -49,7 +50,8 @@ License: **The Unlicense**
 - `Lives` restart the current stage once ships are exhausted.
 - Power cores feed between-stage upgrade drafts and long-run weapon growth.
 - The title screen can skip the tutorial immediately, and the tutorial pause menu can skip it mid-run.
-- Options include display/FX/audio tuning plus a game-scale slider preset.
+- Options include `UI Scale`, `World Scale`, `Font Theme`, plus display/FX/audio tuning.
+- Android defaults to the built-in `Readable` font theme and a larger UI baseline for touch readability.
 
 ## Release Downloads
 
