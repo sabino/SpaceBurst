@@ -27,10 +27,11 @@ namespace SpaceBurst
     {
         public static HudLayout Calculate(int virtualWidth, GameFlowState state, int currentStageNumber, int transitionTargetStageNumber, bool transitionToBoss, WeaponInventoryState inventory, int score)
         {
-            const int margin = 12;
-            const int gap = 10;
-            const int top = 10;
-            const int height = 88;
+            float uiScale = Game1.Instance != null ? Game1.Instance.UiLayoutScale : 1f;
+            int margin = Scale(12, uiScale);
+            int gap = Scale(10, uiScale);
+            int top = Scale(10, uiScale);
+            int height = Scale(88, uiScale);
 
             WeaponStyleDefinition activeStyle = WeaponCatalog.GetStyle(inventory.ActiveStyle);
             string stageLabel = state switch
@@ -44,25 +45,25 @@ namespace SpaceBurst
             string scoreLabel = string.Concat("SCORE ", score.ToString());
 
             int totalWidth = virtualWidth - margin * 2 - gap * 5;
-            int livesWidth = MeasureHudWidth(string.Concat("LIVES ", PlayerStatus.Lives.ToString()), 2f, 40, 200);
-            int activeWidth = MeasureHudWidth(activeStyle.DisplayName, 1.8f, 110, 220);
-            int stageWidth = MeasureHudWidth(stageLabel, 1.7f, 54, 170);
-            int pityWidth = 190;
-            int scoreWidth = MeasureHudWidth(scoreLabel, 1.65f, 186, 272);
+            int livesWidth = MeasureHudWidth(string.Concat("LIVES ", PlayerStatus.Lives.ToString()), 2f, Scale(40, uiScale), Scale(200, uiScale));
+            int activeWidth = MeasureHudWidth(activeStyle.DisplayName, 1.8f, Scale(110, uiScale), Scale(220, uiScale));
+            int stageWidth = MeasureHudWidth(stageLabel, 1.7f, Scale(54, uiScale), Scale(170, uiScale));
+            int pityWidth = Scale(190, uiScale);
+            int scoreWidth = MeasureHudWidth(scoreLabel, 1.65f, Scale(186, uiScale), Scale(272, uiScale));
             int ownedWidth = totalWidth - livesWidth - activeWidth - stageWidth - pityWidth - scoreWidth;
 
-            if (ownedWidth < 180)
+            if (ownedWidth < Scale(180, uiScale))
             {
-                int deficit = 180 - ownedWidth;
-                int reduceScore = System.Math.Min(deficit, System.Math.Max(0, scoreWidth - 240));
+                int deficit = Scale(180, uiScale) - ownedWidth;
+                int reduceScore = System.Math.Min(deficit, System.Math.Max(0, scoreWidth - Scale(240, uiScale)));
                 scoreWidth -= reduceScore;
                 deficit -= reduceScore;
 
-                int reduceActive = System.Math.Min(deficit, System.Math.Max(0, activeWidth - 200));
+                int reduceActive = System.Math.Min(deficit, System.Math.Max(0, activeWidth - Scale(200, uiScale)));
                 activeWidth -= reduceActive;
                 deficit -= reduceActive;
 
-                int reduceStage = System.Math.Min(deficit, System.Math.Max(0, stageWidth - 150));
+                int reduceStage = System.Math.Min(deficit, System.Math.Max(0, stageWidth - Scale(150, uiScale)));
                 stageWidth -= reduceStage;
                 ownedWidth = totalWidth - livesWidth - activeWidth - stageWidth - pityWidth - scoreWidth;
             }
@@ -85,12 +86,20 @@ namespace SpaceBurst
         public static Rectangle GetAndroidPauseChipBounds(HudLayout layout)
         {
             Rectangle stageBounds = layout.StageBounds;
-            return new Rectangle(stageBounds.Right - 34, stageBounds.Y + 10, 20, 18);
+            float uiScale = Game1.Instance != null ? Game1.Instance.UiLayoutScale : 1f;
+            int width = System.Math.Min(Scale(112, uiScale), stageBounds.Width - Scale(18, uiScale));
+            width = System.Math.Max(width, Scale(78, uiScale));
+            return new Rectangle(stageBounds.Right - width - Scale(10, uiScale), stageBounds.Y + Scale(10, uiScale), width, Scale(28, uiScale));
         }
 
         private static int MeasureHudWidth(string text, float scale, int padding, int minimum)
         {
             return System.Math.Max(minimum, (int)System.MathF.Ceiling(BitmapFontRenderer.Measure(text, scale).X) + padding);
+        }
+
+        private static int Scale(int value, float scale)
+        {
+            return System.Math.Max(1, (int)System.MathF.Round(value * scale));
         }
     }
 }

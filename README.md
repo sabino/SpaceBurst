@@ -17,7 +17,7 @@ License: **The Unlicense**
 - Deterministic rewind, save slots, and transition-time upgrade drafts.
 - Ten weapon styles with style-specific power cores and progression.
 - Procedural art, feedback effects, chapter-aware music, and runtime-generated audio.
-- Sabino Software falling-pixel splash intro that doubles as procedural warm-up/loading presentation.
+- Sabino Software falling-pixel splash intro with randomized launch palette/background, fade-in, and skip interaction.
 - Desktop, Linux, and Android packaging paths.
 - GitHub Actions for PR checks, prereleases, and Pages docs.
 
@@ -39,7 +39,8 @@ License: **The Unlicense**
 - Right touch pad: aim and fire
 - `R` touch button: rewind
 - Tap the weapon HUD at the top to cycle owned weapon styles
-- Tap the pause chip in the top stage panel to pause
+- Tap the visible `PAUSE` chip in the top stage panel to pause
+- Use the Android back action to close menus such as Options, Help, and Save/Load
 
 ## Saves, Rewind, and Progression
 
@@ -48,6 +49,9 @@ License: **The Unlicense**
 - `Ships` give in-place respawns.
 - `Lives` restart the current stage once ships are exhausted.
 - Power cores feed between-stage upgrade drafts and long-run weapon growth.
+- The title screen can skip the tutorial immediately, and the tutorial pause menu can skip it mid-run.
+- Options include `UI Scale`, `World Scale`, `Font Theme`, plus display/FX/audio tuning.
+- Android defaults to the built-in `Readable` font theme and a larger UI baseline for touch readability.
 
 ## Release Downloads
 

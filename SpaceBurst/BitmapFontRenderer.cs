@@ -7,6 +7,9 @@ namespace SpaceBurst
 {
     static class BitmapFontRenderer
     {
+        public static FontTheme CurrentTheme { get; set; } = FontTheme.Compact;
+        public static float GlobalScaleMultiplier { get; set; } = 1f;
+
         private static readonly Dictionary<char, string[]> glyphs = new Dictionary<char, string[]>
         {
             [' '] = new[] { "...", "...", "...", "...", "...", "...", "..." },
@@ -63,19 +66,21 @@ namespace SpaceBurst
 
         public static Vector2 Measure(string text, float scale)
         {
+            FontThemeMetrics metrics = ResolveMetrics();
             string[] lines = Normalize(text).Split('\n');
             int maxWidth = 0;
             for (int i = 0; i < lines.Length; i++)
-                maxWidth = Math.Max(maxWidth, MeasureLine(lines[i]));
+                maxWidth = Math.Max(maxWidth, MeasureLine(lines[i], metrics.CharacterSpacing));
 
-            float pixelScale = Math.Max(1f, scale);
-            return new Vector2(maxWidth * pixelScale, lines.Length * 8f * pixelScale);
+            float pixelScale = GetEffectiveScale(scale, metrics);
+            return new Vector2(maxWidth * pixelScale, lines.Length * metrics.LineHeight * pixelScale);
         }
 
         public static void Draw(SpriteBatch spriteBatch, Texture2D pixel, string text, Vector2 position, Color color, float scale)
         {
+            FontThemeMetrics metrics = ResolveMetrics();
             string normalized = Normalize(text);
-            float pixelScale = Math.Max(1f, scale);
+            float pixelScale = GetEffectiveScale(scale, metrics);
             float x = position.X;
             float y = position.Y;
 
@@ -83,7 +88,7 @@ namespace SpaceBurst
             {
                 if (ch == '\n')
                 {
-                    y += 8f * pixelScale;
+                    y += metrics.LineHeight * pixelScale;
                     x = position.X;
                     continue;
                 }
@@ -97,18 +102,26 @@ namespace SpaceBurst
                         if (line[column] != '#')
                             continue;
 
-                        spriteBatch.Draw(
-                            pixel,
-                            new Rectangle(
-                                (int)MathF.Round(x + column * pixelScale),
-                                (int)MathF.Round(y + row * pixelScale),
-                                Math.Max(1, (int)MathF.Ceiling(pixelScale)),
-                                Math.Max(1, (int)MathF.Ceiling(pixelScale))),
-                            color);
+                        Rectangle block = new Rectangle(
+                            (int)MathF.Round(x + column * pixelScale),
+                            (int)MathF.Round(y + row * pixelScale),
+                            Math.Max(1, (int)MathF.Ceiling(pixelScale)),
+                            Math.Max(1, (int)MathF.Ceiling(pixelScale)));
+
+                        if (metrics.DrawOutline)
+                        {
+                            Color outlineColor = Color.Black * (color.A / 255f) * 0.55f;
+                            spriteBatch.Draw(pixel, new Rectangle(block.X - 1, block.Y, block.Width, block.Height), outlineColor);
+                            spriteBatch.Draw(pixel, new Rectangle(block.X + 1, block.Y, block.Width, block.Height), outlineColor);
+                            spriteBatch.Draw(pixel, new Rectangle(block.X, block.Y - 1, block.Width, block.Height), outlineColor);
+                            spriteBatch.Draw(pixel, new Rectangle(block.X, block.Y + 1, block.Width, block.Height), outlineColor);
+                        }
+
+                        spriteBatch.Draw(pixel, block, color);
                     }
                 }
 
-                x += (glyph[0].Length + 1) * pixelScale;
+                x += (glyph[0].Length + metrics.CharacterSpacing) * pixelScale;
             }
         }
 
@@ -123,18 +136,46 @@ namespace SpaceBurst
             return (text ?? string.Empty).ToUpperInvariant().Replace("\r\n", "\n");
         }
 
-        private static int MeasureLine(string line)
+        private static int MeasureLine(string line, int characterSpacing)
         {
             int width = 0;
             for (int i = 0; i < line.Length; i++)
-                width += ResolveGlyph(line[i])[0].Length + 1;
+                width += ResolveGlyph(line[i])[0].Length + characterSpacing;
 
-            return Math.Max(0, width - 1);
+            return Math.Max(0, width - characterSpacing);
         }
 
         private static string[] ResolveGlyph(char ch)
         {
             return glyphs.TryGetValue(ch, out string[] glyph) ? glyph : fallback;
+        }
+
+        private static float GetEffectiveScale(float scale, FontThemeMetrics metrics)
+        {
+            return Math.Max(1f, scale * GlobalScaleMultiplier * metrics.ScaleMultiplier);
+        }
+
+        private static FontThemeMetrics ResolveMetrics()
+        {
+            return CurrentTheme == FontTheme.Readable
+                ? new FontThemeMetrics(scaleMultiplier: 1.15f, lineHeight: 9f, characterSpacing: 2, drawOutline: true)
+                : new FontThemeMetrics(scaleMultiplier: 1f, lineHeight: 8f, characterSpacing: 1, drawOutline: false);
+        }
+
+        private readonly struct FontThemeMetrics
+        {
+            public FontThemeMetrics(float scaleMultiplier, float lineHeight, int characterSpacing, bool drawOutline)
+            {
+                ScaleMultiplier = scaleMultiplier;
+                LineHeight = lineHeight;
+                CharacterSpacing = characterSpacing;
+                DrawOutline = drawOutline;
+            }
+
+            public float ScaleMultiplier { get; }
+            public float LineHeight { get; }
+            public int CharacterSpacing { get; }
+            public bool DrawOutline { get; }
         }
     }
 }

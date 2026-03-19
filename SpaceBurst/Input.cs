@@ -57,7 +57,7 @@ namespace SpaceBurst
             mouseState = default(MouseState);
 #else
             mouseState = Mouse.GetState();
-            pointerPosition = Game1.ScreenToWorld(new Vector2(mouseState.X, mouseState.Y));
+            pointerPosition = Game1.ScreenToUi(new Vector2(mouseState.X, mouseState.Y));
             primaryActionPressed = lastMouseState.LeftButton == ButtonState.Released && mouseState.LeftButton == ButtonState.Pressed;
             fireHeld = keyboardState.IsKeyDown(Keys.Space) || gamepadState.Triggers.Right > 0.25f;
             rewindHeld = keyboardState.IsKeyDown(Keys.R) || gamepadState.IsButtonDown(Buttons.LeftShoulder);
@@ -227,12 +227,14 @@ namespace SpaceBurst
 
             foreach (TouchLocation touch in touches)
             {
+                Vector2 rawScreenPosition = touch.Position;
                 Vector2 screenPosition = Vector2.Clamp(
                     touch.Position,
                     new Vector2(gameplayBounds.Left, gameplayBounds.Top),
                     new Vector2(gameplayBounds.Right - 1, gameplayBounds.Bottom - 1));
+                Vector2 uiPosition = Game1.ScreenToUi(rawScreenPosition);
 
-                pointerPosition = Game1.ScreenToWorld(screenPosition);
+                pointerPosition = uiPosition;
 
                 if (touch.State == TouchLocationState.Pressed)
                     primaryActionPressed = true;
@@ -271,13 +273,13 @@ namespace SpaceBurst
                     rewindFound = true;
                     rewindHeld = true;
                 }
-                else if (weaponBounds.Contains(screenPosition))
+                else if (weaponBounds.Contains(uiPosition))
                 {
                     touchTopButtonId = touch.Id;
                     topButtonFound = true;
                     touchStyleCyclePressed = touch.State == TouchLocationState.Pressed;
                 }
-                else if (pauseBounds.Contains(screenPosition))
+                else if (pauseBounds.Contains(uiPosition))
                 {
                     touchTopButtonId = touch.Id;
                     topButtonFound = true;
@@ -415,7 +417,7 @@ namespace SpaceBurst
                     Vector2.Zero,
                     Game1.ScreenSize - Vector2.One);
 
-                pointerPosition = Game1.ScreenToWorld(screenPosition);
+                pointerPosition = Game1.ScreenToUi(screenPosition);
                 if (touch.State == TouchLocationState.Pressed)
                     primaryActionPressed = true;
             }

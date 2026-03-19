@@ -6,6 +6,19 @@ namespace SpaceBurst
         public bool TutorialCompleted { get; set; }
         public bool AutoUpgradeDraft { get; set; }
         public DesktopDisplayMode DisplayMode { get; set; } = DesktopDisplayMode.BorderlessFullscreen;
+        public int UiScalePercent { get; set; } =
+#if ANDROID
+            100;
+#else
+            100;
+#endif
+        public int WorldScalePercent { get; set; } = 100;
+        public FontTheme FontTheme { get; set; } =
+#if ANDROID
+            FontTheme.Readable;
+#else
+            FontTheme.Compact;
+#endif
         public VisualPreset VisualPreset { get; set; } = VisualPreset.Standard;
         public bool EnableBloom { get; set; } = true;
         public bool EnableShockwaves { get; set; } = true;
