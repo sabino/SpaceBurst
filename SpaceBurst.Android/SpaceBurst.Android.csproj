@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-android34.0</TargetFramework>
+    <SupportedOSPlatformVersion>23</SupportedOSPlatformVersion>
+    <OutputType>Exe</OutputType>
+    <ApplicationTitle>SpaceBurst</ApplicationTitle>
+    <ApplicationId>com.sabino.spaceburst</ApplicationId>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <Company>Sabino Software</Company>
+    <Authors>Sabino Software</Authors>
+    <Product>SpaceBurst</Product>
+    <Description>Procedural side-scrolling shooter with deterministic rewind, weapon drafts, and cross-platform release builds.</Description>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+    <AndroidPackageFormat>apk</AndroidPackageFormat>
+    <MonoGamePlatform>Android</MonoGamePlatform>
+    <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+    <AndroidFastDeploymentType>None</AndroidFastDeploymentType>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MonoGame.Framework.Android" Version="3.8.4.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SpaceBurst.Runtime\SpaceBurst.Runtime.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\SpaceBurst\*.cs" Exclude="..\SpaceBurst\Program.cs" Link="Shared\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AndroidAsset Include="..\SpaceBurst\Content\bin\Android\Content\**\*.*" Link="Content\%(RecursiveDir)%(Filename)%(Extension)" />
+    <AndroidAsset Include="..\Levels\**\*.json" Link="Levels\%(RecursiveDir)%(Filename)%(Extension)" />
+    <AndroidAsset Include="..\LICENSE" Link="LICENSE" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,260 @@
+{
+  "StageNumber": 50,
+  "Name": "Boss 50: Final Core",
+  "IntroSeconds": 1.45,
+  "ScrollSpeed": 186.0,
+  "BaseScrollSpeed": 186.0,
+  "Theme": "Ion",
+  "BackgroundSeed": 350,
+  "StartingLives": 3,
+  "ShipsPerLife": 2,
+  "BackgroundMood": {
+    "PrimaryColor": "#07151F",
+    "SecondaryColor": "#163B47",
+    "AccentColor": "#73F3E8",
+    "GlowColor": "#A7E8FF",
+    "StarDensity": 1.17,
+    "DustDensity": 1.01,
+    "LightIntensity": 0.72,
+    "PlanetPresence": 0.48,
+    "Contrast": 1.06
+  },
+  "CheckpointMarkers": [
+    23.25
+  ],
+  "Sections": [
+    {
+      "Label": "Warmup 1",
+      "StartSeconds": 0.75,
+      "DurationSeconds": 10.7,
+      "Checkpoint": false,
+      "PowerDropBonusChance": 0.035,
+      "ScrollMultiplier": 0.9,
+      "EnemySpeedMultiplier": 0.82,
+      "Mood": {
+        "PrimaryColor": "#07151F",
+        "SecondaryColor": "#163B47",
+        "AccentColor": "#73F3E8",
+        "GlowColor": "#A7E8FF",
+        "StarDensity": 1.17,
+        "DustDensity": 1.01,
+        "LightIntensity": 0.72,
+        "PlanetPresence": 0.48,
+        "Contrast": 1.06
+      },
+      "EventWindows": [
+        {
+          "EventType": "DebrisDrift",
+          "StartSeconds": 2.3,
+          "DurationSeconds": 3.2,
+          "Weight": 1.0,
+          "Intensity": 0.96
+        }
+      ],
+      "Groups": [
+        {
+          "ArchetypeId": "Interceptor",
+          "StartSeconds": 0.0,
+          "Lane": 0,
+          "Count": 10,
+          "SpawnLeadDistance": 250.0,
+          "SpawnIntervalSeconds": 0.14,
+          "SpacingX": 68.0,
+          "SpeedMultiplier": 1.33,
+          "MovePatternOverride": "SineWave",
+          "FirePatternOverride": "None",
+          "Amplitude": 50.0,
+          "Frequency": 1.18
+        },
+        {
+          "ArchetypeId": "Walker",
+          "StartSeconds": 3.2,
+          "Lane": 3,
+          "Count": 8,
+          "SpawnLeadDistance": 220.0,
+          "SpawnIntervalSeconds": 0.2,
+          "SpacingX": 80.0,
+          "SpeedMultiplier": 1.22,
+          "MovePatternOverride": "StraightFlyIn",
+          "FirePatternOverride": "None",
+          "Amplitude": 28.0,
+          "Frequency": 1.0
+        },
+        {
+          "ArchetypeId": "Destroyer",
+          "StartSeconds": 6.2,
+          "Lane": 2,
+          "Count": 4,
+          "SpawnLeadDistance": 318.0,
+          "SpawnIntervalSeconds": 0.24,
+          "SpacingX": 96.0,
+          "SpeedMultiplier": 1.2,
+          "MovePatternOverride": "Dive",
+          "FirePatternOverride": "ForwardPulse",
+          "Amplitude": 44.0,
+          "Frequency": 0.9
+        }
+      ]
+    },
+    {
+      "Label": "Warmup 2",
+      "StartSeconds": 12.0,
+      "DurationSeconds": 10.7,
+      "Checkpoint": false,
+      "PowerDropBonusChance": 0.045,
+      "ScrollMultiplier": 0.99,
+      "EnemySpeedMultiplier": 0.96,
+      "Mood": {
+        "PrimaryColor": "#07151F",
+        "SecondaryColor": "#163B47",
+        "AccentColor": "#73F3E8",
+        "GlowColor": "#A7E8FF",
+        "StarDensity": 1.22,
+        "DustDensity": 1.05,
+        "LightIntensity": 0.78,
+        "PlanetPresence": 0.44,
+        "Contrast": 1.06
+      },
+      "EventWindows": [],
+      "Groups": [
+        {
+          "ArchetypeId": "Interceptor",
+          "StartSeconds": 0.0,
+          "Lane": 1,
+          "Count": 11,
+          "SpawnLeadDistance": 250.0,
+          "SpawnIntervalSeconds": 0.14,
+          "SpacingX": 68.0,
+          "SpeedMultiplier": 1.33,
+          "MovePatternOverride": "SineWave",
+          "FirePatternOverride": "None",
+          "Amplitude": 62.0,
+          "Frequency": 1.18
+        },
+        {
+          "ArchetypeId": "Walker",
+          "StartSeconds": 3.2,
+          "Lane": 4,
+          "Count": 9,
+          "SpawnLeadDistance": 220.0,
+          "SpawnIntervalSeconds": 0.2,
+          "SpacingX": 80.0,
+          "SpeedMultiplier": 1.22,
+          "MovePatternOverride": "StraightFlyIn",
+          "FirePatternOverride": "None",
+          "Amplitude": 28.0,
+          "Frequency": 1.0
+        },
+        {
+          "ArchetypeId": "Carrier",
+          "StartSeconds": 6.2,
+          "Lane": 3,
+          "Count": 4,
+          "SpawnLeadDistance": 318.0,
+          "SpawnIntervalSeconds": 0.24,
+          "SpacingX": 96.0,
+          "SpeedMultiplier": 1.2,
+          "MovePatternOverride": "TurretCarrier",
+          "FirePatternOverride": "ForwardPulse",
+          "Amplitude": 44.0,
+          "Frequency": 0.9
+        }
+      ]
+    },
+    {
+      "Label": "Warmup 3",
+      "StartSeconds": 23.25,
+      "DurationSeconds": 10.7,
+      "Checkpoint": true,
+      "PowerDropBonusChance": 0.055,
+      "ScrollMultiplier": 1.09,
+      "EnemySpeedMultiplier": 1.08,
+      "Mood": {
+        "PrimaryColor": "#07151F",
+        "SecondaryColor": "#163B47",
+        "AccentColor": "#73F3E8",
+        "GlowColor": "#A7E8FF",
+        "StarDensity": 1.27,
+        "DustDensity": 1.09,
+        "LightIntensity": 0.84,
+        "PlanetPresence": 0.4,
+        "Contrast": 1.06
+      },
+      "EventWindows": [],
+      "Groups": [
+        {
+          "ArchetypeId": "Interceptor",
+          "StartSeconds": 0.0,
+          "Lane": 2,
+          "Count": 12,
+          "SpawnLeadDistance": 250.0,
+          "SpawnIntervalSeconds": 0.14,
+          "SpacingX": 68.0,
+          "SpeedMultiplier": 1.33,
+          "MovePatternOverride": "SineWave",
+          "FirePatternOverride": "None",
+          "Amplitude": 74.0,
+          "Frequency": 1.18
+        },
+        {
+          "ArchetypeId": "Walker",
+          "StartSeconds": 3.2,
+          "Lane": 0,
+          "Count": 10,
+          "SpawnLeadDistance": 220.0,
+          "SpawnIntervalSeconds": 0.2,
+          "SpacingX": 80.0,
+          "SpeedMultiplier": 1.22,
+          "MovePatternOverride": "StraightFlyIn",
+          "FirePatternOverride": "None",
+          "Amplitude": 28.0,
+          "Frequency": 1.0
+        },
+        {
+          "ArchetypeId": "Destroyer",
+          "StartSeconds": 6.2,
+          "Lane": 4,
+          "Count": 4,
+          "SpawnLeadDistance": 318.0,
+          "SpawnIntervalSeconds": 0.24,
+          "SpacingX": 96.0,
+          "SpeedMultiplier": 1.2,
+          "MovePatternOverride": "Dive",
+          "FirePatternOverride": "ForwardPulse",
+          "Amplitude": 44.0,
+          "Frequency": 0.9
+        }
+      ]
+    }
+  ],
+  "Boss": {
+    "Type": "FinalBoss",
+    "DisplayName": "Final Core",
+    "ArchetypeId": "BossFinal",
+    "IntroSeconds": 1.4,
+    "TargetY": 0.5,
+    "ArenaScrollSpeed": 42,
+    "HitPoints": 135,
+    "AllowRandomEvents": false,
+    "HazardOverrides": [],
+    "MoodOverride": {
+      "PrimaryColor": "#07151F",
+      "SecondaryColor": "#163B47",
+      "AccentColor": "#73F3E8",
+      "GlowColor": "#A7E8FF",
+      "StarDensity": 1.27,
+      "DustDensity": 1.09,
+      "LightIntensity": 0.84,
+      "PlanetPresence": 0.4,
+      "Contrast": 1.06
+    },
+    "PhaseThresholds": [
+      0.84,
+      0.6,
+      0.36,
+      0.18
+    ],
+    "MovePattern": "BossOrbit",
+    "FirePattern": "BossFan"
+  }
+}

@@ -1,0 +1,320 @@
+{
+  "StageNumber": 6,
+  "Name": "Signal Arc",
+  "IntroSeconds": 1.2,
+  "ScrollSpeed": 125.0,
+  "BaseScrollSpeed": 125.0,
+  "Theme": "Solar",
+  "BackgroundSeed": 42,
+  "StartingLives": 3,
+  "ShipsPerLife": 2,
+  "BackgroundMood": {
+    "PrimaryColor": "#1A0E10",
+    "SecondaryColor": "#46303A",
+    "AccentColor": "#FFB057",
+    "GlowColor": "#FFD99E",
+    "StarDensity": 0.96,
+    "DustDensity": 1.15,
+    "LightIntensity": 0.76,
+    "PlanetPresence": 0.58,
+    "Contrast": 0.98
+  },
+  "CheckpointMarkers": [
+    21.75
+  ],
+  "Sections": [
+    {
+      "Label": "Section 1",
+      "StartSeconds": 0.75,
+      "DurationSeconds": 9.85,
+      "Checkpoint": false,
+      "PowerDropBonusChance": 0.015,
+      "ScrollMultiplier": 0.9,
+      "EnemySpeedMultiplier": 0.82,
+      "Mood": {
+        "PrimaryColor": "#1A0E10",
+        "SecondaryColor": "#46303A",
+        "AccentColor": "#FFB057",
+        "GlowColor": "#FFD99E",
+        "StarDensity": 0.96,
+        "DustDensity": 1.15,
+        "LightIntensity": 0.76,
+        "PlanetPresence": 0.58,
+        "Contrast": 0.98
+      },
+      "EventWindows": [
+        {
+          "EventType": "MeteorShower",
+          "StartSeconds": 2.2,
+          "DurationSeconds": 3.35,
+          "Weight": 1.0,
+          "Intensity": 0.86
+        }
+      ],
+      "Groups": [
+        {
+          "ArchetypeId": "Interceptor",
+          "StartSeconds": 0.0,
+          "Lane": 1,
+          "Count": 6,
+          "SpawnLeadDistance": 250.0,
+          "SpawnIntervalSeconds": 0.14,
+          "SpacingX": 72.0,
+          "SpeedMultiplier": 1.13,
+          "MovePatternOverride": "SineWave",
+          "FirePatternOverride": "None",
+          "Amplitude": 60.0,
+          "Frequency": 1.2
+        },
+        {
+          "ArchetypeId": "Destroyer",
+          "StartSeconds": 3.8,
+          "Lane": 3,
+          "Count": 4,
+          "SpawnLeadDistance": 300.0,
+          "SpawnIntervalSeconds": 0.26,
+          "SpacingX": 96.0,
+          "SpeedMultiplier": 1.04,
+          "MovePatternOverride": "Dive",
+          "FirePatternOverride": "ForwardPulse",
+          "Amplitude": 42.0,
+          "Frequency": 0.9
+        },
+        {
+          "ArchetypeId": "Walker",
+          "StartSeconds": 7.0,
+          "Lane": 0,
+          "Count": 3,
+          "SpawnLeadDistance": 220.0,
+          "SpawnIntervalSeconds": 0.2,
+          "SpacingX": 80.0,
+          "SpeedMultiplier": 1.05,
+          "MovePatternOverride": "StraightFlyIn",
+          "FirePatternOverride": "None",
+          "Amplitude": 30.0,
+          "Frequency": 1.0
+        }
+      ]
+    },
+    {
+      "Label": "Section 2",
+      "StartSeconds": 11.25,
+      "DurationSeconds": 9.85,
+      "Checkpoint": false,
+      "PowerDropBonusChance": 0.025,
+      "ScrollMultiplier": 0.99,
+      "EnemySpeedMultiplier": 0.96,
+      "Mood": {
+        "PrimaryColor": "#1A0E10",
+        "SecondaryColor": "#46303A",
+        "AccentColor": "#FFB057",
+        "GlowColor": "#FFD99E",
+        "StarDensity": 0.99,
+        "DustDensity": 1.18,
+        "LightIntensity": 0.8,
+        "PlanetPresence": 0.55,
+        "Contrast": 0.98
+      },
+      "EventWindows": [
+        {
+          "EventType": "SolarFlare",
+          "StartSeconds": 2.75,
+          "DurationSeconds": 2.6,
+          "Weight": 1.0,
+          "Intensity": 0.94
+        }
+      ],
+      "Groups": [
+        {
+          "ArchetypeId": "Interceptor",
+          "StartSeconds": 0.0,
+          "Lane": 3,
+          "Count": 7,
+          "SpawnLeadDistance": 240.0,
+          "SpawnIntervalSeconds": 0.13,
+          "SpacingX": 68.0,
+          "SpeedMultiplier": 1.09,
+          "MovePatternOverride": "SineWave",
+          "FirePatternOverride": "None",
+          "Amplitude": 52.0,
+          "Frequency": 1.12
+        },
+        {
+          "ArchetypeId": "Walker",
+          "StartSeconds": 3.7,
+          "Lane": 0,
+          "Count": 5,
+          "SpawnLeadDistance": 220.0,
+          "SpawnIntervalSeconds": 0.22,
+          "SpacingX": 80.0,
+          "SpeedMultiplier": 1.03,
+          "MovePatternOverride": "StraightFlyIn",
+          "FirePatternOverride": "None",
+          "Amplitude": 30.0,
+          "Frequency": 1.0
+        },
+        {
+          "ArchetypeId": "Interceptor",
+          "StartSeconds": 7.0,
+          "Lane": 2,
+          "Count": 5,
+          "SpawnLeadDistance": 250.0,
+          "SpawnIntervalSeconds": 0.14,
+          "SpacingX": 72.0,
+          "SpeedMultiplier": 1.13,
+          "MovePatternOverride": "SineWave",
+          "FirePatternOverride": "None",
+          "Amplitude": 58.0,
+          "Frequency": 1.18
+        }
+      ]
+    },
+    {
+      "Label": "Section 3",
+      "StartSeconds": 21.75,
+      "DurationSeconds": 9.85,
+      "Checkpoint": true,
+      "PowerDropBonusChance": 0.035,
+      "ScrollMultiplier": 1.09,
+      "EnemySpeedMultiplier": 1.08,
+      "Mood": {
+        "PrimaryColor": "#1A0E10",
+        "SecondaryColor": "#46303A",
+        "AccentColor": "#FFB057",
+        "GlowColor": "#FFD99E",
+        "StarDensity": 1.03,
+        "DustDensity": 1.2,
+        "LightIntensity": 0.84,
+        "PlanetPresence": 0.53,
+        "Contrast": 0.98
+      },
+      "EventWindows": [
+        {
+          "EventType": "DebrisDrift",
+          "StartSeconds": 3.3,
+          "DurationSeconds": 3.65,
+          "Weight": 1.0,
+          "Intensity": 1.02
+        }
+      ],
+      "Groups": [
+        {
+          "ArchetypeId": "Interceptor",
+          "StartSeconds": 0.0,
+          "Lane": 0,
+          "Count": 7,
+          "SpawnLeadDistance": 250.0,
+          "SpawnIntervalSeconds": 0.14,
+          "SpacingX": 70.0,
+          "SpeedMultiplier": 1.13,
+          "MovePatternOverride": "SineWave",
+          "FirePatternOverride": "None",
+          "Amplitude": 60.0,
+          "Frequency": 1.18
+        },
+        {
+          "ArchetypeId": "Destroyer",
+          "StartSeconds": 3.8,
+          "Lane": 2,
+          "Count": 4,
+          "SpawnLeadDistance": 300.0,
+          "SpawnIntervalSeconds": 0.28,
+          "SpacingX": 96.0,
+          "SpeedMultiplier": 1.02,
+          "MovePatternOverride": "Dive",
+          "FirePatternOverride": "ForwardPulse",
+          "Amplitude": 46.0,
+          "Frequency": 0.92
+        },
+        {
+          "ArchetypeId": "Walker",
+          "StartSeconds": 7.4,
+          "Lane": 4,
+          "Count": 4,
+          "SpawnLeadDistance": 220.0,
+          "SpawnIntervalSeconds": 0.2,
+          "SpacingX": 78.0,
+          "SpeedMultiplier": 1.05,
+          "MovePatternOverride": "StraightFlyIn",
+          "FirePatternOverride": "None",
+          "Amplitude": 28.0,
+          "Frequency": 1.0
+        }
+      ]
+    },
+    {
+      "Label": "Section 4",
+      "StartSeconds": 32.25,
+      "DurationSeconds": 9.85,
+      "Checkpoint": false,
+      "PowerDropBonusChance": 0.045,
+      "ScrollMultiplier": 1.18,
+      "EnemySpeedMultiplier": 1.18,
+      "Mood": {
+        "PrimaryColor": "#1A0E10",
+        "SecondaryColor": "#46303A",
+        "AccentColor": "#FFB057",
+        "GlowColor": "#FFD99E",
+        "StarDensity": 1.06,
+        "DustDensity": 1.23,
+        "LightIntensity": 0.88,
+        "PlanetPresence": 0.5,
+        "Contrast": 0.98
+      },
+      "EventWindows": [
+        {
+          "EventType": "CometSwarm",
+          "StartSeconds": 2.2,
+          "DurationSeconds": 3.8,
+          "Weight": 1.0,
+          "Intensity": 1.1
+        }
+      ],
+      "Groups": [
+        {
+          "ArchetypeId": "Walker",
+          "StartSeconds": 0.0,
+          "Lane": 1,
+          "Count": 6,
+          "SpawnLeadDistance": 220.0,
+          "SpawnIntervalSeconds": 0.2,
+          "SpacingX": 80.0,
+          "SpeedMultiplier": 1.04,
+          "MovePatternOverride": "StraightFlyIn",
+          "FirePatternOverride": "None",
+          "Amplitude": 28.0,
+          "Frequency": 1.0
+        },
+        {
+          "ArchetypeId": "Carrier",
+          "StartSeconds": 3.9,
+          "Lane": 2,
+          "Count": 3,
+          "SpawnLeadDistance": 330.0,
+          "SpawnIntervalSeconds": 0.4,
+          "SpacingX": 116.0,
+          "SpeedMultiplier": 1.01,
+          "MovePatternOverride": "TurretCarrier",
+          "FirePatternOverride": "SpreadPulse",
+          "Amplitude": 34.0,
+          "Frequency": 0.8
+        },
+        {
+          "ArchetypeId": "Interceptor",
+          "StartSeconds": 7.2,
+          "Lane": 2,
+          "Count": 4,
+          "SpawnLeadDistance": 250.0,
+          "SpawnIntervalSeconds": 0.14,
+          "SpacingX": 72.0,
+          "SpeedMultiplier": 1.15,
+          "MovePatternOverride": "SineWave",
+          "FirePatternOverride": "None",
+          "Amplitude": 62.0,
+          "Frequency": 1.2
+        }
+      ]
+    }
+  ],
+  "Boss": null
+}

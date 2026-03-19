@@ -1,0 +1,194 @@
+{
+  "StageNumber": 40,
+  "Name": "Boss 40: Walker Mk II",
+  "IntroSeconds": 1.45,
+  "ScrollSpeed": 173.0,
+  "BaseScrollSpeed": 173.0,
+  "Theme": "Nebula",
+  "BackgroundSeed": 280,
+  "StartingLives": 3,
+  "ShipsPerLife": 2,
+  "BackgroundMood": {
+    "PrimaryColor": "#0C1122",
+    "SecondaryColor": "#1C3055",
+    "AccentColor": "#6EC1FF",
+    "GlowColor": "#F6C674",
+    "StarDensity": 1.12,
+    "DustDensity": 1.09,
+    "LightIntensity": 0.8,
+    "PlanetPresence": 0.61,
+    "Contrast": 0.98
+  },
+  "CheckpointMarkers": [
+    12.0
+  ],
+  "Sections": [
+    {
+      "Label": "Warmup 1",
+      "StartSeconds": 0.75,
+      "DurationSeconds": 10.7,
+      "Checkpoint": false,
+      "PowerDropBonusChance": 0.035,
+      "ScrollMultiplier": 0.9,
+      "EnemySpeedMultiplier": 0.82,
+      "Mood": {
+        "PrimaryColor": "#0C1122",
+        "SecondaryColor": "#1C3055",
+        "AccentColor": "#6EC1FF",
+        "GlowColor": "#F6C674",
+        "StarDensity": 1.12,
+        "DustDensity": 1.09,
+        "LightIntensity": 0.8,
+        "PlanetPresence": 0.61,
+        "Contrast": 0.98
+      },
+      "EventWindows": [
+        {
+          "EventType": "DebrisDrift",
+          "StartSeconds": 2.3,
+          "DurationSeconds": 3.2,
+          "Weight": 1.0,
+          "Intensity": 0.96
+        }
+      ],
+      "Groups": [
+        {
+          "ArchetypeId": "Interceptor",
+          "StartSeconds": 0.0,
+          "Lane": 0,
+          "Count": 9,
+          "SpawnLeadDistance": 250.0,
+          "SpawnIntervalSeconds": 0.14,
+          "SpacingX": 68.0,
+          "SpeedMultiplier": 1.28,
+          "MovePatternOverride": "SineWave",
+          "FirePatternOverride": "None",
+          "Amplitude": 50.0,
+          "Frequency": 1.18
+        },
+        {
+          "ArchetypeId": "Walker",
+          "StartSeconds": 3.2,
+          "Lane": 3,
+          "Count": 7,
+          "SpawnLeadDistance": 220.0,
+          "SpawnIntervalSeconds": 0.2,
+          "SpacingX": 80.0,
+          "SpeedMultiplier": 1.18,
+          "MovePatternOverride": "StraightFlyIn",
+          "FirePatternOverride": "None",
+          "Amplitude": 28.0,
+          "Frequency": 1.0
+        },
+        {
+          "ArchetypeId": "Destroyer",
+          "StartSeconds": 6.2,
+          "Lane": 2,
+          "Count": 4,
+          "SpawnLeadDistance": 318.0,
+          "SpawnIntervalSeconds": 0.24,
+          "SpacingX": 96.0,
+          "SpeedMultiplier": 1.16,
+          "MovePatternOverride": "Dive",
+          "FirePatternOverride": "ForwardPulse",
+          "Amplitude": 44.0,
+          "Frequency": 0.9
+        }
+      ]
+    },
+    {
+      "Label": "Warmup 2",
+      "StartSeconds": 12.0,
+      "DurationSeconds": 10.7,
+      "Checkpoint": true,
+      "PowerDropBonusChance": 0.045,
+      "ScrollMultiplier": 0.99,
+      "EnemySpeedMultiplier": 0.96,
+      "Mood": {
+        "PrimaryColor": "#0C1122",
+        "SecondaryColor": "#1C3055",
+        "AccentColor": "#6EC1FF",
+        "GlowColor": "#F6C674",
+        "StarDensity": 1.22,
+        "DustDensity": 1.17,
+        "LightIntensity": 0.92,
+        "PlanetPresence": 0.53,
+        "Contrast": 0.98
+      },
+      "EventWindows": [],
+      "Groups": [
+        {
+          "ArchetypeId": "Interceptor",
+          "StartSeconds": 0.0,
+          "Lane": 1,
+          "Count": 10,
+          "SpawnLeadDistance": 250.0,
+          "SpawnIntervalSeconds": 0.14,
+          "SpacingX": 68.0,
+          "SpeedMultiplier": 1.28,
+          "MovePatternOverride": "SineWave",
+          "FirePatternOverride": "None",
+          "Amplitude": 62.0,
+          "Frequency": 1.18
+        },
+        {
+          "ArchetypeId": "Walker",
+          "StartSeconds": 3.2,
+          "Lane": 4,
+          "Count": 8,
+          "SpawnLeadDistance": 220.0,
+          "SpawnIntervalSeconds": 0.2,
+          "SpacingX": 80.0,
+          "SpeedMultiplier": 1.18,
+          "MovePatternOverride": "StraightFlyIn",
+          "FirePatternOverride": "None",
+          "Amplitude": 28.0,
+          "Frequency": 1.0
+        },
+        {
+          "ArchetypeId": "Carrier",
+          "StartSeconds": 6.2,
+          "Lane": 3,
+          "Count": 4,
+          "SpawnLeadDistance": 318.0,
+          "SpawnIntervalSeconds": 0.24,
+          "SpacingX": 96.0,
+          "SpeedMultiplier": 1.16,
+          "MovePatternOverride": "TurretCarrier",
+          "FirePatternOverride": "ForwardPulse",
+          "Amplitude": 44.0,
+          "Frequency": 0.9
+        }
+      ]
+    }
+  ],
+  "Boss": {
+    "Type": "WalkerBossMk2",
+    "DisplayName": "Walker Mk II",
+    "ArchetypeId": "BossWalker",
+    "IntroSeconds": 1.3,
+    "TargetY": 0.5,
+    "ArenaScrollSpeed": 46,
+    "HitPoints": 125,
+    "AllowRandomEvents": false,
+    "HazardOverrides": [],
+    "MoodOverride": {
+      "PrimaryColor": "#0C1122",
+      "SecondaryColor": "#1C3055",
+      "AccentColor": "#6EC1FF",
+      "GlowColor": "#F6C674",
+      "StarDensity": 1.22,
+      "DustDensity": 1.17,
+      "LightIntensity": 0.92,
+      "PlanetPresence": 0.53,
+      "Contrast": 0.98
+    },
+    "PhaseThresholds": [
+      0.82,
+      0.58,
+      0.32
+    ],
+    "MovePattern": "BossOrbit",
+    "FirePattern": "BossFan"
+  }
+}

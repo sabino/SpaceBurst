@@ -1,0 +1,450 @@
+{
+  "Archetypes": [
+    {
+      "Id": "Walker",
+      "DisplayName": "Walker",
+      "RenderScale": 1.0,
+      "MoveSpeed": 190.0,
+      "HitPoints": 6,
+      "ScoreValue": 80,
+      "SpawnLeadDistance": 220.0,
+      "FireIntervalSeconds": 0.0,
+      "MovementAmplitude": 28.0,
+      "MovementFrequency": 1.0,
+      "DestroyOnCoreBreach": true,
+      "ShowDurabilityBar": false,
+      "MovePattern": "StraightFlyIn",
+      "FirePattern": "None",
+      "Sprite": {
+        "Id": "WalkerSprite",
+        "PixelScale": 4,
+        "PrimaryColor": "#CFEFFF",
+        "SecondaryColor": "#65A7C5",
+        "AccentColor": "#F4B860",
+        "Rows": [
+          "....##......",
+          "..######....",
+          ".##++++##...",
+          "##++CC++##..",
+          "##++++++##..",
+          ".##+**+##...",
+          "..######....",
+          "....##......",
+          "............"
+        ],
+        "VitalCore": {
+          "Rows": [
+            "............",
+            "............",
+            "............",
+            "....XXXX....",
+            "....XXXX....",
+            "............",
+            "............",
+            "............",
+            "............"
+          ]
+        }
+      },
+      "DamageMask": {
+        "ContactDamage": 2,
+        "ProjectileDamage": 1,
+        "DamageRadius": 1,
+        "IntegrityThresholdPercent": 55
+      }
+    },
+    {
+      "Id": "Interceptor",
+      "DisplayName": "Interceptor",
+      "RenderScale": 0.95,
+      "MoveSpeed": 250.0,
+      "HitPoints": 4,
+      "ScoreValue": 90,
+      "SpawnLeadDistance": 260.0,
+      "FireIntervalSeconds": 0.0,
+      "MovementAmplitude": 60.0,
+      "MovementFrequency": 1.2,
+      "DestroyOnCoreBreach": true,
+      "ShowDurabilityBar": false,
+      "MovePattern": "SineWave",
+      "FirePattern": "None",
+      "Sprite": {
+        "Id": "InterceptorSprite",
+        "PixelScale": 4,
+        "PrimaryColor": "#FFF2D6",
+        "SecondaryColor": "#F2AE49",
+        "AccentColor": "#FF7A59",
+        "Rows": [
+          "...##.....",
+          ".######...",
+          "##++++##..",
+          "++++CC++++",
+          "##++++##..",
+          ".######...",
+          "...##....."
+        ],
+        "VitalCore": {
+          "Rows": [
+            "..........",
+            "..........",
+            "..........",
+            "....XX....",
+            "..........",
+            "..........",
+            ".........."
+          ]
+        }
+      },
+      "DamageMask": {
+        "ContactDamage": 2,
+        "ProjectileDamage": 1,
+        "DamageRadius": 1,
+        "IntegrityThresholdPercent": 55
+      }
+    },
+    {
+      "Id": "Destroyer",
+      "DisplayName": "Destroyer",
+      "RenderScale": 1.0,
+      "MoveSpeed": 170.0,
+      "HitPoints": 10,
+      "ScoreValue": 125,
+      "SpawnLeadDistance": 300.0,
+      "FireIntervalSeconds": 1.7,
+      "MovementAmplitude": 52.0,
+      "MovementFrequency": 0.9,
+      "DestroyOnCoreBreach": true,
+      "ShowDurabilityBar": true,
+      "MovePattern": "Dive",
+      "FirePattern": "ForwardPulse",
+      "Sprite": {
+        "Id": "DestroyerSprite",
+        "PixelScale": 4,
+        "PrimaryColor": "#F2DCE5",
+        "SecondaryColor": "#B56A8A",
+        "AccentColor": "#FF9B54",
+        "Rows": [
+          ".....####.......",
+          "...########.....",
+          ".###++++++###...",
+          "###++CCCC++###..",
+          "###++++++++###**",
+          ".###++++++###...",
+          "...########.....",
+          ".....####.......",
+          "................"
+        ],
+        "VitalCore": {
+          "Rows": [
+            "................",
+            "................",
+            "................",
+            ".....XXXX.......",
+            ".....XXXX.......",
+            "................",
+            "................",
+            "................",
+            "................"
+          ]
+        }
+      },
+      "DamageMask": {
+        "ContactDamage": 3,
+        "ProjectileDamage": 1,
+        "DamageRadius": 1,
+        "IntegrityThresholdPercent": 45
+      }
+    },
+    {
+      "Id": "Carrier",
+      "DisplayName": "Carrier",
+      "RenderScale": 1.0,
+      "MoveSpeed": 145.0,
+      "HitPoints": 12,
+      "ScoreValue": 160,
+      "SpawnLeadDistance": 320.0,
+      "FireIntervalSeconds": 1.4,
+      "MovementAmplitude": 40.0,
+      "MovementFrequency": 0.8,
+      "DestroyOnCoreBreach": true,
+      "ShowDurabilityBar": true,
+      "MovePattern": "TurretCarrier",
+      "FirePattern": "SpreadPulse",
+      "Sprite": {
+        "Id": "CarrierSprite",
+        "PixelScale": 4,
+        "PrimaryColor": "#DDF0D3",
+        "SecondaryColor": "#7AAA6E",
+        "AccentColor": "#F4B860",
+        "Rows": [
+          "......####........",
+          "....########......",
+          "..###++##++###....",
+          ".###+++CC+++###...",
+          "###++++CC++++###..",
+          "###+++****+++###..",
+          ".###++++++++###...",
+          "..###++++++###....",
+          "....########......",
+          "......####........",
+          ".................."
+        ],
+        "VitalCore": {
+          "Rows": [
+            "..................",
+            "..................",
+            "..................",
+            "......XXXX........",
+            "......XXXX........",
+            "..................",
+            "..................",
+            "..................",
+            "..................",
+            "..................",
+            ".................."
+          ]
+        }
+      },
+      "DamageMask": {
+        "ContactDamage": 3,
+        "ProjectileDamage": 1,
+        "DamageRadius": 1,
+        "IntegrityThresholdPercent": 45
+      }
+    },
+    {
+      "Id": "Bulwark",
+      "DisplayName": "Bulwark",
+      "RenderScale": 1.0,
+      "MoveSpeed": 135.0,
+      "HitPoints": 16,
+      "ScoreValue": 190,
+      "SpawnLeadDistance": 340.0,
+      "FireIntervalSeconds": 1.2,
+      "MovementAmplitude": 36.0,
+      "MovementFrequency": 0.7,
+      "DestroyOnCoreBreach": true,
+      "ShowDurabilityBar": true,
+      "MovePattern": "RetreatBackfire",
+      "FirePattern": "ForwardPulse",
+      "Sprite": {
+        "Id": "BulwarkSprite",
+        "PixelScale": 4,
+        "PrimaryColor": "#E9E3D2",
+        "SecondaryColor": "#A98F6C",
+        "AccentColor": "#FFB347",
+        "Rows": [
+          ".....######.......",
+          "...##########.....",
+          ".###++++++++###...",
+          "###++CCCCCC++###..",
+          "###++++++++++###..",
+          "###+++****+++###..",
+          ".###++++++++###...",
+          "...##########.....",
+          ".....######.......",
+          ".................."
+        ],
+        "VitalCore": {
+          "Rows": [
+            "..................",
+            "..................",
+            "..................",
+            ".....XXXXXX.......",
+            ".....XXXXXX.......",
+            "..................",
+            "..................",
+            "..................",
+            "..................",
+            ".................."
+          ]
+        }
+      },
+      "DamageMask": {
+        "ContactDamage": 4,
+        "ProjectileDamage": 2,
+        "DamageRadius": 1,
+        "IntegrityThresholdPercent": 38
+      }
+    },
+    {
+      "Id": "BossDestroyer",
+      "DisplayName": "Destroyer Prime",
+      "RenderScale": 1.0,
+      "MoveSpeed": 130.0,
+      "HitPoints": 90,
+      "ScoreValue": 600,
+      "SpawnLeadDistance": 360.0,
+      "FireIntervalSeconds": 0.85,
+      "MovementAmplitude": 90.0,
+      "MovementFrequency": 0.8,
+      "DestroyOnCoreBreach": false,
+      "ShowDurabilityBar": false,
+      "MovePattern": "BossCharge",
+      "FirePattern": "BossFan",
+      "Sprite": {
+        "Id": "BossDestroyerSprite",
+        "PixelScale": 4,
+        "PrimaryColor": "#F6E4EA",
+        "SecondaryColor": "#C06A8D",
+        "AccentColor": "#FFB347",
+        "Rows": [
+          ".......######...........",
+          ".....##########.........",
+          "...####++++++####.......",
+          ".####++++CC++++####.....",
+          "####++++CCCC++++####....",
+          "####++++CCCC++++####.**.",
+          "####++++CCCC++++####....",
+          ".####++++CC++++####.....",
+          "...####++++++####.......",
+          ".....##########.........",
+          ".......######...........",
+          "........................"
+        ],
+        "VitalCore": {
+          "Rows": [
+            "........................",
+            "........................",
+            "........................",
+            "........XXXX............",
+            ".......XXXXXX...........",
+            ".......XXXXXX...........",
+            ".......XXXXXX...........",
+            "........XXXX............",
+            "........................",
+            "........................",
+            "........................",
+            "........................"
+          ]
+        }
+      },
+      "DamageMask": {
+        "ContactDamage": 5,
+        "ProjectileDamage": 2,
+        "DamageRadius": 1,
+        "IntegrityThresholdPercent": 10
+      }
+    },
+    {
+      "Id": "BossWalker",
+      "DisplayName": "Walker Matron",
+      "RenderScale": 1.0,
+      "MoveSpeed": 120.0,
+      "HitPoints": 105,
+      "ScoreValue": 700,
+      "SpawnLeadDistance": 360.0,
+      "FireIntervalSeconds": 0.78,
+      "MovementAmplitude": 96.0,
+      "MovementFrequency": 0.75,
+      "DestroyOnCoreBreach": false,
+      "ShowDurabilityBar": false,
+      "MovePattern": "BossOrbit",
+      "FirePattern": "BossFan",
+      "Sprite": {
+        "Id": "BossWalkerSprite",
+        "PixelScale": 4,
+        "PrimaryColor": "#E1F7D7",
+        "SecondaryColor": "#78B46A",
+        "AccentColor": "#FFD166",
+        "Rows": [
+          "........####............",
+          "......########..........",
+          "....####++++####........",
+          "..####+++CC+++####......",
+          ".####++++CCCC++++####...",
+          "####++++++CC++++++####..",
+          "####++++******++++####..",
+          ".####++++CCCC++++####...",
+          "..####+++CC+++####......",
+          "....####++++####........",
+          "......########..........",
+          "........####............"
+        ],
+        "VitalCore": {
+          "Rows": [
+            "........................",
+            "........................",
+            "........................",
+            ".........XX.............",
+            "........XXXX............",
+            "........XXXX............",
+            "........................",
+            "........XXXX............",
+            ".........XX.............",
+            "........................",
+            "........................",
+            "........................"
+          ]
+        }
+      },
+      "DamageMask": {
+        "ContactDamage": 5,
+        "ProjectileDamage": 2,
+        "DamageRadius": 1,
+        "IntegrityThresholdPercent": 10
+      }
+    },
+    {
+      "Id": "BossFinal",
+      "DisplayName": "Final Core",
+      "RenderScale": 1.0,
+      "MoveSpeed": 135.0,
+      "HitPoints": 135,
+      "ScoreValue": 1000,
+      "SpawnLeadDistance": 380.0,
+      "FireIntervalSeconds": 0.7,
+      "MovementAmplitude": 110.0,
+      "MovementFrequency": 0.7,
+      "DestroyOnCoreBreach": false,
+      "ShowDurabilityBar": false,
+      "MovePattern": "BossOrbit",
+      "FirePattern": "BossFan",
+      "Sprite": {
+        "Id": "BossFinalSprite",
+        "PixelScale": 4,
+        "PrimaryColor": "#F1EEDC",
+        "SecondaryColor": "#8AA7D1",
+        "AccentColor": "#FF9F59",
+        "Rows": [
+          ".........######...........",
+          "......############........",
+          "....####++++++++####......",
+          "..####+++++CC+++++####....",
+          ".####+++++CCCC+++++####...",
+          "####+++++CCCCCC+++++####..",
+          "####++++***CC***++++####..",
+          "####+++++CCCCCC+++++####..",
+          ".####+++++CCCC+++++####...",
+          "..####+++++CC+++++####....",
+          "....####++++++++####......",
+          "......############........",
+          ".........######..........."
+        ],
+        "VitalCore": {
+          "Rows": [
+            "..........................",
+            "..........................",
+            "..........................",
+            "..........XXXX............",
+            ".........XXXXXX...........",
+            "........XXXXXXXX..........",
+            "..........XXXX............",
+            "........XXXXXXXX..........",
+            ".........XXXXXX...........",
+            "..........XXXX............",
+            "..........................",
+            "..........................",
+            ".........................."
+          ]
+        }
+      },
+      "DamageMask": {
+        "ContactDamage": 6,
+        "ProjectileDamage": 2,
+        "DamageRadius": 1,
+        "IntegrityThresholdPercent": 10
+      }
+    }
+  ]
+}

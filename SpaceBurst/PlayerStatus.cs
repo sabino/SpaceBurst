@@ -1,54 +1,69 @@
-﻿using System;
-using System.Collections.Generic;
+using SpaceBurst.RuntimeData;
+using System;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace SpaceBurst
 {
+    enum PlayerDeathOutcome
+    {
+        RespawnInPlace,
+        RestartStage,
+        GameOver,
+    }
+
     static class PlayerStatus
     {
-        // amount of time it takes, in seconds, for a multiplier to expire.
-        private const float multiplierExpiryTime = 0.8f;
+        private const float multiplierExpiryTime = 1.2f;
         private const int maxMultiplier = 20;
+        private const int extraLifeScoreStep = 3000;
 
         public static int Lives { get; private set; }
+        public static int Ships { get; private set; }
         public static int Score { get; private set; }
         public static int HighScore { get; private set; }
         public static int Multiplier { get; private set; }
-        public static bool IsGameOver { get { return Lives == 0; } }
+        public static bool IsGameOver { get { return Lives <= 0; } }
+        public static PlayerRunProgress RunProgress { get; } = new PlayerRunProgress();
 
-        private static float multiplierTimeLeft;    // time until the current multiplier expires
-        private static int scoreForExtraLife;       // score required to gain an extra life
+        private static float multiplierTimeLeft;
+        private static int scoreForExtraLife;
 
-        private const string highScoreFilename = "highscore.txt";
+        private static readonly string highScoreFilename = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "SpaceBurst",
+            "highscore.txt");
 
-        // Static constructor
         static PlayerStatus()
         {
             HighScore = LoadHighScore();
-            Reset();
+            BeginCampaign(null);
         }
 
-        public static void Reset()
+        public static void BeginCampaign(StageDefinition openingStage)
         {
-            if (Score > HighScore)
-                SaveHighScore(HighScore = Score);
-
+            RunProgress.BeginCampaign(openingStage);
             Score = 0;
             Multiplier = 1;
-            Lives = 4;
-            scoreForExtraLife = 2000;
-            multiplierTimeLeft = 0;
+            Lives = RunProgress.StartingLives;
+            Ships = RunProgress.ShipsPerLife;
+            scoreForExtraLife = extraLifeScoreStep;
+            multiplierTimeLeft = 0f;
+        }
+
+        public static void PrepareStage(StageDefinition stage, bool resetLives)
+        {
+            RunProgress.ApplyStageDefaults(stage);
+            if (resetLives)
+                Lives = RunProgress.StartingLives;
+
+            Ships = RunProgress.ShipsPerLife;
         }
 
         public static void Update()
         {
             if (Multiplier > 1)
             {
-                // update the multiplier timer
-                if ((multiplierTimeLeft -= (float)Game1.GameTime.ElapsedGameTime.TotalSeconds) <= 0)
+                if ((multiplierTimeLeft -= (float)Game1.GameTime.ElapsedGameTime.TotalSeconds) <= 0f)
                 {
                     multiplierTimeLeft = multiplierExpiryTime;
                     ResetMultiplier();
@@ -64,7 +79,7 @@ namespace SpaceBurst
             Score += basePoints * Multiplier;
             while (Score >= scoreForExtraLife)
             {
-                scoreForExtraLife += 2000;
+                scoreForExtraLife += extraLifeScoreStep;
                 Lives++;
             }
         }
@@ -84,20 +99,79 @@ namespace SpaceBurst
             Multiplier = 1;
         }
 
-        public static void RemoveLife()
+        public static void GrantShips(int count)
         {
+            if (count > 0)
+                Ships += count;
+        }
+
+        public static void GrantLife(int count = 1)
+        {
+            if (count > 0)
+                Lives += count;
+        }
+
+        public static PlayerDeathOutcome ConsumeDeath(StageDefinition stage)
+        {
+            RunProgress.Weapons.ApplyDeathPenalty();
+
+            if (Ships > 0)
+            {
+                Ships--;
+                return PlayerDeathOutcome.RespawnInPlace;
+            }
+
             Lives--;
+            if (Lives <= 0)
+                return PlayerDeathOutcome.GameOver;
+
+            Ships = RunProgress.ShipsPerLife;
+            return PlayerDeathOutcome.RestartStage;
+        }
+
+        public static void FinalizeRun()
+        {
+            if (Score > HighScore)
+                SaveHighScore(HighScore = Score);
+        }
+
+        public static PlayerStatusSnapshotData CaptureSnapshot()
+        {
+            return new PlayerStatusSnapshotData
+            {
+                Lives = Lives,
+                Ships = Ships,
+                Score = Score,
+                Multiplier = Multiplier,
+                MultiplierTimeLeft = multiplierTimeLeft,
+                ScoreForExtraLife = scoreForExtraLife,
+                RunProgress = RunProgress.CaptureSnapshot(),
+            };
+        }
+
+        public static void RestoreSnapshot(PlayerStatusSnapshotData snapshot)
+        {
+            if (snapshot == null)
+                return;
+
+            Lives = snapshot.Lives;
+            Ships = snapshot.Ships;
+            Score = snapshot.Score;
+            Multiplier = snapshot.Multiplier;
+            multiplierTimeLeft = snapshot.MultiplierTimeLeft;
+            scoreForExtraLife = snapshot.ScoreForExtraLife > 0 ? snapshot.ScoreForExtraLife : extraLifeScoreStep;
+            RunProgress.RestoreSnapshot(snapshot.RunProgress);
         }
 
         private static int LoadHighScore()
         {
-            // return the saved high score if possible and return 0 otherwise
             int score;
             return File.Exists(highScoreFilename) && int.TryParse(File.ReadAllText(highScoreFilename), out score) ? score : 0;
         }
 
         private static void SaveHighScore(int score)
         {
+            Directory.CreateDirectory(Path.GetDirectoryName(highScoreFilename));
             File.WriteAllText(highScoreFilename, score.ToString());
         }
     }

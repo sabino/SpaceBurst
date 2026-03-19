@@ -1,36 +1,30 @@
-﻿using Microsoft.Xna.Framework.Content;
-using Microsoft.Xna.Framework.Graphics;
-using System;
+using SpaceBurst.RuntimeData;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace SpaceBurst
 {
     static class Element
     {
-        public static Texture2D Player { get; private set; }
-        public static Texture2D Pointer { get; private set; }
-        public static Texture2D Bullet { get; private set; }
-        public static Texture2D Turret { get; private set; }
-        public static Texture2D Destroyer { get; private set; }
-        public static Texture2D Walker { get; private set; }
-        public static Texture2D Portal { get; private set; }
+        public static ProceduralSpriteDefinition PlayerBulletDefinition { get; private set; }
+        public static ProceduralSpriteDefinition EnemyBulletDefinition { get; private set; }
 
-        public static SpriteFont Font { get; private set; }
-
-        public static void Load(ContentManager content)
+        public static void Load()
         {
-            Font = content.Load<SpriteFont>("Font");
+            PlayerBulletDefinition = WeaponCatalog.CreateProjectileDefinition(WeaponStyleId.Pulse, 0, true);
 
-            Player = content.Load<Texture2D>("Player");
-            Pointer = content.Load<Texture2D>("Pointer");
-            Bullet = content.Load<Texture2D>("Bullet");
-            Destroyer = content.Load<Texture2D>("Destroyer");
-            Walker = content.Load<Texture2D>("Walker");
-            Turret = content.Load<Texture2D>("Turret");
-            Portal = content.Load<Texture2D>("Portal");
+            EnemyBulletDefinition = new ProceduralSpriteDefinition
+            {
+                Id = "EnemyBullet",
+                PixelScale = 4,
+                PrimaryColor = "#FFBFA8",
+                SecondaryColor = "#F26D5B",
+                AccentColor = "#FFD166",
+                Rows = new List<string>
+                {
+                    "##",
+                    "##",
+                }
+            };
         }
     }
 }

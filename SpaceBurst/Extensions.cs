@@ -16,6 +16,8 @@ namespace SpaceBurst
 
         public static Vector2 ScaleTo(this Vector2 vector, float length)
         {
+            if (vector == Vector2.Zero)
+                return Vector2.Zero;
             return vector * (length / vector.Length());
         }
 
