@@ -13,6 +13,9 @@ namespace SpaceBurst
         private static MouseState lastMouseState;
         private static GamePadState gamepadState;
         private static GamePadState lastGamepadState;
+#if ANDROID
+        private static bool androidCancelPressed;
+#endif
 
         private static bool primaryActionPressed;
         private static bool fireHeld;
@@ -93,10 +96,20 @@ namespace SpaceBurst
         public static bool WasCancelPressed()
         {
 #if ANDROID
-            if (touchPausePressed)
+            if (touchPausePressed || androidCancelPressed)
+            {
+                androidCancelPressed = false;
                 return true;
+            }
 #endif
             return WasKeyPressed(Keys.Escape) || WasButtonPressed(Buttons.Back) || WasButtonPressed(Buttons.B);
+        }
+
+        public static void NotifyAndroidBackPressed()
+        {
+#if ANDROID
+            androidCancelPressed = true;
+#endif
         }
 
         public static bool WasHelpPressed()

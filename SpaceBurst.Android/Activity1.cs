@@ -29,5 +29,21 @@ namespace SpaceBurst
             SetContentView(view);
             game.Run();
         }
+
+        public override void OnBackPressed()
+        {
+            Input.NotifyAndroidBackPressed();
+        }
+
+        public override bool DispatchKeyEvent(KeyEvent e)
+        {
+            if (e != null && e.KeyCode == Keycode.Back && e.Action == KeyEventActions.Up)
+            {
+                Input.NotifyAndroidBackPressed();
+                return true;
+            }
+
+            return base.DispatchKeyEvent(e);
+        }
     }
 }
