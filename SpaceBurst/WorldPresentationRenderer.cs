@@ -50,6 +50,30 @@ namespace SpaceBurst
             public Vector2 Position { get; init; }
             public float Scale { get; init; }
             public float Depth { get; init; }
+            public float Lateral { get; init; }
+            public float Elevation { get; init; }
+            public float Bank { get; init; }
+            public bool IsPlayer { get; init; }
+        }
+
+        private readonly struct ChaseCamera
+        {
+            public ChaseCamera(float forward, float lateral, float height, float focalLength, float horizonY, float centerX)
+            {
+                Forward = forward;
+                Lateral = lateral;
+                Height = height;
+                FocalLength = focalLength;
+                HorizonY = horizonY;
+                CenterX = centerX;
+            }
+
+            public float Forward { get; }
+            public float Lateral { get; }
+            public float Height { get; }
+            public float FocalLength { get; }
+            public float HorizonY { get; }
+            public float CenterX { get; }
         }
 
         private static readonly Dictionary<string, RenderableHullCache> hullCacheByKey = new Dictionary<string, RenderableHullCache>(StringComparer.Ordinal);
@@ -96,6 +120,7 @@ namespace SpaceBurst
             PresentationTier tier,
             bool voxelAccentOnly)
         {
+            ChaseCamera camera = BuildChaseCamera();
             var projected = new List<ProjectedEntity>();
             var passthrough = new List<Entity>();
             foreach (Entity entity in entities)
@@ -109,7 +134,7 @@ namespace SpaceBurst
                     continue;
                 }
 
-                projected.Add(ProjectEntity(entity));
+                projected.Add(ProjectEntity(entity, camera));
             }
 
             foreach (ProjectedEntity item in projected.OrderByDescending(value => value.Depth))
@@ -146,6 +171,14 @@ namespace SpaceBurst
             Color accent = ResolveAccent(entity);
             float scale = item.Scale * entity.PresentationScaleMultiplier;
 
+            if (item.IsPlayer)
+            {
+                DrawChasePlayerHull(spriteBatch, pixel, radialTexture, item.Position, scale, tint, accent, item.Bank, Player1.Instance.ActiveStyle, Player1.Instance.ActiveWeaponLevel, tier);
+                return;
+            }
+
+            DrawProjectedShadow(spriteBatch, radialTexture, item.Position, scale, accent, item.Depth, item.Elevation);
+
             if (tier >= PresentationTier.VoxelShell)
                 DrawProjectedVoxelShell(spriteBatch, pixel, radialTexture, cache, sprite, item.Position, scale, tint, accent, voxelAccentOnly ? 1 : 3, item.Depth);
 
@@ -155,36 +188,92 @@ namespace SpaceBurst
             DrawProjectedBillboard(spriteBatch, sprite, item.Position, tint, entity.Orientation, scale, item.Depth);
         }
 
-        private static ProjectedEntity ProjectEntity(Entity entity)
+        private static ChaseCamera BuildChaseCamera()
         {
             float baseWidth = Game1.VirtualWidth;
             float baseHeight = Game1.VirtualHeight;
             Vector2 player = Player1.Instance != null ? Player1.Instance.Position : new Vector2(baseWidth * 0.2f, baseHeight * 0.5f);
-            float forward = Math.Max(-120f, entity.Position.X - player.X);
-            float relativeY = player.Y - entity.Position.Y;
-            float lane = (entity.PresentationDepthBias * 180f) + ((entity.Position.Y / Math.Max(1f, baseHeight)) - 0.5f) * 90f;
-            float depth = 260f + Math.Max(0f, forward) * 0.82f;
-            float perspective = MathHelper.Clamp(560f / (560f + depth), 0.18f, 1.28f);
+            float playerLateral = ToWorldLateral(player.Y, baseHeight);
+            float spawnX = baseWidth * 0.18f;
+            float forwardLead = 208f + MathHelper.Clamp((player.X - spawnX) * 0.34f, -44f, 64f);
+            return new ChaseCamera(
+                player.X - forwardLead,
+                playerLateral * 0.42f,
+                144f,
+                MathF.Max(420f, baseWidth * 0.58f),
+                baseHeight * 0.25f,
+                baseWidth * 0.5f);
+        }
+
+        private static float ToWorldLateral(float yPosition, float baseHeight)
+        {
+            return (yPosition - baseHeight * 0.5f) * 1.8f;
+        }
+
+        private static float GetEntityElevation(Entity entity)
+        {
+            Vector2 size = entity.Size;
+            float sizeFactor = Math.Max(size.X, size.Y) * 0.08f;
+            if (entity is Player1)
+                return 24f + sizeFactor;
+
+            if (entity is Bullet)
+                return 12f + sizeFactor * 0.35f;
+
+            return 18f + sizeFactor;
+        }
+
+        private static float GetEntityBank(Entity entity)
+        {
+            return MathHelper.Clamp(-entity.Velocity.Y * 0.0028f + entity.Velocity.X * 0.0008f, -0.48f, 0.48f);
+        }
+
+        private static ProjectedEntity ProjectEntity(Entity entity, ChaseCamera camera)
+        {
+            float baseWidth = Game1.VirtualWidth;
+            float baseHeight = Game1.VirtualHeight;
+            Vector2 player = Player1.Instance != null ? Player1.Instance.Position : new Vector2(baseWidth * 0.2f, baseHeight * 0.5f);
+            float worldForward = entity.Position.X;
+            float worldLateral = ToWorldLateral(entity.Position.Y, baseHeight) + entity.PresentationDepthBias * 110f;
+            float depth = Math.Max(48f, worldForward - camera.Forward);
+            float lateral = worldLateral - camera.Lateral;
+            float elevation = GetEntityElevation(entity);
+            float bank = GetEntityBank(entity);
 
             if (entity is Player1)
             {
+                float spawnX = baseWidth * 0.18f;
+                depth = MathHelper.Clamp(180f + (entity.Position.X - spawnX) * 0.48f, 144f, 248f);
+                lateral = worldLateral - camera.Lateral;
+                elevation = 24f + Math.Abs(entity.Velocity.Y) * 0.02f;
                 return new ProjectedEntity
                 {
                     Entity = entity,
-                    Position = new Vector2(baseWidth * 0.5f + lane * 0.35f, baseHeight * 0.76f),
-                    Scale = 1.38f,
-                    Depth = 0f,
+                    Position = new Vector2(
+                        camera.CenterX + lateral * camera.FocalLength / depth,
+                        camera.HorizonY + (camera.Height - elevation) * camera.FocalLength / depth - lateral * 0.04f),
+                    Scale = MathHelper.Clamp(camera.FocalLength / depth * 0.72f, 0.9f, 2.4f),
+                    Depth = depth,
+                    Lateral = lateral,
+                    Elevation = elevation,
+                    Bank = bank,
+                    IsPlayer = true,
                 };
             }
 
+            float perspective = camera.FocalLength / depth;
             return new ProjectedEntity
             {
                 Entity = entity,
                 Position = new Vector2(
-                    baseWidth * 0.5f + lane * perspective,
-                    baseHeight * 0.76f - relativeY * 0.42f * perspective - forward * 0.08f),
-                Scale = Math.Max(0.22f, perspective * 1.65f),
+                    camera.CenterX + lateral * perspective,
+                    camera.HorizonY + (camera.Height - elevation) * perspective - lateral * 0.03f * perspective),
+                Scale = MathHelper.Clamp(perspective * 0.98f, entity is Bullet ? 0.14f : 0.2f, entity is BossEnemy ? 3.2f : 2.25f),
                 Depth = depth,
+                Lateral = lateral,
+                Elevation = elevation,
+                Bank = bank,
+                IsPlayer = false,
             };
         }
 
@@ -192,6 +281,183 @@ namespace SpaceBurst
         {
             Color depthTint = Color.Lerp(tint * 0.7f, tint, MathHelper.Clamp(1f - depth / 980f, 0.25f, 1f));
             sprite.Draw(spriteBatch, position, depthTint, orientation, scale);
+        }
+
+        private static void DrawProjectedShadow(SpriteBatch spriteBatch, Texture2D radialTexture, Vector2 position, float scale, Color accent, float depth, float elevation)
+        {
+            if (radialTexture == null)
+                return;
+
+            float alpha = MathHelper.Clamp(0.18f - depth / 3200f, 0.03f, 0.18f);
+            float width = Math.Max(14f, scale * 42f);
+            float height = Math.Max(5f, scale * 12f);
+            Vector2 shadowPosition = new Vector2(position.X, position.Y + elevation * 0.24f + scale * 12f);
+            spriteBatch.Draw(
+                radialTexture,
+                shadowPosition,
+                null,
+                Color.Lerp(Color.Black, accent, 0.15f) * alpha,
+                0f,
+                new Vector2(radialTexture.Width / 2f, radialTexture.Height / 2f),
+                new Vector2(width / radialTexture.Width, height / radialTexture.Height),
+                SpriteEffects.None,
+                0f);
+        }
+
+        private static void DrawChasePlayerHull(
+            SpriteBatch spriteBatch,
+            Texture2D pixel,
+            Texture2D radialTexture,
+            Vector2 center,
+            float scale,
+            Color tint,
+            Color accent,
+            float bank,
+            WeaponStyleId styleId,
+            int level,
+            PresentationTier tier)
+        {
+            float hullScale = MathHelper.Lerp(26f, 40f, MathHelper.Clamp(scale / 2.4f, 0f, 1f));
+            float wingSpan = 2.35f;
+            float fuselageWidth = 0.72f;
+            float noseLength = 3.15f;
+            float engineWidth = 1.18f;
+            float bankFactor = 1f;
+
+            switch (styleId)
+            {
+                case WeaponStyleId.Spread:
+                    wingSpan = 2.9f;
+                    fuselageWidth = 0.62f;
+                    break;
+                case WeaponStyleId.Laser:
+                    wingSpan = 1.85f;
+                    fuselageWidth = 0.58f;
+                    noseLength = 3.85f;
+                    break;
+                case WeaponStyleId.Plasma:
+                    wingSpan = 2.15f;
+                    fuselageWidth = 0.92f;
+                    break;
+                case WeaponStyleId.Missile:
+                    wingSpan = 2.55f;
+                    engineWidth = 1.34f;
+                    break;
+                case WeaponStyleId.Rail:
+                    wingSpan = 1.7f;
+                    fuselageWidth = 0.56f;
+                    noseLength = 4.2f;
+                    break;
+                case WeaponStyleId.Arc:
+                    wingSpan = 2.25f;
+                    bankFactor = 1.18f;
+                    break;
+                case WeaponStyleId.Blade:
+                    wingSpan = 3.1f;
+                    fuselageWidth = 0.54f;
+                    break;
+                case WeaponStyleId.Drone:
+                    wingSpan = 2.5f;
+                    engineWidth = 0.94f;
+                    break;
+                case WeaponStyleId.Fortress:
+                    wingSpan = 3.25f;
+                    fuselageWidth = 1.08f;
+                    engineWidth = 1.45f;
+                    break;
+            }
+
+            wingSpan += level * 0.12f;
+            fuselageWidth += level * 0.04f;
+            noseLength += level * 0.18f;
+            float rotation = bank * bankFactor;
+            Color hullColor = Color.Lerp(tint, Color.White, 0.14f);
+            Color panelColor = Color.Lerp(hullColor, accent, 0.18f);
+            Color shadowColor = Color.Black * 0.34f;
+
+            DrawProjectedShadow(spriteBatch, radialTexture, center, scale * 1.1f, accent, 120f, 34f);
+
+            DrawChaseBeam(spriteBatch, pixel, center, new Vector2(0f, -0.15f), new Vector2(0f, 2.95f + noseLength * 0.35f), hullScale, rotation, fuselageWidth * 0.92f, shadowColor);
+            DrawChaseBeam(spriteBatch, pixel, center, new Vector2(0f, 0f), new Vector2(0f, 2.65f + noseLength * 0.3f), hullScale, rotation, fuselageWidth, hullColor);
+            DrawChaseBeam(spriteBatch, pixel, center, new Vector2(0f, 0.12f), new Vector2(0f, 2.1f + noseLength * 0.18f), hullScale, rotation, fuselageWidth * 0.34f, Color.White * 0.9f);
+
+            DrawChaseBeam(spriteBatch, pixel, center, new Vector2(0f, 0.6f), new Vector2(-wingSpan, -0.7f), hullScale, rotation, 0.34f + fuselageWidth * 0.42f, panelColor);
+            DrawChaseBeam(spriteBatch, pixel, center, new Vector2(0f, 0.6f), new Vector2(wingSpan, -0.7f), hullScale, rotation, 0.34f + fuselageWidth * 0.42f, panelColor);
+            DrawChaseBeam(spriteBatch, pixel, center, new Vector2(-wingSpan * 0.55f, -0.25f), new Vector2(-wingSpan * 0.88f, -1.45f), hullScale, rotation, 0.18f + level * 0.03f, accent * 0.78f);
+            DrawChaseBeam(spriteBatch, pixel, center, new Vector2(wingSpan * 0.55f, -0.25f), new Vector2(wingSpan * 0.88f, -1.45f), hullScale, rotation, 0.18f + level * 0.03f, accent * 0.78f);
+
+            if (tier >= PresentationTier.HybridMesh)
+            {
+                DrawChaseBeam(spriteBatch, pixel, center, new Vector2(0f, 1.7f), new Vector2(-wingSpan * 0.22f, 2.45f), hullScale, rotation, 0.24f, accent * 0.92f);
+                DrawChaseBeam(spriteBatch, pixel, center, new Vector2(0f, 1.7f), new Vector2(wingSpan * 0.22f, 2.45f), hullScale, rotation, 0.24f, accent * 0.92f);
+            }
+
+            if (styleId == WeaponStyleId.Drone || styleId == WeaponStyleId.Fortress)
+            {
+                DrawChaseNode(spriteBatch, pixel, radialTexture, center, new Vector2(-wingSpan * 0.88f, 0.1f), hullScale, rotation, 0.5f, accent, hullColor);
+                DrawChaseNode(spriteBatch, pixel, radialTexture, center, new Vector2(wingSpan * 0.88f, 0.1f), hullScale, rotation, 0.5f, accent, hullColor);
+            }
+
+            if (styleId == WeaponStyleId.Missile || styleId == WeaponStyleId.Rail)
+            {
+                DrawChaseBeam(spriteBatch, pixel, center, new Vector2(-fuselageWidth * 0.52f, 0.35f), new Vector2(-fuselageWidth * 0.52f, 2.25f), hullScale, rotation, 0.16f, accent * 0.85f);
+                DrawChaseBeam(spriteBatch, pixel, center, new Vector2(fuselageWidth * 0.52f, 0.35f), new Vector2(fuselageWidth * 0.52f, 2.25f), hullScale, rotation, 0.16f, accent * 0.85f);
+            }
+
+            if (styleId == WeaponStyleId.Blade)
+            {
+                DrawChaseBeam(spriteBatch, pixel, center, new Vector2(-wingSpan * 0.3f, 0.85f), new Vector2(-wingSpan * 1.1f, 2.1f), hullScale, rotation, 0.14f, Color.White * 0.9f);
+                DrawChaseBeam(spriteBatch, pixel, center, new Vector2(wingSpan * 0.3f, 0.85f), new Vector2(wingSpan * 1.1f, 2.1f), hullScale, rotation, 0.14f, Color.White * 0.9f);
+            }
+
+            DrawChaseNode(spriteBatch, pixel, radialTexture, center, new Vector2(0f, 1.35f + noseLength * 0.18f), hullScale, rotation, 0.36f + level * 0.02f, accent, Color.White);
+
+            int thrusterCount = styleId == WeaponStyleId.Fortress ? 3 : styleId == WeaponStyleId.Spread ? 2 : 1;
+            for (int i = 0; i < thrusterCount; i++)
+            {
+                float offset = thrusterCount == 1 ? 0f : (i - (thrusterCount - 1) * 0.5f) * engineWidth * 0.75f;
+                Vector2 thrusterLocal = new Vector2(offset, -0.95f);
+                DrawChaseThruster(spriteBatch, pixel, radialTexture, center, thrusterLocal, hullScale, rotation, accent, level);
+            }
+        }
+
+        private static void DrawChaseThruster(SpriteBatch spriteBatch, Texture2D pixel, Texture2D radialTexture, Vector2 center, Vector2 local, float hullScale, float rotation, Color accent, int level)
+        {
+            Vector2 nozzle = TransformChasePoint(local, center, hullScale, rotation);
+            float glowScale = 0.16f + level * 0.02f;
+            Color flameColor = Color.Lerp(accent, Color.White, 0.25f);
+            DrawChaseBeam(spriteBatch, pixel, center, local, new Vector2(local.X, local.Y - 0.68f - level * 0.08f), hullScale, rotation, 0.28f + level * 0.03f, flameColor * 0.78f);
+            if (radialTexture != null)
+            {
+                spriteBatch.Draw(radialTexture, nozzle, null, flameColor * 0.34f, 0f, new Vector2(radialTexture.Width / 2f, radialTexture.Height / 2f), glowScale, SpriteEffects.None, 0f);
+            }
+        }
+
+        private static void DrawChaseNode(SpriteBatch spriteBatch, Texture2D pixel, Texture2D radialTexture, Vector2 center, Vector2 local, float hullScale, float rotation, float radius, Color accent, Color fill)
+        {
+            Vector2 nodeCenter = TransformChasePoint(local, center, hullScale, rotation);
+            int size = Math.Max(2, (int)MathF.Round(radius * hullScale * 0.34f));
+            Rectangle rect = new Rectangle((int)MathF.Round(nodeCenter.X - size * 0.5f), (int)MathF.Round(nodeCenter.Y - size * 0.5f), size, size);
+            spriteBatch.Draw(pixel, rect, fill);
+            if (radialTexture != null)
+            {
+                spriteBatch.Draw(radialTexture, nodeCenter, null, accent * 0.22f, 0f, new Vector2(radialTexture.Width / 2f, radialTexture.Height / 2f), size * 1.8f / radialTexture.Width, SpriteEffects.None, 0f);
+            }
+        }
+
+        private static void DrawChaseBeam(SpriteBatch spriteBatch, Texture2D pixel, Vector2 center, Vector2 startLocal, Vector2 endLocal, float hullScale, float rotation, float thickness, Color color)
+        {
+            Vector2 start = TransformChasePoint(startLocal, center, hullScale, rotation);
+            Vector2 end = TransformChasePoint(endLocal, center, hullScale, rotation);
+            DrawSegment(spriteBatch, pixel, start, end, color, Math.Max(1f, thickness * hullScale * 0.34f));
+        }
+
+        private static Vector2 TransformChasePoint(Vector2 local, Vector2 center, float hullScale, float rotation)
+        {
+            Vector2 scaled = new Vector2(local.X * hullScale, -local.Y * hullScale);
+            float cos = MathF.Cos(rotation);
+            float sin = MathF.Sin(rotation);
+            return center + new Vector2(scaled.X * cos - scaled.Y * sin, scaled.X * sin + scaled.Y * cos);
         }
 
         private static void DrawSideVoxelShell(SpriteBatch spriteBatch, Texture2D pixel, RenderableHullCache cache, ProceduralSpriteInstance sprite, Vector2 position, float scale, Color tint, Color accent, int depthSlices)
@@ -296,6 +562,17 @@ namespace SpaceBurst
             spriteBatch.Draw(pixel, new Rectangle(bounds.X, bounds.Bottom - 1, bounds.Width, 1), color);
             spriteBatch.Draw(pixel, new Rectangle(bounds.X, bounds.Y, 1, bounds.Height), color);
             spriteBatch.Draw(pixel, new Rectangle(bounds.Right - 1, bounds.Y, 1, bounds.Height), color);
+        }
+
+        private static void DrawSegment(SpriteBatch spriteBatch, Texture2D pixel, Vector2 start, Vector2 end, Color color, float thickness)
+        {
+            Vector2 edge = end - start;
+            float length = edge.Length();
+            if (length <= 0.1f)
+                return;
+
+            float rotation = MathF.Atan2(edge.Y, edge.X);
+            spriteBatch.Draw(pixel, start, null, color, rotation, new Vector2(0f, 0.5f), new Vector2(length, Math.Max(1f, thickness)), SpriteEffects.None, 0f);
         }
 
         private static RenderableHullCache GetHullCache(ProceduralSpriteInstance sprite)

@@ -188,6 +188,10 @@ namespace SpaceBurst
         private static void DrawPerspectiveFlightLanes(SpriteBatch spriteBatch, Texture2D pixel, Color accentColor, Color glowColor, float transitionWarp, float rewindStrength, float impactPulse)
         {
             float baseY = Game1.VirtualHeight * 0.78f;
+            Vector2 playerPosition = Player1.Instance != null ? Player1.Instance.Position : new Vector2(Game1.VirtualWidth * 0.2f, Game1.VirtualHeight * 0.5f);
+            float normalizedY = (playerPosition.Y - Game1.VirtualHeight * 0.5f) / Math.Max(1f, Game1.VirtualHeight * 0.5f);
+            float normalizedX = (playerPosition.X - Game1.VirtualWidth * 0.18f) / Math.Max(1f, Game1.VirtualWidth * 0.32f);
+            float vanishingX = Game1.VirtualWidth * 0.5f + normalizedY * 170f + normalizedX * 54f;
             Color laneColor = Color.Lerp(accentColor, glowColor, 0.45f) * (0.08f + transitionWarp * 0.08f + impactPulse * 0.04f);
             if (rewindStrength > 0f)
                 laneColor = Color.Lerp(laneColor, Color.Cyan * (laneColor.A / 255f), 0.4f);
@@ -203,8 +207,8 @@ namespace SpaceBurst
                     float width1 = MathHelper.Lerp(8f, 220f, t1);
                     float y0 = MathHelper.Lerp(Game1.VirtualHeight * 0.34f, baseY, t0);
                     float y1 = MathHelper.Lerp(Game1.VirtualHeight * 0.34f, baseY, t1);
-                    float x0 = Game1.VirtualWidth * 0.5f + laneOffset * t0;
-                    float x1 = Game1.VirtualWidth * 0.5f + laneOffset * t1;
+                    float x0 = vanishingX + laneOffset * t0;
+                    float x1 = vanishingX + laneOffset * t1;
                     DrawSegment(spriteBatch, pixel, new Vector2(x0 - width0 * 0.5f, y0), new Vector2(x1 - width1 * 0.5f, y1), laneColor);
                     DrawSegment(spriteBatch, pixel, new Vector2(x0 + width0 * 0.5f, y0), new Vector2(x1 + width1 * 0.5f, y1), laneColor * 0.8f);
                 }
