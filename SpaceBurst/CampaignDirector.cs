@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
 using SpaceBurst.RuntimeData;
 using System;
 using System.Collections.Generic;
@@ -19,6 +20,7 @@ namespace SpaceBurst
         private const int AboutHelpPageIndex = 5;
         private const float TitleIntroDurationSeconds = 4.8f;
         private const float TitleIntroSkipDurationSeconds = 1.05f;
+        private const float DeveloperCodeTimeoutSeconds = 1.5f;
 
         private const string AboutHelpText =
             "ABOUT SPACEBURST\n" +
@@ -58,6 +60,10 @@ namespace SpaceBurst
         private readonly List<RunSaveData> rewindFrames = new List<RunSaveData>();
         private readonly List<UpgradeDraftCard> draftCards = new List<UpgradeDraftCard>();
         private readonly Random titleVisualRandom = new Random(unchecked(Environment.TickCount * 397));
+        private static readonly Keys[] DeveloperToolsCode =
+        {
+            Keys.Up, Keys.Up, Keys.Down, Keys.Down, Keys.Left, Keys.Right, Keys.Left, Keys.Right, Keys.D, Keys.E, Keys.V
+        };
 
         private StageDefinition currentStage;
         private BossDefinition resolvedBossDefinition;
@@ -113,6 +119,9 @@ namespace SpaceBurst
         private bool titleIntroSeen;
         private bool titleIntroExploded;
         private float titleIntroTimer = TitleIntroDurationSeconds;
+        private int developerCodeProgress;
+        private float developerCodeTimer;
+        private PresentationTier? developerPresentationOverride;
         private readonly List<IntroPixel> introPixels = new List<IntroPixel>();
         private Color titleIntroBackgroundColor = new Color(7, 12, 24);
         private Color titleIntroGlowColorA = new Color(110, 193, 255);
@@ -163,6 +172,31 @@ namespace SpaceBurst
             public Color Primary { get; }
             public Color Secondary { get; }
             public Color Prompt { get; }
+        }
+
+        private enum PauseMenuAction
+        {
+            Resume,
+            SaveGame,
+            LoadGame,
+            Options,
+            Help,
+            DeveloperStage,
+            DeveloperDetail,
+            SkipTutorial,
+            QuitToTitle,
+        }
+
+        private readonly struct PauseMenuEntry
+        {
+            public PauseMenuEntry(PauseMenuAction action, UiButton button)
+            {
+                Action = action;
+                Button = button;
+            }
+
+            public PauseMenuAction Action { get; }
+            public UiButton Button { get; }
         }
 
         public CampaignDirector()
@@ -353,12 +387,17 @@ namespace SpaceBurst
 
         public PresentationTier CurrentPresentationTier
         {
-            get { return presentationTier; }
+            get { return developerPresentationOverride ?? presentationTier; }
         }
 
         public ViewMode CurrentViewMode
         {
             get { return viewMode; }
+        }
+
+        public bool DeveloperToolsUnlocked
+        {
+            get { return options.DeveloperToolsUnlocked; }
         }
 
         public bool TransitionToBoss
@@ -444,6 +483,8 @@ namespace SpaceBurst
 
         public void Update()
         {
+            UpdateDeveloperToolsCode();
+
             switch (state)
             {
                 case GameFlowState.Title:
@@ -577,12 +618,63 @@ namespace SpaceBurst
 
         private void UpdatePause()
         {
-            List<UiButton> buttons = GetPauseButtons();
-            UpdateVerticalSelection(ref pauseSelection, buttons.Count);
-            pauseSelection = Math.Clamp(pauseSelection, 0, buttons.Count - 1);
-            bool pointerActivated = HandlePointerSelection(buttons, ref pauseSelection);
+            List<PauseMenuEntry> entries = GetPauseEntries();
+            UpdateVerticalSelection(ref pauseSelection, entries.Count);
+            pauseSelection = Math.Clamp(pauseSelection, 0, entries.Count - 1);
+            bool pointerActivated = HandlePointerSelection(entries.Select(entry => entry.Button.Bounds).ToArray(), ref pauseSelection);
 
             bool tutorialPause = pauseReturnState == GameFlowState.Tutorial;
+            PauseMenuAction selectedAction = entries[pauseSelection].Action;
+
+            if (options.DeveloperToolsUnlocked && !tutorialPause)
+            {
+                if (Input.WasKeyPressed(Keys.PageUp))
+                {
+                    JumpToDeveloperStage(-1);
+                    return;
+                }
+
+                if (Input.WasKeyPressed(Keys.PageDown))
+                {
+                    JumpToDeveloperStage(1);
+                    return;
+                }
+
+                if (Input.WasKeyPressed(Keys.F6))
+                {
+                    CycleDeveloperPresentationOverride(1);
+                    return;
+                }
+
+                if (selectedAction == PauseMenuAction.DeveloperStage)
+                {
+                    if (Input.WasNavigateLeftPressed())
+                    {
+                        JumpToDeveloperStage(-1);
+                        return;
+                    }
+
+                    if (Input.WasNavigateRightPressed())
+                    {
+                        JumpToDeveloperStage(1);
+                        return;
+                    }
+                }
+                else if (selectedAction == PauseMenuAction.DeveloperDetail)
+                {
+                    if (Input.WasNavigateLeftPressed())
+                    {
+                        CycleDeveloperPresentationOverride(-1);
+                        return;
+                    }
+
+                    if (Input.WasNavigateRightPressed())
+                    {
+                        CycleDeveloperPresentationOverride(1);
+                        return;
+                    }
+                }
+            }
 
             if (Input.WasCancelPressed())
             {
@@ -601,26 +693,32 @@ namespace SpaceBurst
             if (!Input.WasConfirmPressed() && !pointerActivated)
                 return;
 
-            switch (pauseSelection)
+            switch (entries[pauseSelection].Action)
             {
-                case 1:
+                case PauseMenuAction.SaveGame:
                     slotReturnState = GameFlowState.Paused;
                     slotSelection = 0;
                     state = GameFlowState.SaveSlots;
                     break;
-                case 2:
+                case PauseMenuAction.LoadGame:
                     slotReturnState = GameFlowState.Paused;
                     slotSelection = 0;
                     state = GameFlowState.LoadSlots;
                     break;
-                case 3:
+                case PauseMenuAction.Options:
                     OpenOptions(GameFlowState.Paused);
                     break;
-                case 4:
+                case PauseMenuAction.Help:
                     helpReturnState = GameFlowState.Paused;
                     state = GameFlowState.Help;
                     break;
-                case 5:
+                case PauseMenuAction.DeveloperStage:
+                    JumpToDeveloperStage(1);
+                    break;
+                case PauseMenuAction.DeveloperDetail:
+                    CycleDeveloperPresentationOverride(1);
+                    break;
+                case PauseMenuAction.SkipTutorial:
                     if (tutorialPause)
                     {
                         options.TutorialCompleted = true;
@@ -636,10 +734,11 @@ namespace SpaceBurst
                         EnterTitle(false);
                     }
                     break;
-                case 6:
+                case PauseMenuAction.QuitToTitle:
                     PlayerStatus.FinalizeRun();
                     EnterTitle(false);
                     break;
+                case PauseMenuAction.Resume:
                 default:
                     state = pauseReturnState;
                     break;
@@ -1512,8 +1611,132 @@ namespace SpaceBurst
 #if ANDROID
             return false;
 #else
-            return PresentationProgression.IsChaseViewUnlocked(currentStageNumber, currentStage) && presentationTier == PresentationTier.Late3D;
+            bool unlockedByProgress = PresentationProgression.IsChaseViewUnlocked(currentStageNumber, currentStage);
+            return (unlockedByProgress || options.DeveloperToolsUnlocked) && CurrentPresentationTier == PresentationTier.Late3D;
 #endif
+        }
+
+        private void JumpToDeveloperStage(int delta)
+        {
+            if (!options.DeveloperToolsUnlocked || currentStage == null)
+                return;
+
+            int targetStage = Math.Clamp(currentStageNumber + delta, 1, 50);
+            if (targetStage == currentStageNumber)
+                return;
+
+            PrepareStage(targetStage, false);
+            state = GameFlowState.Paused;
+            pauseReturnState = GameFlowState.Playing;
+            stateTimer = 0f;
+            transitionToBoss = false;
+            transitionTargetStageNumber = 0;
+            Player1.Instance.MakeInvulnerable(1f);
+            Game1.Instance.Feedback?.Handle(new FeedbackEvent(FeedbackEventType.StageTransition, Player1.Instance.Position, 0.45f));
+        }
+
+        private void CycleDeveloperPresentationOverride(int delta)
+        {
+            if (!options.DeveloperToolsUnlocked)
+                return;
+
+            PresentationTier?[] values =
+            {
+                null,
+                PresentationTier.Pixel2D,
+                PresentationTier.VoxelShell,
+                PresentationTier.HybridMesh,
+                PresentationTier.Late3D,
+            };
+
+            int currentIndex = 0;
+            for (int i = 0; i < values.Length; i++)
+            {
+                if (values[i] == developerPresentationOverride)
+                {
+                    currentIndex = i;
+                    break;
+                }
+            }
+
+            int nextIndex = (currentIndex + delta) % values.Length;
+            if (nextIndex < 0)
+                nextIndex += values.Length;
+
+            developerPresentationOverride = values[nextIndex];
+            if (!CanUseChaseView())
+                viewMode = ViewMode.SideScroller;
+        }
+
+        private string GetDeveloperDetailLabel()
+        {
+            return developerPresentationOverride.HasValue
+                ? string.Concat("DEV DETAIL ", developerPresentationOverride.Value.ToString().ToUpperInvariant())
+                : "DEV DETAIL AUTO";
+        }
+
+        private void UpdateDeveloperToolsCode()
+        {
+            bool canEnterCode =
+                state == GameFlowState.Title ||
+                state == GameFlowState.Paused ||
+                state == GameFlowState.Help ||
+                state == GameFlowState.Options ||
+                state == GameFlowState.SaveSlots ||
+                state == GameFlowState.LoadSlots;
+
+            if (!canEnterCode)
+            {
+                developerCodeProgress = 0;
+                developerCodeTimer = 0f;
+                return;
+            }
+
+            float deltaSeconds = (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
+            if (developerCodeProgress > 0)
+            {
+                developerCodeTimer -= deltaSeconds;
+                if (developerCodeTimer <= 0f)
+                {
+                    developerCodeProgress = 0;
+                    developerCodeTimer = 0f;
+                }
+            }
+
+            Keys[] observedKeys =
+            {
+                Keys.Up, Keys.Down, Keys.Left, Keys.Right, Keys.D, Keys.E, Keys.V,
+            };
+
+            for (int i = 0; i < observedKeys.Length; i++)
+            {
+                Keys key = observedKeys[i];
+                if (!Input.WasKeyPressed(key))
+                    continue;
+
+                Keys expected = DeveloperToolsCode[developerCodeProgress];
+                if (key == expected)
+                {
+                    developerCodeProgress++;
+                    developerCodeTimer = DeveloperCodeTimeoutSeconds;
+                    if (developerCodeProgress >= DeveloperToolsCode.Length)
+                    {
+                        options.DeveloperToolsUnlocked = !options.DeveloperToolsUnlocked;
+                        if (optionsSnapshot != null)
+                            optionsSnapshot.DeveloperToolsUnlocked = options.DeveloperToolsUnlocked;
+                        PersistentStorage.SaveOptions(options);
+                        developerCodeProgress = 0;
+                        developerCodeTimer = 0f;
+                    }
+                }
+                else
+                {
+                    developerCodeProgress = key == DeveloperToolsCode[0] ? 1 : 0;
+                    developerCodeTimer = developerCodeProgress > 0 ? DeveloperCodeTimeoutSeconds : 0f;
+                }
+
+                break;
+            }
         }
 
         private BossDefinition ResolveBossDefinitionForStage(int stageNumber, StageDefinition stage)
@@ -2325,24 +2548,32 @@ namespace SpaceBurst
             return buttons;
         }
 
-        private List<UiButton> GetPauseButtons()
+        private List<PauseMenuEntry> GetPauseEntries()
         {
             bool tutorialPause = pauseReturnState == GameFlowState.Tutorial;
-            int total = tutorialPause ? 7 : 6;
-            var buttons = new List<UiButton>
+            bool includeDeveloperEntries = options.DeveloperToolsUnlocked && !tutorialPause && currentStage != null;
+            int total = tutorialPause ? 7 : includeDeveloperEntries ? 8 : 6;
+            var entries = new List<PauseMenuEntry>
             {
-                CreateButton("RESUME", 0, total),
-                CreateButton("SAVE GAME", 1, total),
-                CreateButton("LOAD GAME", 2, total),
-                CreateButton("OPTIONS", 3, total),
-                CreateButton("HELP", 4, total),
+                new PauseMenuEntry(PauseMenuAction.Resume, CreateButton("RESUME", 0, total)),
+                new PauseMenuEntry(PauseMenuAction.SaveGame, CreateButton("SAVE GAME", 1, total)),
+                new PauseMenuEntry(PauseMenuAction.LoadGame, CreateButton("LOAD GAME", 2, total)),
+                new PauseMenuEntry(PauseMenuAction.Options, CreateButton("OPTIONS", 3, total)),
+                new PauseMenuEntry(PauseMenuAction.Help, CreateButton("HELP", 4, total)),
             };
 
-            if (tutorialPause)
-                buttons.Add(CreateButton("SKIP TUTORIAL", 5, total));
+            int nextIndex = 5;
+            if (includeDeveloperEntries)
+            {
+                entries.Add(new PauseMenuEntry(PauseMenuAction.DeveloperStage, CreateButton(string.Concat("DEV STAGE ", currentStageNumber.ToString("00")), nextIndex++, total)));
+                entries.Add(new PauseMenuEntry(PauseMenuAction.DeveloperDetail, CreateButton(GetDeveloperDetailLabel(), nextIndex++, total)));
+            }
 
-            buttons.Add(CreateButton("QUIT TO TITLE", total - 1, total));
-            return buttons;
+            if (tutorialPause)
+                entries.Add(new PauseMenuEntry(PauseMenuAction.SkipTutorial, CreateButton("SKIP TUTORIAL", nextIndex++, total)));
+
+            entries.Add(new PauseMenuEntry(PauseMenuAction.QuitToTitle, CreateButton("QUIT TO TITLE", total - 1, total)));
+            return entries;
         }
 
         private UiButton CreateButton(string text, int index, int total)
@@ -2385,6 +2616,7 @@ namespace SpaceBurst
                 SfxVolume = source.SfxVolume,
                 AudioQualityPreset = source.AudioQualityPreset,
                 ScreenShakeStrength = source.ScreenShakeStrength,
+                DeveloperToolsUnlocked = source.DeveloperToolsUnlocked,
             };
         }
 
@@ -2406,6 +2638,7 @@ namespace SpaceBurst
             target.SfxVolume = source.SfxVolume;
             target.AudioQualityPreset = source.AudioQualityPreset;
             target.ScreenShakeStrength = source.ScreenShakeStrength;
+            target.DeveloperToolsUnlocked = source.DeveloperToolsUnlocked;
         }
 
         private void ApplyOptionsState()
@@ -3082,11 +3315,13 @@ namespace SpaceBurst
         {
             spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), Color.Black * 0.45f);
             DrawCenteredText(spriteBatch, pixel, "PAUSED", Game1.ScreenSize.X / 2f, 148f, Color.White, 3f);
-            List<UiButton> buttons = GetPauseButtons();
-            for (int i = 0; i < buttons.Count; i++)
-                DrawButton(spriteBatch, pixel, buttons[i], i == pauseSelection);
+            List<PauseMenuEntry> entries = GetPauseEntries();
+            for (int i = 0; i < entries.Count; i++)
+                DrawButton(spriteBatch, pixel, entries[i].Button, i == pauseSelection);
             if (pauseReturnState == GameFlowState.Tutorial)
                 DrawCenteredText(spriteBatch, pixel, "SKIP TUTORIAL STARTS THE REAL CAMPAIGN", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 92f, Color.Orange * 0.8f, 1.2f);
+            else if (options.DeveloperToolsUnlocked)
+                DrawCenteredText(spriteBatch, pixel, "DEV TOOLS ENABLED  PAGEUP/PAGEDOWN STAGE  F6 DETAIL  V VIEW", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 92f, Color.Cyan * 0.85f, 1.05f);
 #if ANDROID
             DrawCenteredText(spriteBatch, pixel, "TAP A BUTTON OR TAP THE PAUSE CHIP AGAIN TO RETURN", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 62f, Color.White * 0.62f, 1.05f);
 #else
