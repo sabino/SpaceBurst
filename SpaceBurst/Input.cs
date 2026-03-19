@@ -26,6 +26,9 @@ namespace SpaceBurst
         private static int movementTouchId = -1;
         private static int aimTouchId = -1;
         private static int rewindTouchId = -1;
+        private static bool touchPausePressed;
+        private static bool touchSwapPressed;
+        private static int touchTopButtonId = -1;
         private static Vector2 movementTouchOrigin;
         private static Vector2 movementTouchPosition;
         private static Vector2 aimTouchOrigin;
@@ -83,6 +86,10 @@ namespace SpaceBurst
 
         public static bool WasCancelPressed()
         {
+#if ANDROID
+            if (touchPausePressed)
+                return true;
+#endif
             return WasKeyPressed(Keys.Escape) || WasButtonPressed(Buttons.Back) || WasButtonPressed(Buttons.B);
         }
 
@@ -93,11 +100,19 @@ namespace SpaceBurst
 
         public static bool WasPreviousStylePressed()
         {
+#if ANDROID
+            if (touchSwapPressed)
+                return true;
+#endif
             return WasKeyPressed(Keys.Q) || WasButtonPressed(Buttons.DPadLeft);
         }
 
         public static bool WasNextStylePressed()
         {
+#if ANDROID
+            if (touchSwapPressed)
+                return true;
+#endif
             return WasKeyPressed(Keys.E) || WasButtonPressed(Buttons.DPadRight);
         }
 
@@ -196,7 +211,12 @@ namespace SpaceBurst
             bool rewindFound = false;
             fireHeld = aimTouchId != -1;
             rewindHeld = false;
+            touchPausePressed = false;
+            touchSwapPressed = false;
             Rectangle rewindBounds = GetRewindButtonBounds(gameplayBounds, stickRadius);
+            Rectangle swapBounds = GetSwapButtonBounds(gameplayBounds, stickRadius);
+            Rectangle pauseBounds = GetPauseButtonBounds(gameplayBounds, stickRadius);
+            bool topButtonFound = false;
 
             foreach (TouchLocation touch in touches)
             {
@@ -214,6 +234,12 @@ namespace SpaceBurst
                 {
                     rewindFound = true;
                     rewindHeld = true;
+                    continue;
+                }
+
+                if (touch.Id == touchTopButtonId)
+                {
+                    topButtonFound = true;
                     continue;
                 }
 
@@ -237,6 +263,18 @@ namespace SpaceBurst
                     rewindTouchId = touch.Id;
                     rewindFound = true;
                     rewindHeld = true;
+                }
+                else if (swapBounds.Contains(screenPosition))
+                {
+                    touchTopButtonId = touch.Id;
+                    topButtonFound = true;
+                    touchSwapPressed = touch.State == TouchLocationState.Pressed;
+                }
+                else if (pauseBounds.Contains(screenPosition))
+                {
+                    touchTopButtonId = touch.Id;
+                    topButtonFound = true;
+                    touchPausePressed = touch.State == TouchLocationState.Pressed;
                 }
                 else if (screenPosition.X < gameplayBounds.Center.X)
                 {
@@ -274,6 +312,8 @@ namespace SpaceBurst
 
             if (!rewindFound)
                 rewindTouchId = -1;
+            if (!topButtonFound)
+                touchTopButtonId = -1;
 
             touchMovementDirection = GetVirtualStickDirection(movementTouchOrigin, movementTouchPosition, stickRadius);
 
@@ -317,6 +357,16 @@ namespace SpaceBurst
             Vector2 rewindCenter = new Vector2(rewindBounds.Center.X, rewindBounds.Center.Y);
             DrawCircle(spriteBatch, controlTexture, rewindCenter, rewindBounds.Width * 0.5f, Color.White * (rewindTouchId == -1 ? 0.1f : 0.24f));
             BitmapFontRenderer.Draw(spriteBatch, Game1.UiPixel, "R", rewindCenter - new Vector2(6f, 8f), Color.White, 1.4f);
+
+            Rectangle swapBounds = GetSwapButtonBounds(gameplayBounds, stickRadius);
+            Vector2 swapCenter = new Vector2(swapBounds.Center.X, swapBounds.Center.Y);
+            DrawCircle(spriteBatch, controlTexture, swapCenter, swapBounds.Width * 0.5f, Color.White * 0.13f);
+            BitmapFontRenderer.Draw(spriteBatch, Game1.UiPixel, "SW", swapCenter - new Vector2(13f, 8f), Color.White, 1f);
+
+            Rectangle pauseBounds = GetPauseButtonBounds(gameplayBounds, stickRadius);
+            Vector2 pauseCenter = new Vector2(pauseBounds.Center.X, pauseBounds.Center.Y);
+            DrawCircle(spriteBatch, controlTexture, pauseCenter, pauseBounds.Width * 0.5f, Color.White * 0.13f);
+            BitmapFontRenderer.Draw(spriteBatch, Game1.UiPixel, "II", pauseCenter - new Vector2(8f, 8f), Color.White, 1.2f);
         }
 
         private static Vector2 GetVirtualStickDirection(Vector2 origin, Vector2 current, float maxDistance)
@@ -349,6 +399,28 @@ namespace SpaceBurst
             int size = (int)(radius * 1.15f);
             return new Rectangle(
                 (int)(gameplayBounds.Right - margin - size),
+                (int)(gameplayBounds.Top + margin),
+                size,
+                size);
+        }
+
+        private static Rectangle GetSwapButtonBounds(Rectangle gameplayBounds, float radius)
+        {
+            float margin = radius * 0.6f;
+            int size = (int)(radius * 1.15f);
+            return new Rectangle(
+                (int)(gameplayBounds.Left + margin),
+                (int)(gameplayBounds.Top + margin),
+                size,
+                size);
+        }
+
+        private static Rectangle GetPauseButtonBounds(Rectangle gameplayBounds, float radius)
+        {
+            float margin = radius * 0.6f;
+            int size = (int)(radius * 1.15f);
+            return new Rectangle(
+                (int)(gameplayBounds.Left + margin + size + margin * 0.75f),
                 (int)(gameplayBounds.Top + margin),
                 size,
                 size);
