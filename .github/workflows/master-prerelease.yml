@@ -9,9 +9,39 @@ permissions:
   contents: write
 
 jobs:
+  version:
+    name: Compute Build Version
+    runs-on: windows-latest
+    outputs:
+      display_version: ${{ steps.version.outputs.display_version }}
+      build_version: ${{ steps.version.outputs.build_version }}
+      file_version: ${{ steps.version.outputs.file_version }}
+      informational_version: ${{ steps.version.outputs.informational_version }}
+      android_version_code: ${{ steps.version.outputs.android_version_code }}
+      artifact_tag: ${{ steps.version.outputs.artifact_tag }}
+      short_sha: ${{ steps.version.outputs.short_sha }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Compute version stamp
+        id: version
+        shell: pwsh
+        run: |
+          $info = & .\tools\Get-BuildVersion.ps1 -Commit $env:GITHUB_SHA | ConvertFrom-Json
+          $shortSha = $env:GITHUB_SHA.Substring(0, 7)
+          "display_version=$($info.DisplayVersion)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "build_version=$($info.BuildVersion)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "file_version=$($info.FileVersion)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "informational_version=$($info.InformationalVersion)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "android_version_code=$($info.AndroidVersionCode)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "artifact_tag=$($info.ArtifactTag)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "short_sha=$shortSha" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
   windows-build:
     name: Windows Game Package
     runs-on: windows-latest
+    needs: version
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -41,23 +71,25 @@ jobs:
           -p:IncludeNativeLibrariesForSelfExtract=true
           -p:DebugType=None
           -p:DebugSymbols=false
-          -p:Version=1.0.${{ github.run_number }}
-          -p:InformationalVersion=${{ github.sha }}
+          -p:Version=${{ needs.version.outputs.build_version }}
+          -p:FileVersion=${{ needs.version.outputs.file_version }}
+          -p:InformationalVersion=${{ needs.version.outputs.informational_version }}
           -o .\artifacts\ci\win-x64
 
       - name: Package Windows artifact
         shell: pwsh
-        run: Compress-Archive -Path .\artifacts\ci\win-x64\* -DestinationPath .\artifacts\ci\SpaceBurst-win-x64.zip -Force
+        run: Compress-Archive -Path .\artifacts\ci\win-x64\* -DestinationPath .\artifacts\ci\SpaceBurst-win-x64-${{ needs.version.outputs.artifact_tag }}.zip -Force
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-game
-          path: artifacts/ci/SpaceBurst-win-x64.zip
+          path: artifacts/ci/SpaceBurst-win-x64-${{ needs.version.outputs.artifact_tag }}.zip
 
   linux-build:
     name: Linux Game Package
     runs-on: ubuntu-latest
+    needs: version
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -77,22 +109,24 @@ jobs:
           -p:IncludeNativeLibrariesForSelfExtract=true
           -p:DebugType=None
           -p:DebugSymbols=false
-          -p:Version=1.0.${{ github.run_number }}
-          -p:InformationalVersion=${{ github.sha }}
+          -p:Version=${{ needs.version.outputs.build_version }}
+          -p:FileVersion=${{ needs.version.outputs.file_version }}
+          -p:InformationalVersion=${{ needs.version.outputs.informational_version }}
           -o artifacts/ci/linux-x64
 
       - name: Package Linux artifact
-        run: tar -czf artifacts/ci/SpaceBurst-linux-x64.tar.gz -C artifacts/ci/linux-x64 .
+        run: tar -czf artifacts/ci/SpaceBurst-linux-x64-${{ needs.version.outputs.artifact_tag }}.tar.gz -C artifacts/ci/linux-x64 .
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-game
-          path: artifacts/ci/SpaceBurst-linux-x64.tar.gz
+          path: artifacts/ci/SpaceBurst-linux-x64-${{ needs.version.outputs.artifact_tag }}.tar.gz
 
   android-build:
     name: Android Signed APK
     runs-on: windows-latest
+    needs: version
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -151,8 +185,8 @@ jobs:
           .\build-android.ps1
           -Configuration Release
           -InstallDependencies
-          -ApplicationVersion ${{ github.run_number }}
-          -ApplicationDisplayVersion 1.0.${{ github.run_number }}
+          -ApplicationVersion ${{ needs.version.outputs.android_version_code }}
+          -ApplicationDisplayVersion ${{ needs.version.outputs.display_version }}
           -SigningKeyStorePath $env:KEYSTORE_PATH
           -SigningStorePass $env:ANDROID_KEYSTORE_PASSWORD
           -SigningKeyAlias $env:ANDROID_KEY_ALIAS
@@ -162,22 +196,26 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path .\artifacts\ci\android | Out-Null
-          $apk = Get-ChildItem .\SpaceBurst.Android\bin\Release\net8.0-android34.0 -Filter *.apk | Select-Object -First 1
+          $apk = Get-ChildItem .\SpaceBurst.Android\bin\Release\net8.0-android34.0 -Filter "SpaceBurst-android-${{ needs.version.outputs.artifact_tag }}.apk" | Select-Object -First 1
+          if (-not $apk) {
+            $apk = Get-ChildItem .\SpaceBurst.Android\bin\Release\net8.0-android34.0 -Filter *-Signed.apk | Select-Object -First 1
+          }
           if (-not $apk) {
             throw "No Android APK found."
           }
-          Copy-Item $apk.FullName .\artifacts\ci\android\SpaceBurst-android.apk -Force
+          Copy-Item $apk.FullName .\artifacts\ci\android\SpaceBurst-android-${{ needs.version.outputs.artifact_tag }}.apk -Force
 
       - name: Upload Android artifact
         uses: actions/upload-artifact@v4
         with:
           name: android-game
-          path: artifacts/ci/android/SpaceBurst-android.apk
+          path: artifacts/ci/android/SpaceBurst-android-${{ needs.version.outputs.artifact_tag }}.apk
 
   release:
     name: Publish Master Prerelease
     runs-on: ubuntu-latest
     needs:
+      - version
       - windows-build
       - linux-build
       - android-build
@@ -194,38 +232,37 @@ jobs:
         shell: bash
         run: |
           mkdir -p artifacts/release
-          cp artifacts/downloads/windows-game/SpaceBurst-win-x64.zip artifacts/release/
-          cp artifacts/downloads/linux-game/SpaceBurst-linux-x64.tar.gz artifacts/release/
-          cp artifacts/downloads/android-game/SpaceBurst-android.apk artifacts/release/
+          cp "artifacts/downloads/windows-game/SpaceBurst-win-x64-${{ needs.version.outputs.artifact_tag }}.zip" artifacts/release/
+          cp "artifacts/downloads/linux-game/SpaceBurst-linux-x64-${{ needs.version.outputs.artifact_tag }}.tar.gz" artifacts/release/
+          cp "artifacts/downloads/android-game/SpaceBurst-android-${{ needs.version.outputs.artifact_tag }}.apk" artifacts/release/
           cp LICENSE artifacts/release/LICENSE.txt
-          short_sha="${GITHUB_SHA::7}"
           {
             echo "SpaceBurst master prerelease"
             echo
             echo "Commit: ${GITHUB_SHA}"
+            echo "Version: ${{ needs.version.outputs.display_version }}"
             echo "Developer: Sabino Software"
             echo "Docs: http://sabino.pro/SpaceBurst/"
             echo "License: The Unlicense"
             echo
             echo "Included assets:"
-            echo "- SpaceBurst-win-x64.zip"
-            echo "- SpaceBurst-linux-x64.tar.gz"
-            echo "- SpaceBurst-android.apk"
+            echo "- SpaceBurst-win-x64-${{ needs.version.outputs.artifact_tag }}.zip"
+            echo "- SpaceBurst-linux-x64-${{ needs.version.outputs.artifact_tag }}.tar.gz"
+            echo "- SpaceBurst-android-${{ needs.version.outputs.artifact_tag }}.apk"
           } > artifacts/release/RELEASE-NOTES.txt
-          (cd artifacts/release && sha256sum SpaceBurst-win-x64.zip SpaceBurst-linux-x64.tar.gz SpaceBurst-android.apk LICENSE.txt RELEASE-NOTES.txt > SHA256SUMS.txt)
-          echo "short_sha=${short_sha}" >> "$GITHUB_ENV"
+          (cd artifacts/release && sha256sum "SpaceBurst-win-x64-${{ needs.version.outputs.artifact_tag }}.zip" "SpaceBurst-linux-x64-${{ needs.version.outputs.artifact_tag }}.tar.gz" "SpaceBurst-android-${{ needs.version.outputs.artifact_tag }}.apk" LICENSE.txt RELEASE-NOTES.txt > SHA256SUMS.txt)
 
       - name: Create prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: master-${{ env.short_sha }}
-          name: Master prerelease ${{ env.short_sha }}
+          tag_name: master-${{ needs.version.outputs.short_sha }}
+          name: Master prerelease ${{ needs.version.outputs.short_sha }}
           prerelease: true
           generate_release_notes: true
           files: |
-            artifacts/release/SpaceBurst-win-x64.zip
-            artifacts/release/SpaceBurst-linux-x64.tar.gz
-            artifacts/release/SpaceBurst-android.apk
+            artifacts/release/SpaceBurst-win-x64-${{ needs.version.outputs.artifact_tag }}.zip
+            artifacts/release/SpaceBurst-linux-x64-${{ needs.version.outputs.artifact_tag }}.tar.gz
+            artifacts/release/SpaceBurst-android-${{ needs.version.outputs.artifact_tag }}.apk
             artifacts/release/SHA256SUMS.txt
             artifacts/release/LICENSE.txt
             artifacts/release/RELEASE-NOTES.txt

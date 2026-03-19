@@ -11,8 +11,8 @@ namespace SpaceBurst
     {
         private const int VirtualBaseWidth = 1280;
         private const int VirtualBaseHeight = 720;
-        private const float MinimumBootVisibleSeconds = 0.9f;
-        private const float ReadyBootHandoffSeconds = 0.4f;
+        private const float MinimumBootVisibleSeconds = 1.35f;
+        private const float ReadyBootHandoffSeconds = 0.55f;
 
         public static Game1 Instance { get; private set; }
         public static Texture2D UiPixel { get { return Instance != null ? Instance.uiPixel : null; } }
@@ -50,6 +50,7 @@ namespace SpaceBurst
         private bool bootReady;
         private bool bootComplete;
         private bool bootExploded;
+        private bool bootHasDrawn;
         private float bootVisibleSeconds;
         private float bootReadySeconds;
         private string bootStatus = "STARTING";
@@ -510,6 +511,7 @@ namespace SpaceBurst
             bootReady = false;
             bootComplete = false;
             bootExploded = false;
+            bootHasDrawn = false;
             bootVisibleSeconds = 0f;
             bootReadySeconds = 0f;
             bootStatus = "STARTING";
@@ -519,7 +521,9 @@ namespace SpaceBurst
 
         private void UpdateBootLoader(float deltaSeconds)
         {
-            bootVisibleSeconds += deltaSeconds;
+            if (bootHasDrawn)
+                bootVisibleSeconds += deltaSeconds;
+
             UpdateBootPixels(deltaSeconds);
 
             if (Input.WasPrimaryActionPressed() && GetBootLogoBounds().Contains(Input.PointerPosition))
@@ -532,7 +536,7 @@ namespace SpaceBurst
             }
 
             bootReadySeconds += deltaSeconds;
-            if (bootVisibleSeconds >= MinimumBootVisibleSeconds && (Input.WasPrimaryActionPressed() || bootExploded || bootReadySeconds >= ReadyBootHandoffSeconds))
+            if (bootHasDrawn && bootVisibleSeconds >= MinimumBootVisibleSeconds && (Input.WasPrimaryActionPressed() || bootExploded || bootReadySeconds >= ReadyBootHandoffSeconds))
                 bootComplete = true;
         }
 
@@ -577,6 +581,7 @@ namespace SpaceBurst
 
         private void DrawBootLoader(SpriteBatch spriteBatch, Texture2D pixel)
         {
+            bootHasDrawn = true;
             Rectangle full = new Rectangle(0, 0, VirtualWidth, VirtualHeight);
             spriteBatch.Draw(pixel, full, bootBackgroundColor);
 

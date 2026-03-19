@@ -636,10 +636,18 @@ namespace SpaceBurst
             HandlePointerSelection(optionBounds, ref optionsSelection);
 
             int delta = 0;
-            if (Input.WasNavigateLeftPressed())
+            int swipeDelta = Input.ConsumeMenuHorizontalDelta();
+            if (swipeDelta != 0)
+                delta = swipeDelta;
+            else if (Input.WasNavigateLeftPressed())
                 delta = -1;
             else if (Input.WasNavigateRightPressed() || Input.WasConfirmPressed() || Input.WasPrimaryActionPressed())
                 delta = 1;
+
+#if ANDROID
+            if (delta != 0 && Input.WasPrimaryActionPressed() && optionsSelection >= 0 && optionsSelection < optionBounds.Length && optionBounds[optionsSelection].Contains(Input.PointerPosition))
+                delta = Input.PointerPosition.X < optionBounds[optionsSelection].Center.X ? -1 : 1;
+#endif
 
             if (delta == 0)
                 return;
@@ -2362,7 +2370,8 @@ namespace SpaceBurst
             }
 
 #if ANDROID
-            DrawCenteredText(spriteBatch, pixel, "TAP A ROW TO ADVANCE  USE ANDROID BACK TO CLOSE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - UiPx(96), Color.White * 0.75f, 1.06f);
+            DrawCenteredText(spriteBatch, pixel, "SWIPE A ROW LEFT OR RIGHT TO ADJUST  TAP LEFT TO LOWER  TAP RIGHT TO RAISE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - UiPx(120), Color.White * 0.75f, 0.96f);
+            DrawCenteredText(spriteBatch, pixel, "USE ANDROID BACK TO CLOSE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - UiPx(88), Color.White * 0.62f, 0.98f);
 #else
             DrawCenteredText(spriteBatch, pixel, "LEFT RIGHT OR ENTER TO CHANGE  ESC TO CLOSE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - UiPx(96), Color.White * 0.75f, 1.1f);
 #endif
@@ -2456,7 +2465,7 @@ namespace SpaceBurst
             }
 
 #if ANDROID
-            DrawCenteredText(spriteBatch, pixel, helpPageIndex == 0 ? "SWIPE LEFT OR RIGHT  TAP TO REPLAY TUTORIAL  USE ANDROID BACK TO CLOSE" : "SWIPE LEFT OR RIGHT  USE ANDROID BACK TO CLOSE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 120f, Color.White * 0.75f, 1.08f);
+            DrawCenteredText(spriteBatch, pixel, helpPageIndex == 0 ? "SWIPE LEFT OR RIGHT  TAP TO REPLAY TUTORIAL  USE ANDROID BACK TO CLOSE" : "SWIPE LEFT OR RIGHT  TAP TO CLOSE OR USE ANDROID BACK", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 120f, Color.White * 0.75f, 1.05f);
 #else
             DrawCenteredText(spriteBatch, pixel, helpPageIndex == 0 ? "LEFT RIGHT TO CHANGE PAGE  ENTER TO REPLAY TUTORIAL  ESC TO CLOSE" : "LEFT RIGHT TO CHANGE PAGE  ENTER ESC F1 TO CLOSE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 120f, Color.White * 0.75f, 1.35f);
 #endif
