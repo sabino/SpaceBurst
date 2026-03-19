@@ -185,6 +185,16 @@ namespace SpaceBurst
             get { return campaignDirector != null ? campaignDirector.VisualPreset : VisualPreset.Standard; }
         }
 
+        internal PresentationTier CurrentPresentationTier
+        {
+            get { return campaignDirector != null ? campaignDirector.CurrentPresentationTier : PresentationTier.Pixel2D; }
+        }
+
+        internal ViewMode CurrentViewMode
+        {
+            get { return campaignDirector != null ? campaignDirector.CurrentViewMode : ViewMode.SideScroller; }
+        }
+
         internal float TouchControlsOpacity
         {
             get
@@ -329,10 +339,11 @@ namespace SpaceBurst
             {
                 if (VisualPreset == VisualPreset.Low)
                 {
-                    Matrix worldMatrix = Matrix.CreateTranslation(CameraOffset.X, CameraOffset.Y, 0f) * worldScaleMatrix;
+                    bool chaseView = CurrentViewMode == ViewMode.Chase3D;
+                    Matrix worldMatrix = (chaseView ? Matrix.Identity : Matrix.CreateTranslation(CameraOffset.X, CameraOffset.Y, 0f)) * worldScaleMatrix;
                     spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, worldMatrix);
                     DrawBackground(spriteBatch, uiPixel);
-                    EntityManager.Draw(spriteBatch);
+                    WorldPresentationRenderer.Draw(spriteBatch, uiPixel, radialTexture, EntityManager.AllEntities, CurrentPresentationTier, CurrentViewMode, campaignDirector != null ? campaignDirector.CurrentStageNumber : 1);
                     spriteBatch.End();
                 }
                 else
@@ -341,10 +352,12 @@ namespace SpaceBurst
                     GraphicsDevice.SetRenderTarget(worldRenderTarget);
                     GraphicsDevice.Clear(Color.Transparent);
 
-                    Matrix worldMatrix = Matrix.CreateTranslation(CameraOffset.X, CameraOffset.Y, 0f);
+                    Matrix worldMatrix = CurrentViewMode == ViewMode.Chase3D
+                        ? Matrix.Identity
+                        : Matrix.CreateTranslation(CameraOffset.X, CameraOffset.Y, 0f);
                     spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, worldMatrix);
                     DrawBackground(spriteBatch, uiPixel);
-                    EntityManager.Draw(spriteBatch);
+                    WorldPresentationRenderer.Draw(spriteBatch, uiPixel, radialTexture, EntityManager.AllEntities, CurrentPresentationTier, CurrentViewMode, campaignDirector != null ? campaignDirector.CurrentStageNumber : 1);
                     spriteBatch.End();
 
                     GraphicsDevice.SetRenderTarget(null);
@@ -410,7 +423,9 @@ namespace SpaceBurst
                 campaignDirector != null ? campaignDirector.RewindVisualStrength : 0f,
                 ImpactPulse,
                 PickupPulse,
-                VisualPreset);
+                VisualPreset,
+                CurrentPresentationTier,
+                CurrentViewMode);
         }
 
         private void DrawWorldComposite()

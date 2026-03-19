@@ -50,6 +50,7 @@ namespace SpaceBurst.RuntimeData
         DestroyerBossMk2,
         WalkerBossMk2,
         FinalBoss,
+        CombinedBossSixth,
     }
 
     /// <summary>
@@ -74,6 +75,26 @@ namespace SpaceBurst.RuntimeData
         DebrisDrift,
         CometSwarm,
         SolarFlare,
+    }
+
+    /// <summary>
+    /// Describes the active presentation fidelity layer used for a stage.
+    /// </summary>
+    public enum PresentationTier
+    {
+        Pixel2D,
+        VoxelShell,
+        HybridMesh,
+        Late3D,
+    }
+
+    /// <summary>
+    /// Describes the player-facing camera presentation mode.
+    /// </summary>
+    public enum ViewMode
+    {
+        SideScroller,
+        Chase3D,
     }
 
     /// <summary>
@@ -325,12 +346,27 @@ namespace SpaceBurst.RuntimeData
         public float StartSeconds { get; set; }
         public float DurationSeconds { get; set; } = 12f;
         public bool Checkpoint { get; set; }
+        public bool AllowReentryAmbushes { get; set; } = true;
         public float PowerDropBonusChance { get; set; }
         public float ScrollMultiplier { get; set; } = 1f;
         public float EnemySpeedMultiplier { get; set; } = 1f;
         public BackgroundMoodDefinition Mood { get; set; } = new BackgroundMoodDefinition();
         public List<RandomEventWindowDefinition> EventWindows { get; set; } = new List<RandomEventWindowDefinition>();
         public List<SpawnGroupDefinition> Groups { get; set; } = new List<SpawnGroupDefinition>();
+    }
+
+    /// <summary>
+    /// Defines an optional runtime-selected boss variant for a milestone stage.
+    /// </summary>
+    public sealed class BossVariantDefinition
+    {
+        public string Id { get; set; } = string.Empty;
+        public BossType Type { get; set; } = BossType.FinalBoss;
+        public string DisplayName { get; set; }
+        public string ArchetypeId { get; set; }
+        public float ChancePercent { get; set; }
+        public float PresentationScaleMultiplier { get; set; } = 1f;
+        public float HitPointMultiplier { get; set; } = 1f;
     }
 
     /// <summary>
@@ -346,8 +382,11 @@ namespace SpaceBurst.RuntimeData
         public float ArenaScrollSpeed { get; set; } = 70f;
         public int HitPoints { get; set; } = 160;
         public bool AllowRandomEvents { get; set; }
+        public float PresentationScale { get; set; } = 1f;
+        public float ScreenCoverageTarget { get; set; }
         public List<float> PhaseThresholds { get; set; } = new List<float> { 0.75f, 0.5f, 0.25f };
         public List<RandomEventType> HazardOverrides { get; set; } = new List<RandomEventType>();
+        public List<BossVariantDefinition> Variants { get; set; } = new List<BossVariantDefinition>();
         public BackgroundMoodDefinition MoodOverride { get; set; } = new BackgroundMoodDefinition();
         public MovePattern MovePattern { get; set; } = MovePattern.BossOrbit;
         public FirePattern FirePattern { get; set; } = FirePattern.BossFan;
@@ -367,6 +406,8 @@ namespace SpaceBurst.RuntimeData
         public int BackgroundSeed { get; set; } = 1;
         public int StartingLives { get; set; } = 3;
         public int ShipsPerLife { get; set; } = 2;
+        public PresentationTier? PresentationTierOverride { get; set; }
+        public bool EnableChaseView { get; set; } = true;
         public BackgroundMoodDefinition BackgroundMood { get; set; } = new BackgroundMoodDefinition();
         public List<float> CheckpointMarkers { get; set; } = new List<float>();
         public List<SectionDefinition> Sections { get; set; } = new List<SectionDefinition>();

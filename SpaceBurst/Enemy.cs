@@ -23,6 +23,8 @@ namespace SpaceBurst
         protected float flashTimer;
         protected float fireCooldown;
         protected float phaseOffset;
+        protected bool reentryRollConsumed;
+        protected bool wasReentrySpawn;
         private static readonly DeterministicRngState fallbackGameplayRandom = new DeterministicRngState(0x5EED1234u);
         private static readonly Random cosmeticRandom = new Random();
 
@@ -65,6 +67,26 @@ namespace SpaceBurst
 
                 return sprite.Mask.OccupiedCount / (float)sprite.Mask.InitialOccupiedCount;
             }
+        }
+
+        public bool ReentryRollConsumed
+        {
+            get { return reentryRollConsumed; }
+        }
+
+        public bool WasReentrySpawn
+        {
+            get { return wasReentrySpawn; }
+        }
+
+        internal Color PresentationAccentColor
+        {
+            get { return accentColor; }
+        }
+
+        internal override float PresentationDepthBias
+        {
+            get { return MathHelper.Clamp((targetY / Math.Max(1f, Game1.ScreenSize.Y) - 0.5f) * 1.2f, -0.6f, 0.6f); }
         }
 
         public Enemy(
@@ -112,7 +134,7 @@ namespace SpaceBurst
             Position += Velocity * deltaSeconds;
 
             if (Position.X < -Size.X || Position.Y < -Size.Y || Position.Y > Game1.ScreenSize.Y + Size.Y || Position.X > Game1.ScreenSize.X + 400f)
-                IsExpired = true;
+                HandleLiveAreaExit();
         }
 
         public override void Draw(SpriteBatch spriteBatch)
@@ -189,6 +211,8 @@ namespace SpaceBurst
                 FlashTimer = flashTimer,
                 FireCooldown = fireCooldown,
                 PhaseOffset = phaseOffset,
+                ReentryRollConsumed = reentryRollConsumed,
+                WasReentrySpawn = wasReentrySpawn,
                 IsBoss = false,
                 Mask = sprite?.CaptureMaskSnapshot() ?? new MaskSnapshotData(),
             };
@@ -205,6 +229,8 @@ namespace SpaceBurst
             flashTimer = snapshot.FlashTimer;
             fireCooldown = snapshot.FireCooldown;
             phaseOffset = snapshot.PhaseOffset;
+            reentryRollConsumed = snapshot.ReentryRollConsumed;
+            wasReentrySpawn = snapshot.WasReentrySpawn;
             sprite?.RestoreMaskSnapshot(snapshot.Mask);
             color = flashTimer > 0f ? Color.Lerp(Color.White, accentColor, 0.28f) : Color.White;
         }
@@ -232,6 +258,48 @@ namespace SpaceBurst
             return enemy;
         }
 
+        public static Enemy FromReentrySnapshot(
+            EnemyArchetypeDefinition archetype,
+            EnemySnapshotData snapshot,
+            Vector2 spawnPoint,
+            float targetY,
+            float speedMultiplier)
+        {
+            if (snapshot == null || archetype == null)
+                return null;
+
+            var enemy = new Enemy(
+                archetype,
+                spawnPoint,
+                targetY,
+                snapshot.MovePattern,
+                snapshot.FirePattern,
+                speedMultiplier > 0f ? speedMultiplier : snapshot.SpeedMultiplier,
+                snapshot.MovementAmplitude,
+                snapshot.MovementFrequency);
+
+            enemy.ageSeconds = 0f;
+            enemy.flashTimer = snapshot.FlashTimer;
+            enemy.fireCooldown = snapshot.FireCooldown;
+            enemy.phaseOffset = snapshot.PhaseOffset;
+            enemy.reentryRollConsumed = true;
+            enemy.wasReentrySpawn = true;
+            enemy.sprite?.RestoreMaskSnapshot(snapshot.Mask);
+            enemy.color = enemy.flashTimer > 0f ? Color.Lerp(Color.White, enemy.accentColor, 0.28f) : Color.White;
+            return enemy;
+        }
+
+        public void MarkReentryRollConsumed()
+        {
+            reentryRollConsumed = true;
+        }
+
+        public void MarkAsReentrySpawn()
+        {
+            wasReentrySpawn = true;
+            reentryRollConsumed = true;
+        }
+
         protected virtual void Destroy(bool coreBreach = false)
         {
             if (IsExpired)
@@ -251,6 +319,23 @@ namespace SpaceBurst
             float bonusChance = Game1.Instance != null ? Game1.Instance.CurrentPowerDropBonusChance : 0f;
             if (archetype.PowerupEligible && PlayerStatus.RunProgress.Powerups.ShouldDrop(Game1.Instance?.GameplayRandom, bonusChance, archetype.PowerupWeight, IsBoss))
                 EntityManager.Add(new PowerupPickup(Position, ResolvePowerupStyle()));
+        }
+
+        protected virtual void HandleLiveAreaExit()
+        {
+            if (!reentryRollConsumed && !IsBoss && Game1.Instance?.CampaignDirector != null)
+            {
+                if (Game1.Instance.CampaignDirector.TryQueueEnemyReentry(this))
+                {
+                    reentryRollConsumed = true;
+                    IsExpired = true;
+                    return;
+                }
+
+                reentryRollConsumed = true;
+            }
+
+            IsExpired = true;
         }
 
         protected virtual WeaponStyleId ResolvePowerupStyle()

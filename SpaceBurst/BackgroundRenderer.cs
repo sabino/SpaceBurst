@@ -22,7 +22,9 @@ namespace SpaceBurst
             float rewindStrength,
             float impactPulse,
             float pickupPulse,
-            VisualPreset preset)
+            VisualPreset preset,
+            PresentationTier presentationTier,
+            ViewMode viewMode)
         {
             BackgroundMoodDefinition resolvedMood = mood ?? new BackgroundMoodDefinition();
             Color backColor = ColorUtil.ParseHex(resolvedMood.PrimaryColor, new Color(10, 14, 22));
@@ -57,6 +59,12 @@ namespace SpaceBurst
             DrawDust(spriteBatch, pixel, seed + 3, scrollSpeed, accentColor, resolvedMood, cameraOffset * 0.28f, transitionWarp, rewindStrength);
             DrawNearDebris(spriteBatch, pixel, seed + 11, scrollSpeed, difficulty, activeEvent, activeEventIntensity, cameraOffset * 0.42f, transitionWarp, preset);
             DrawGlints(spriteBatch, radialTexture, seed + 29, accentColor, glowColor, cameraOffset * 0.16f, transitionWarp, time);
+
+            if (presentationTier >= PresentationTier.VoxelShell)
+                DrawDepthBands(spriteBatch, pixel, seed + 41, accentColor, glowColor, cameraOffset * 0.22f, transitionWarp, difficulty, presentationTier);
+
+            if (viewMode == ViewMode.Chase3D)
+                DrawPerspectiveFlightLanes(spriteBatch, pixel, accentColor, glowColor, transitionWarp, rewindStrength, impactPulse);
 
             if (activeEvent == RandomEventType.SolarFlare)
             {
@@ -158,6 +166,64 @@ namespace SpaceBurst
                 Color tint = Color.Lerp(accentColor, glowColor, Hash01(seed, i * 13 + 7)) * (pulse + transitionWarp * 0.1f);
                 spriteBatch.Draw(radialTexture, new Vector2(x, y) + cameraOffset, null, tint, 0f, new Vector2(radialTexture.Width / 2f, radialTexture.Height / 2f), 48f / radialTexture.Width, SpriteEffects.None, 0f);
             }
+        }
+
+        private static void DrawDepthBands(SpriteBatch spriteBatch, Texture2D pixel, int seed, Color accentColor, Color glowColor, Vector2 cameraOffset, float transitionWarp, float difficulty, PresentationTier tier)
+        {
+            int count = tier >= PresentationTier.HybridMesh ? 18 : 10;
+            float time = (float)Game1.GameTime.TotalGameTime.TotalSeconds;
+            for (int i = 0; i < count; i++)
+            {
+                float x = Hash01(seed, i * 19 + 1) * Game1.VirtualWidth;
+                float y = Hash01(seed, i * 19 + 3) * Game1.VirtualHeight;
+                float width = 34f + Hash01(seed, i * 19 + 5) * (tier >= PresentationTier.HybridMesh ? 190f : 120f);
+                float height = tier >= PresentationTier.HybridMesh ? 4f : 3f;
+                float drift = (time * (12f + difficulty * 22f) * (0.35f + Hash01(seed, i * 19 + 7))) % (Game1.VirtualWidth + width);
+                float screenX = Game1.VirtualWidth + width - ((x + drift) % (Game1.VirtualWidth + width));
+                Color color = Color.Lerp(accentColor, glowColor, Hash01(seed, i * 19 + 9)) * (tier >= PresentationTier.HybridMesh ? 0.08f : 0.05f);
+                spriteBatch.Draw(pixel, new Rectangle((int)(screenX + cameraOffset.X), (int)(y + cameraOffset.Y), (int)(width * (1f + transitionWarp * 2.6f)), (int)height), color);
+            }
+        }
+
+        private static void DrawPerspectiveFlightLanes(SpriteBatch spriteBatch, Texture2D pixel, Color accentColor, Color glowColor, float transitionWarp, float rewindStrength, float impactPulse)
+        {
+            float baseY = Game1.VirtualHeight * 0.78f;
+            Vector2 playerPosition = Player1.Instance != null ? Player1.Instance.Position : new Vector2(Game1.VirtualWidth * 0.2f, Game1.VirtualHeight * 0.5f);
+            float normalizedY = (playerPosition.Y - Game1.VirtualHeight * 0.5f) / Math.Max(1f, Game1.VirtualHeight * 0.5f);
+            float normalizedX = (playerPosition.X - Game1.VirtualWidth * 0.18f) / Math.Max(1f, Game1.VirtualWidth * 0.32f);
+            float vanishingX = Game1.VirtualWidth * 0.5f + normalizedY * 170f + normalizedX * 54f;
+            Color laneColor = Color.Lerp(accentColor, glowColor, 0.45f) * (0.08f + transitionWarp * 0.08f + impactPulse * 0.04f);
+            if (rewindStrength > 0f)
+                laneColor = Color.Lerp(laneColor, Color.Cyan * (laneColor.A / 255f), 0.4f);
+
+            for (int lane = -4; lane <= 4; lane++)
+            {
+                float laneOffset = lane * 74f;
+                for (int step = 1; step <= 8; step++)
+                {
+                    float t0 = step / 8f;
+                    float t1 = (step + 1) / 8f;
+                    float width0 = MathHelper.Lerp(8f, 220f, t0);
+                    float width1 = MathHelper.Lerp(8f, 220f, t1);
+                    float y0 = MathHelper.Lerp(Game1.VirtualHeight * 0.34f, baseY, t0);
+                    float y1 = MathHelper.Lerp(Game1.VirtualHeight * 0.34f, baseY, t1);
+                    float x0 = vanishingX + laneOffset * t0;
+                    float x1 = vanishingX + laneOffset * t1;
+                    DrawSegment(spriteBatch, pixel, new Vector2(x0 - width0 * 0.5f, y0), new Vector2(x1 - width1 * 0.5f, y1), laneColor);
+                    DrawSegment(spriteBatch, pixel, new Vector2(x0 + width0 * 0.5f, y0), new Vector2(x1 + width1 * 0.5f, y1), laneColor * 0.8f);
+                }
+            }
+        }
+
+        private static void DrawSegment(SpriteBatch spriteBatch, Texture2D pixel, Vector2 start, Vector2 end, Color color)
+        {
+            Vector2 edge = end - start;
+            float length = edge.Length();
+            if (length <= 0.1f)
+                return;
+
+            float rotation = MathF.Atan2(edge.Y, edge.X);
+            spriteBatch.Draw(pixel, start, null, color, rotation, Vector2.Zero, new Vector2(length, 1f), SpriteEffects.None, 0f);
         }
 
         private static float Hash01(int seed, int salt)

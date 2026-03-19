@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
 using SpaceBurst.RuntimeData;
 using System;
 using System.Collections.Generic;
@@ -19,6 +20,7 @@ namespace SpaceBurst
         private const int AboutHelpPageIndex = 5;
         private const float TitleIntroDurationSeconds = 4.8f;
         private const float TitleIntroSkipDurationSeconds = 1.05f;
+        private const float DeveloperCodeTimeoutSeconds = 1.5f;
 
         private const string AboutHelpText =
             "ABOUT SPACEBURST\n" +
@@ -53,12 +55,18 @@ namespace SpaceBurst
         private readonly MedalProgress medals;
         private readonly List<ScheduledSpawn> scheduledSpawns = new List<ScheduledSpawn>();
         private readonly List<ScheduledEvent> scheduledEvents = new List<ScheduledEvent>();
+        private readonly List<ReentryTicket> reentryTickets = new List<ReentryTicket>();
         private readonly DeterministicRngState gameplayRandom = new DeterministicRngState(1u);
         private readonly List<RunSaveData> rewindFrames = new List<RunSaveData>();
         private readonly List<UpgradeDraftCard> draftCards = new List<UpgradeDraftCard>();
         private readonly Random titleVisualRandom = new Random(unchecked(Environment.TickCount * 397));
+        private static readonly Keys[] DeveloperToolsCode =
+        {
+            Keys.Up, Keys.Up, Keys.Down, Keys.Down, Keys.Left, Keys.Right, Keys.Left, Keys.Right, Keys.D, Keys.E, Keys.V
+        };
 
         private StageDefinition currentStage;
+        private BossDefinition resolvedBossDefinition;
         private BossEnemy activeBoss;
         private GameFlowState state = GameFlowState.Title;
         private GameFlowState helpReturnState = GameFlowState.Title;
@@ -104,10 +112,16 @@ namespace SpaceBurst
         private TutorialStep tutorialStep;
         private float tutorialProgressSeconds;
         private int optionsSliderDragIndex = -1;
+        private ViewMode viewMode = ViewMode.SideScroller;
+        private PresentationTier presentationTier = PresentationTier.Pixel2D;
+        private string selectedBossVariantId = string.Empty;
         private bool titleIntroActive = true;
         private bool titleIntroSeen;
         private bool titleIntroExploded;
         private float titleIntroTimer = TitleIntroDurationSeconds;
+        private int developerCodeProgress;
+        private float developerCodeTimer;
+        private PresentationTier? developerPresentationOverride;
         private readonly List<IntroPixel> introPixels = new List<IntroPixel>();
         private Color titleIntroBackgroundColor = new Color(7, 12, 24);
         private Color titleIntroGlowColorA = new Color(110, 193, 255);
@@ -160,6 +174,31 @@ namespace SpaceBurst
             public Color Prompt { get; }
         }
 
+        private enum PauseMenuAction
+        {
+            Resume,
+            SaveGame,
+            LoadGame,
+            Options,
+            Help,
+            DeveloperStage,
+            DeveloperDetail,
+            SkipTutorial,
+            QuitToTitle,
+        }
+
+        private readonly struct PauseMenuEntry
+        {
+            public PauseMenuEntry(PauseMenuAction action, UiButton button)
+            {
+                Action = action;
+                Button = button;
+            }
+
+            public PauseMenuAction Action { get; }
+            public UiButton Button { get; }
+        }
+
         public CampaignDirector()
         {
             options = PersistentStorage.LoadOptions();
@@ -195,8 +234,8 @@ namespace SpaceBurst
                     return GetTransitionScrollSpeed();
                 }
 
-                if (activeBoss != null && currentStage.Boss != null)
-                    return currentStage.Boss.ArenaScrollSpeed;
+                if (activeBoss != null && ActiveStageBossDefinition != null)
+                    return ActiveStageBossDefinition.ArenaScrollSpeed;
 
                 return GetCurrentStageScrollSpeed();
             }
@@ -216,8 +255,8 @@ namespace SpaceBurst
         {
             get
             {
-                if (activeBoss != null && currentStage?.Boss?.MoodOverride != null)
-                    return currentStage.Boss.MoodOverride;
+                if (activeBoss != null && ActiveStageBossDefinition?.MoodOverride != null)
+                    return ActiveStageBossDefinition.MoodOverride;
 
                 SectionDefinition section = GetActiveSection();
                 return section?.Mood ?? currentStage?.BackgroundMood ?? new BackgroundMoodDefinition();
@@ -346,6 +385,21 @@ namespace SpaceBurst
             get { return activeBoss != null && !activeBoss.IsExpired; }
         }
 
+        public PresentationTier CurrentPresentationTier
+        {
+            get { return developerPresentationOverride ?? presentationTier; }
+        }
+
+        public ViewMode CurrentViewMode
+        {
+            get { return viewMode; }
+        }
+
+        public bool DeveloperToolsUnlocked
+        {
+            get { return options.DeveloperToolsUnlocked; }
+        }
+
         public bool TransitionToBoss
         {
             get { return transitionToBoss; }
@@ -380,6 +434,11 @@ namespace SpaceBurst
                     return MathHelper.Lerp(0.35f, 1f, (progress - 0.2f) / 0.55f);
                 return MathHelper.Lerp(1f, 0.25f, (progress - 0.75f) / 0.25f);
             }
+        }
+
+        private BossDefinition ActiveStageBossDefinition
+        {
+            get { return resolvedBossDefinition ?? currentStage?.Boss; }
         }
 
         public float RewindVisualStrength
@@ -424,6 +483,8 @@ namespace SpaceBurst
 
         public void Update()
         {
+            UpdateDeveloperToolsCode();
+
             switch (state)
             {
                 case GameFlowState.Title:
@@ -557,12 +618,63 @@ namespace SpaceBurst
 
         private void UpdatePause()
         {
-            List<UiButton> buttons = GetPauseButtons();
-            UpdateVerticalSelection(ref pauseSelection, buttons.Count);
-            pauseSelection = Math.Clamp(pauseSelection, 0, buttons.Count - 1);
-            bool pointerActivated = HandlePointerSelection(buttons, ref pauseSelection);
+            List<PauseMenuEntry> entries = GetPauseEntries();
+            UpdateVerticalSelection(ref pauseSelection, entries.Count);
+            pauseSelection = Math.Clamp(pauseSelection, 0, entries.Count - 1);
+            bool pointerActivated = HandlePointerSelection(entries.Select(entry => entry.Button.Bounds).ToArray(), ref pauseSelection);
 
             bool tutorialPause = pauseReturnState == GameFlowState.Tutorial;
+            PauseMenuAction selectedAction = entries[pauseSelection].Action;
+
+            if (options.DeveloperToolsUnlocked && !tutorialPause)
+            {
+                if (Input.WasKeyPressed(Keys.PageUp))
+                {
+                    JumpToDeveloperStage(-1);
+                    return;
+                }
+
+                if (Input.WasKeyPressed(Keys.PageDown))
+                {
+                    JumpToDeveloperStage(1);
+                    return;
+                }
+
+                if (Input.WasKeyPressed(Keys.F6))
+                {
+                    CycleDeveloperPresentationOverride(1);
+                    return;
+                }
+
+                if (selectedAction == PauseMenuAction.DeveloperStage)
+                {
+                    if (Input.WasNavigateLeftPressed())
+                    {
+                        JumpToDeveloperStage(-1);
+                        return;
+                    }
+
+                    if (Input.WasNavigateRightPressed())
+                    {
+                        JumpToDeveloperStage(1);
+                        return;
+                    }
+                }
+                else if (selectedAction == PauseMenuAction.DeveloperDetail)
+                {
+                    if (Input.WasNavigateLeftPressed())
+                    {
+                        CycleDeveloperPresentationOverride(-1);
+                        return;
+                    }
+
+                    if (Input.WasNavigateRightPressed())
+                    {
+                        CycleDeveloperPresentationOverride(1);
+                        return;
+                    }
+                }
+            }
 
             if (Input.WasCancelPressed())
             {
@@ -581,26 +693,32 @@ namespace SpaceBurst
             if (!Input.WasConfirmPressed() && !pointerActivated)
                 return;
 
-            switch (pauseSelection)
+            switch (entries[pauseSelection].Action)
             {
-                case 1:
+                case PauseMenuAction.SaveGame:
                     slotReturnState = GameFlowState.Paused;
                     slotSelection = 0;
                     state = GameFlowState.SaveSlots;
                     break;
-                case 2:
+                case PauseMenuAction.LoadGame:
                     slotReturnState = GameFlowState.Paused;
                     slotSelection = 0;
                     state = GameFlowState.LoadSlots;
                     break;
-                case 3:
+                case PauseMenuAction.Options:
                     OpenOptions(GameFlowState.Paused);
                     break;
-                case 4:
+                case PauseMenuAction.Help:
                     helpReturnState = GameFlowState.Paused;
                     state = GameFlowState.Help;
                     break;
-                case 5:
+                case PauseMenuAction.DeveloperStage:
+                    JumpToDeveloperStage(1);
+                    break;
+                case PauseMenuAction.DeveloperDetail:
+                    CycleDeveloperPresentationOverride(1);
+                    break;
+                case PauseMenuAction.SkipTutorial:
                     if (tutorialPause)
                     {
                         options.TutorialCompleted = true;
@@ -616,10 +734,11 @@ namespace SpaceBurst
                         EnterTitle(false);
                     }
                     break;
-                case 6:
+                case PauseMenuAction.QuitToTitle:
                     PlayerStatus.FinalizeRun();
                     EnterTitle(false);
                     break;
+                case PauseMenuAction.Resume:
                 default:
                     state = pauseReturnState;
                     break;
@@ -817,6 +936,8 @@ namespace SpaceBurst
                 return;
             }
 
+            HandleViewToggleInput();
+
             if (Input.IsRewindHeld())
             {
                 UpdateRewind(deltaSeconds);
@@ -829,6 +950,7 @@ namespace SpaceBurst
 
             ScheduleDueSections();
             SpawnDueEntities();
+            SpawnDueReentries();
             SpawnDueEvents();
             UpdateActiveEvent(deltaSeconds);
             EntityManager.Update();
@@ -844,19 +966,19 @@ namespace SpaceBurst
             if (activeBoss != null)
                 DrainBossSupportQueue();
 
-            if (activeBoss == null && currentStage.Boss != null && currentSectionIndex >= currentStage.Sections.Count && scheduledSpawns.Count == 0 && !EntityManager.HasHostiles)
+            if (activeBoss == null && ActiveStageBossDefinition != null && currentSectionIndex >= currentStage.Sections.Count && scheduledSpawns.Count == 0 && reentryTickets.Count == 0 && !EntityManager.HasHostiles)
             {
                 BeginBossApproachTransition();
                 return;
             }
 
-            if (currentStage.Boss == null && currentSectionIndex >= currentStage.Sections.Count && scheduledSpawns.Count == 0 && !EntityManager.HasHostiles)
+            if (ActiveStageBossDefinition == null && currentSectionIndex >= currentStage.Sections.Count && scheduledSpawns.Count == 0 && reentryTickets.Count == 0 && !EntityManager.HasHostiles)
             {
                 CompleteStage();
                 return;
             }
 
-            if (activeBoss != null && activeBoss.IsExpired && !EntityManager.HasHostiles && scheduledSpawns.Count == 0)
+            if (activeBoss != null && activeBoss.IsExpired && !EntityManager.HasHostiles && scheduledSpawns.Count == 0 && reentryTickets.Count == 0)
                 CompleteStage();
 
             CaptureRewindFrame(deltaSeconds);
@@ -880,6 +1002,8 @@ namespace SpaceBurst
                 state = GameFlowState.Help;
                 return;
             }
+
+            HandleViewToggleInput();
 
             if (Input.IsRewindHeld())
             {
@@ -1036,6 +1160,10 @@ namespace SpaceBurst
         {
             currentStageNumber = stageNumber;
             currentStage = repository.GetStage(stageNumber);
+            presentationTier = PresentationProgression.GetTierForStage(stageNumber, currentStage?.PresentationTierOverride);
+            resolvedBossDefinition = ResolveBossDefinitionForStage(currentStageNumber, currentStage);
+            if (!CanUseChaseView())
+                viewMode = ViewMode.SideScroller;
             currentSectionIndex = 0;
             stageElapsedSeconds = 0f;
             activeBoss = null;
@@ -1046,6 +1174,7 @@ namespace SpaceBurst
             activeEventWarning = string.Empty;
             scheduledSpawns.Clear();
             scheduledEvents.Clear();
+            reentryTickets.Clear();
 
             PlayerStatus.PrepareStage(currentStage, false);
             EntityManager.Reset();
@@ -1117,12 +1246,16 @@ namespace SpaceBurst
             gameplayRandom.Restore(0xC0FFEEu);
             currentStageNumber = 1;
             currentStage = repository.GetStage(1);
+            presentationTier = PresentationTier.Pixel2D;
+            resolvedBossDefinition = ResolveBossDefinitionForStage(currentStageNumber, currentStage);
+            viewMode = ViewMode.SideScroller;
             currentSectionIndex = 0;
             stageElapsedSeconds = 0f;
             stateTimer = 0f;
             activeBoss = null;
             scheduledSpawns.Clear();
             scheduledEvents.Clear();
+            reentryTickets.Clear();
             activeEventType = RandomEventType.None;
             activeEventTimer = 0f;
             activeEventSpawnTimer = 0f;
@@ -1164,8 +1297,12 @@ namespace SpaceBurst
             pauseReturnState = GameFlowState.Playing;
             draftReturnState = GameFlowState.Playing;
             currentStage = null;
+            resolvedBossDefinition = null;
             activeBoss = null;
             currentStageNumber = 1;
+            presentationTier = PresentationTier.Pixel2D;
+            viewMode = ViewMode.SideScroller;
+            selectedBossVariantId = string.Empty;
             currentSectionIndex = 0;
             stageElapsedSeconds = 0f;
             stateTimer = 0f;
@@ -1332,7 +1469,7 @@ namespace SpaceBurst
             transitionToBoss = true;
             transitionTargetStageNumber = currentStageNumber;
             transitionScrollFrom = GetCurrentStageScrollSpeed();
-            transitionScrollTo = currentStage.Boss != null ? currentStage.Boss.ArenaScrollSpeed : transitionScrollFrom;
+            transitionScrollTo = ActiveStageBossDefinition != null ? ActiveStageBossDefinition.ArenaScrollSpeed : transitionScrollFrom;
             transitionHudBlend = 0f;
             activeEventType = RandomEventType.None;
             activeEventTimer = 0f;
@@ -1347,6 +1484,10 @@ namespace SpaceBurst
         {
             currentStageNumber = stageNumber;
             currentStage = repository.GetStage(stageNumber);
+            presentationTier = PresentationProgression.GetTierForStage(stageNumber, currentStage?.PresentationTierOverride);
+            resolvedBossDefinition = ResolveBossDefinitionForStage(currentStageNumber, currentStage);
+            if (!CanUseChaseView())
+                viewMode = ViewMode.SideScroller;
             currentSectionIndex = 0;
             stageElapsedSeconds = 0f;
             activeBoss = null;
@@ -1357,6 +1498,7 @@ namespace SpaceBurst
             activeEventWarning = string.Empty;
             scheduledSpawns.Clear();
             scheduledEvents.Clear();
+            reentryTickets.Clear();
             PlayerStatus.PrepareStage(currentStage, false);
             Player1.Instance.MakeInvulnerable(0.8f);
             state = GameFlowState.Playing;
@@ -1453,6 +1595,274 @@ namespace SpaceBurst
 
             float t = (holdSeconds - 0.35f) / 0.9f;
             return MathHelper.SmoothStep(0.2f, 2.5f, t);
+        }
+
+        private void HandleViewToggleInput()
+        {
+            if (!CanUseChaseView() || !Input.WasToggleViewPressed())
+                return;
+
+            viewMode = viewMode == ViewMode.SideScroller ? ViewMode.Chase3D : ViewMode.SideScroller;
+            Game1.Instance.Feedback?.Handle(new FeedbackEvent(FeedbackEventType.StageTransition, Player1.Instance.Position, 0.35f));
+        }
+
+        private bool CanUseChaseView()
+        {
+#if ANDROID
+            return false;
+#else
+            bool unlockedByProgress = PresentationProgression.IsChaseViewUnlocked(currentStageNumber, currentStage);
+            return (unlockedByProgress || options.DeveloperToolsUnlocked) && CurrentPresentationTier == PresentationTier.Late3D;
+#endif
+        }
+
+        private void JumpToDeveloperStage(int delta)
+        {
+            if (!options.DeveloperToolsUnlocked || currentStage == null)
+                return;
+
+            int targetStage = Math.Clamp(currentStageNumber + delta, 1, 50);
+            if (targetStage == currentStageNumber)
+                return;
+
+            PrepareStage(targetStage, false);
+            state = GameFlowState.Paused;
+            pauseReturnState = GameFlowState.Playing;
+            stateTimer = 0f;
+            transitionToBoss = false;
+            transitionTargetStageNumber = 0;
+            Player1.Instance.MakeInvulnerable(1f);
+            Game1.Instance.Feedback?.Handle(new FeedbackEvent(FeedbackEventType.StageTransition, Player1.Instance.Position, 0.45f));
+        }
+
+        private void CycleDeveloperPresentationOverride(int delta)
+        {
+            if (!options.DeveloperToolsUnlocked)
+                return;
+
+            PresentationTier?[] values =
+            {
+                null,
+                PresentationTier.Pixel2D,
+                PresentationTier.VoxelShell,
+                PresentationTier.HybridMesh,
+                PresentationTier.Late3D,
+            };
+
+            int currentIndex = 0;
+            for (int i = 0; i < values.Length; i++)
+            {
+                if (values[i] == developerPresentationOverride)
+                {
+                    currentIndex = i;
+                    break;
+                }
+            }
+
+            int nextIndex = (currentIndex + delta) % values.Length;
+            if (nextIndex < 0)
+                nextIndex += values.Length;
+
+            developerPresentationOverride = values[nextIndex];
+            if (!CanUseChaseView())
+                viewMode = ViewMode.SideScroller;
+        }
+
+        private string GetDeveloperDetailLabel()
+        {
+            return developerPresentationOverride.HasValue
+                ? string.Concat("DEV DETAIL ", developerPresentationOverride.Value.ToString().ToUpperInvariant())
+                : "DEV DETAIL AUTO";
+        }
+
+        private void UpdateDeveloperToolsCode()
+        {
+            bool canEnterCode =
+                state == GameFlowState.Title ||
+                state == GameFlowState.Paused ||
+                state == GameFlowState.Help ||
+                state == GameFlowState.Options ||
+                state == GameFlowState.SaveSlots ||
+                state == GameFlowState.LoadSlots;
+
+            if (!canEnterCode)
+            {
+                developerCodeProgress = 0;
+                developerCodeTimer = 0f;
+                return;
+            }
+
+            float deltaSeconds = (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
+            if (developerCodeProgress > 0)
+            {
+                developerCodeTimer -= deltaSeconds;
+                if (developerCodeTimer <= 0f)
+                {
+                    developerCodeProgress = 0;
+                    developerCodeTimer = 0f;
+                }
+            }
+
+            Keys[] observedKeys =
+            {
+                Keys.Up, Keys.Down, Keys.Left, Keys.Right, Keys.D, Keys.E, Keys.V,
+            };
+
+            for (int i = 0; i < observedKeys.Length; i++)
+            {
+                Keys key = observedKeys[i];
+                if (!Input.WasKeyPressed(key))
+                    continue;
+
+                Keys expected = DeveloperToolsCode[developerCodeProgress];
+                if (key == expected)
+                {
+                    developerCodeProgress++;
+                    developerCodeTimer = DeveloperCodeTimeoutSeconds;
+                    if (developerCodeProgress >= DeveloperToolsCode.Length)
+                    {
+                        options.DeveloperToolsUnlocked = !options.DeveloperToolsUnlocked;
+                        if (optionsSnapshot != null)
+                            optionsSnapshot.DeveloperToolsUnlocked = options.DeveloperToolsUnlocked;
+                        PersistentStorage.SaveOptions(options);
+                        developerCodeProgress = 0;
+                        developerCodeTimer = 0f;
+                    }
+                }
+                else
+                {
+                    developerCodeProgress = key == DeveloperToolsCode[0] ? 1 : 0;
+                    developerCodeTimer = developerCodeProgress > 0 ? DeveloperCodeTimeoutSeconds : 0f;
+                }
+
+                break;
+            }
+        }
+
+        private BossDefinition ResolveBossDefinitionForStage(int stageNumber, StageDefinition stage)
+        {
+            if (stage?.Boss == null)
+            {
+                selectedBossVariantId = string.Empty;
+                return null;
+            }
+
+            BossDefinition resolved = CloneBossDefinition(stage.Boss);
+            resolved.PresentationScale = PresentationProgression.GetBossPresentationScale(stageNumber, resolved);
+            resolved.ScreenCoverageTarget = PresentationProgression.GetBossCoverageTarget(stageNumber, resolved);
+            selectedBossVariantId = string.Empty;
+
+            BossVariantDefinition secretVariant = null;
+            if (stageNumber == 40)
+            {
+                secretVariant = stage.Boss.Variants?.FirstOrDefault(variant => string.Equals(variant.Id, "combined-sixth", StringComparison.OrdinalIgnoreCase));
+                if (secretVariant == null)
+                {
+                    secretVariant = new BossVariantDefinition
+                    {
+                        Id = "combined-sixth",
+                        Type = BossType.CombinedBossSixth,
+                        DisplayName = "SIXFOLD FUSION",
+                        ArchetypeId = "BossFinal",
+                        ChancePercent = 10f,
+                        PresentationScaleMultiplier = 1.16f,
+                        HitPointMultiplier = 1.24f,
+                    };
+                }
+            }
+
+            if (secretVariant != null && gameplayRandom.NextDouble() < secretVariant.ChancePercent / 100f)
+            {
+                selectedBossVariantId = secretVariant.Id;
+                resolved.Type = secretVariant.Type;
+                resolved.DisplayName = string.IsNullOrWhiteSpace(secretVariant.DisplayName) ? resolved.DisplayName : secretVariant.DisplayName;
+                resolved.ArchetypeId = string.IsNullOrWhiteSpace(secretVariant.ArchetypeId) ? resolved.ArchetypeId : secretVariant.ArchetypeId;
+                resolved.HitPoints = Math.Max(resolved.HitPoints + 24, (int)MathF.Round(resolved.HitPoints * secretVariant.HitPointMultiplier));
+                resolved.PresentationScale = Math.Max(resolved.PresentationScale, resolved.PresentationScale * secretVariant.PresentationScaleMultiplier);
+                resolved.ScreenCoverageTarget = Math.Max(0.48f, resolved.ScreenCoverageTarget);
+                resolved.PhaseThresholds = new List<float> { 0.88f, 0.7f, 0.52f, 0.34f, 0.18f };
+                resolved.FirePattern = FirePattern.BossFan;
+                resolved.MovePattern = MovePattern.BossOrbit;
+            }
+
+            return resolved;
+        }
+
+        private static BossDefinition CloneBossDefinition(BossDefinition source)
+        {
+            if (source == null)
+                return null;
+
+            return new BossDefinition
+            {
+                Type = source.Type,
+                DisplayName = source.DisplayName,
+                ArchetypeId = source.ArchetypeId,
+                IntroSeconds = source.IntroSeconds,
+                TargetY = source.TargetY,
+                ArenaScrollSpeed = source.ArenaScrollSpeed,
+                HitPoints = source.HitPoints,
+                AllowRandomEvents = source.AllowRandomEvents,
+                PresentationScale = source.PresentationScale,
+                ScreenCoverageTarget = source.ScreenCoverageTarget,
+                PhaseThresholds = new List<float>(source.PhaseThresholds ?? new List<float>()),
+                HazardOverrides = new List<RandomEventType>(source.HazardOverrides ?? new List<RandomEventType>()),
+                Variants = source.Variants != null ? new List<BossVariantDefinition>(source.Variants) : new List<BossVariantDefinition>(),
+                MoodOverride = source.MoodOverride ?? new BackgroundMoodDefinition(),
+                MovePattern = source.MovePattern,
+                FirePattern = source.FirePattern,
+            };
+        }
+
+        private static BossDefinitionSnapshotData CaptureBossDefinition(BossDefinition source)
+        {
+            if (source == null)
+                return null;
+
+            return new BossDefinitionSnapshotData
+            {
+                VariantId = source.Type == BossType.CombinedBossSixth ? "combined-sixth" : string.Empty,
+                Type = source.Type,
+                DisplayName = source.DisplayName ?? string.Empty,
+                ArchetypeId = source.ArchetypeId ?? string.Empty,
+                IntroSeconds = source.IntroSeconds,
+                TargetY = source.TargetY,
+                ArenaScrollSpeed = source.ArenaScrollSpeed,
+                HitPoints = source.HitPoints,
+                AllowRandomEvents = source.AllowRandomEvents,
+                PresentationScale = source.PresentationScale,
+                ScreenCoverageTarget = source.ScreenCoverageTarget,
+                PhaseThresholds = source.PhaseThresholds != null ? new List<float>(source.PhaseThresholds) : new List<float>(),
+                HazardOverrides = source.HazardOverrides != null ? new List<RandomEventType>(source.HazardOverrides) : new List<RandomEventType>(),
+                MoodOverride = source.MoodOverride ?? new BackgroundMoodDefinition(),
+                MovePattern = source.MovePattern,
+                FirePattern = source.FirePattern,
+            };
+        }
+
+        private static BossDefinition RestoreBossDefinition(BossDefinitionSnapshotData snapshot, BossDefinition fallback)
+        {
+            if (snapshot == null || string.IsNullOrWhiteSpace(snapshot.ArchetypeId))
+                return CloneBossDefinition(fallback);
+
+            return new BossDefinition
+            {
+                Type = snapshot.Type,
+                DisplayName = snapshot.DisplayName,
+                ArchetypeId = snapshot.ArchetypeId,
+                IntroSeconds = snapshot.IntroSeconds,
+                TargetY = snapshot.TargetY,
+                ArenaScrollSpeed = snapshot.ArenaScrollSpeed,
+                HitPoints = snapshot.HitPoints,
+                AllowRandomEvents = snapshot.AllowRandomEvents,
+                PresentationScale = snapshot.PresentationScale,
+                ScreenCoverageTarget = snapshot.ScreenCoverageTarget,
+                PhaseThresholds = snapshot.PhaseThresholds != null ? new List<float>(snapshot.PhaseThresholds) : new List<float>(),
+                HazardOverrides = snapshot.HazardOverrides != null ? new List<RandomEventType>(snapshot.HazardOverrides) : new List<RandomEventType>(),
+                MoodOverride = snapshot.MoodOverride ?? new BackgroundMoodDefinition(),
+                MovePattern = snapshot.MovePattern,
+                FirePattern = snapshot.FirePattern,
+            };
         }
 
         private void UpdateTutorialStep(float deltaSeconds)
@@ -1823,6 +2233,96 @@ namespace SpaceBurst
             }
         }
 
+        public bool TryQueueEnemyReentry(Enemy enemy)
+        {
+            if (enemy == null || enemy.IsBoss || currentStage?.Sections == null || currentStage.Sections.Count == 0)
+                return false;
+
+            if (state != GameFlowState.Playing || activeBoss != null || transitionToBoss || currentSectionIndex >= currentStage.Sections.Count)
+                return false;
+
+            if (enemy.ReentryRollConsumed || gameplayRandom.NextInt(0, 100) >= 50)
+                return false;
+
+            SectionDefinition section = ResolveReentrySection();
+            if (section == null)
+                return false;
+
+            EnemySnapshotData snapshot = enemy.CaptureSnapshot();
+            snapshot.ReentryRollConsumed = true;
+            snapshot.WasReentrySpawn = true;
+
+            float spawnAt = Math.Max(
+                stageElapsedSeconds + gameplayRandom.NextFloat(2.2f, 5.4f),
+                section.StartSeconds + gameplayRandom.NextFloat(0.4f, Math.Max(1.2f, section.DurationSeconds * 0.6f)));
+
+            float targetY = ResolveReentryTargetY(enemy.Position.Y);
+            reentryTickets.Add(new ReentryTicket
+            {
+                TriggerAtSeconds = spawnAt,
+                SpawnPoint = new Vector2(Game1.ScreenSize.X + gameplayRandom.NextFloat(240f, 420f), targetY),
+                TargetY = targetY,
+                SpeedMultiplier = Math.Max(0.75f, snapshot.SpeedMultiplier),
+                Amplitude = snapshot.MovementAmplitude,
+                Frequency = snapshot.MovementFrequency,
+                Enemy = snapshot,
+            });
+            reentryTickets.Sort((left, right) => left.TriggerAtSeconds.CompareTo(right.TriggerAtSeconds));
+            return true;
+        }
+
+        private void SpawnDueReentries()
+        {
+            while (reentryTickets.Count > 0 && reentryTickets[0].TriggerAtSeconds <= stageElapsedSeconds)
+            {
+                ReentryTicket ticket = reentryTickets[0];
+                reentryTickets.RemoveAt(0);
+
+                if (!repository.ArchetypesById.TryGetValue(ticket.Enemy.ArchetypeId, out EnemyArchetypeDefinition archetype))
+                    continue;
+
+                Enemy enemy = Enemy.FromReentrySnapshot(
+                    archetype,
+                    ticket.Enemy,
+                    ticket.SpawnPoint,
+                    ticket.TargetY,
+                    ticket.SpeedMultiplier);
+                if (enemy != null)
+                    EntityManager.Add(enemy);
+            }
+        }
+
+        private SectionDefinition ResolveReentrySection()
+        {
+            if (currentStage?.Sections == null)
+                return null;
+
+            for (int index = currentSectionIndex; index < currentStage.Sections.Count; index++)
+            {
+                SectionDefinition section = currentStage.Sections[index];
+                if (!section.AllowReentryAmbushes)
+                    continue;
+
+                if (section.StartSeconds > stageElapsedSeconds + 0.9f)
+                    return section;
+            }
+
+            return null;
+        }
+
+        private float ResolveReentryTargetY(float previousY)
+        {
+            float margin = Game1.ScreenSize.Y * 0.12f;
+            for (int attempt = 0; attempt < 6; attempt++)
+            {
+                float targetY = gameplayRandom.NextFloat(margin, Game1.ScreenSize.Y - margin);
+                if (Math.Abs(targetY - previousY) >= Game1.ScreenSize.Y * 0.16f)
+                    return targetY;
+            }
+
+            return MathHelper.Clamp(Game1.ScreenSize.Y - previousY, margin, Game1.ScreenSize.Y - margin);
+        }
+
         private void SpawnDueEvents()
         {
             while (scheduledEvents.Count > 0 && scheduledEvents[0].TriggerAtSeconds <= stageElapsedSeconds)
@@ -1911,9 +2411,13 @@ namespace SpaceBurst
 
         private void SpawnBoss()
         {
-            EnemyArchetypeDefinition archetype = repository.ArchetypesById[currentStage.Boss.ArchetypeId];
-            Vector2 spawnPoint = new Vector2(Game1.ScreenSize.X + archetype.SpawnLeadDistance, currentStage.Boss.TargetY * Game1.ScreenSize.Y);
-            activeBoss = new BossEnemy(archetype, currentStage.Boss, spawnPoint);
+            BossDefinition bossDefinition = ActiveStageBossDefinition;
+            if (bossDefinition == null)
+                return;
+
+            EnemyArchetypeDefinition archetype = repository.ArchetypesById[bossDefinition.ArchetypeId];
+            Vector2 spawnPoint = new Vector2(Game1.ScreenSize.X + archetype.SpawnLeadDistance, bossDefinition.TargetY * Game1.ScreenSize.Y);
+            activeBoss = new BossEnemy(archetype, bossDefinition, spawnPoint);
             EntityManager.Add(activeBoss);
         }
 
@@ -1931,7 +2435,7 @@ namespace SpaceBurst
             medals.UnlockStageClear(currentStageNumber);
             if (!stageHadDeath)
                 medals.UnlockNoDeath(currentStageNumber);
-            if (currentStage.Boss != null)
+            if (ActiveStageBossDefinition != null)
                 medals.UnlockBossClear(currentStageNumber);
             PersistentStorage.SaveMedals(medals);
         }
@@ -2044,24 +2548,32 @@ namespace SpaceBurst
             return buttons;
         }
 
-        private List<UiButton> GetPauseButtons()
+        private List<PauseMenuEntry> GetPauseEntries()
         {
             bool tutorialPause = pauseReturnState == GameFlowState.Tutorial;
-            int total = tutorialPause ? 7 : 6;
-            var buttons = new List<UiButton>
+            bool includeDeveloperEntries = options.DeveloperToolsUnlocked && !tutorialPause && currentStage != null;
+            int total = tutorialPause ? 7 : includeDeveloperEntries ? 8 : 6;
+            var entries = new List<PauseMenuEntry>
             {
-                CreateButton("RESUME", 0, total),
-                CreateButton("SAVE GAME", 1, total),
-                CreateButton("LOAD GAME", 2, total),
-                CreateButton("OPTIONS", 3, total),
-                CreateButton("HELP", 4, total),
+                new PauseMenuEntry(PauseMenuAction.Resume, CreateButton("RESUME", 0, total)),
+                new PauseMenuEntry(PauseMenuAction.SaveGame, CreateButton("SAVE GAME", 1, total)),
+                new PauseMenuEntry(PauseMenuAction.LoadGame, CreateButton("LOAD GAME", 2, total)),
+                new PauseMenuEntry(PauseMenuAction.Options, CreateButton("OPTIONS", 3, total)),
+                new PauseMenuEntry(PauseMenuAction.Help, CreateButton("HELP", 4, total)),
             };
 
-            if (tutorialPause)
-                buttons.Add(CreateButton("SKIP TUTORIAL", 5, total));
+            int nextIndex = 5;
+            if (includeDeveloperEntries)
+            {
+                entries.Add(new PauseMenuEntry(PauseMenuAction.DeveloperStage, CreateButton(string.Concat("DEV STAGE ", currentStageNumber.ToString("00")), nextIndex++, total)));
+                entries.Add(new PauseMenuEntry(PauseMenuAction.DeveloperDetail, CreateButton(GetDeveloperDetailLabel(), nextIndex++, total)));
+            }
 
-            buttons.Add(CreateButton("QUIT TO TITLE", total - 1, total));
-            return buttons;
+            if (tutorialPause)
+                entries.Add(new PauseMenuEntry(PauseMenuAction.SkipTutorial, CreateButton("SKIP TUTORIAL", nextIndex++, total)));
+
+            entries.Add(new PauseMenuEntry(PauseMenuAction.QuitToTitle, CreateButton("QUIT TO TITLE", total - 1, total)));
+            return entries;
         }
 
         private UiButton CreateButton(string text, int index, int total)
@@ -2104,6 +2616,7 @@ namespace SpaceBurst
                 SfxVolume = source.SfxVolume,
                 AudioQualityPreset = source.AudioQualityPreset,
                 ScreenShakeStrength = source.ScreenShakeStrength,
+                DeveloperToolsUnlocked = source.DeveloperToolsUnlocked,
             };
         }
 
@@ -2125,6 +2638,7 @@ namespace SpaceBurst
             target.SfxVolume = source.SfxVolume;
             target.AudioQualityPreset = source.AudioQualityPreset;
             target.ScreenShakeStrength = source.ScreenShakeStrength;
+            target.DeveloperToolsUnlocked = source.DeveloperToolsUnlocked;
         }
 
         private void ApplyOptionsState()
@@ -2801,11 +3315,13 @@ namespace SpaceBurst
         {
             spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), Color.Black * 0.45f);
             DrawCenteredText(spriteBatch, pixel, "PAUSED", Game1.ScreenSize.X / 2f, 148f, Color.White, 3f);
-            List<UiButton> buttons = GetPauseButtons();
-            for (int i = 0; i < buttons.Count; i++)
-                DrawButton(spriteBatch, pixel, buttons[i], i == pauseSelection);
+            List<PauseMenuEntry> entries = GetPauseEntries();
+            for (int i = 0; i < entries.Count; i++)
+                DrawButton(spriteBatch, pixel, entries[i].Button, i == pauseSelection);
             if (pauseReturnState == GameFlowState.Tutorial)
                 DrawCenteredText(spriteBatch, pixel, "SKIP TUTORIAL STARTS THE REAL CAMPAIGN", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 92f, Color.Orange * 0.8f, 1.2f);
+            else if (options.DeveloperToolsUnlocked)
+                DrawCenteredText(spriteBatch, pixel, "DEV TOOLS ENABLED  PAGEUP/PAGEDOWN STAGE  F6 DETAIL  V VIEW", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 92f, Color.Cyan * 0.85f, 1.05f);
 #if ANDROID
             DrawCenteredText(spriteBatch, pixel, "TAP A BUTTON OR TAP THE PAUSE CHIP AGAIN TO RETURN", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 62f, Color.White * 0.62f, 1.05f);
 #else
@@ -2967,7 +3483,7 @@ namespace SpaceBurst
 #if ANDROID
                     DrawHelpPage(spriteBatch, pixel, "FX AND REWIND\nHOLD THE TOP RIGHT REWIND BUTTON TO REWIND 8 SECONDS\nREWIND STARTS SLOW AND ACCELERATES THE LONGER YOU HOLD\nLOADS AND REWINDS DISABLE MEDALS FOR THE RUN\nLOW STANDARD AND NEON VISUAL PRESETS ARE IN OPTIONS", 186f);
 #else
-                    DrawHelpPage(spriteBatch, pixel, "FX AND REWIND\nHOLD R TO REWIND 8 SECONDS OF GAMEPLAY\nREWIND STARTS SLOW AND ACCELERATES THE LONGER YOU HOLD\nLOADS AND REWINDS DISABLE MEDALS FOR THE RUN\nLOW STANDARD AND NEON VISUAL PRESETS ARE IN OPTIONS", 186f);
+                    DrawHelpPage(spriteBatch, pixel, "FX AND REWIND\nHOLD R TO REWIND 8 SECONDS OF GAMEPLAY\nREWIND STARTS SLOW AND ACCELERATES THE LONGER YOU HOLD\nSTAGE 40 AND BEYOND CAN TOGGLE CHASE VIEW WITH V\nLOW STANDARD AND NEON VISUAL PRESETS ARE IN OPTIONS", 186f);
 #endif
                     break;
                 case AboutHelpPageIndex:
@@ -3104,6 +3620,12 @@ namespace SpaceBurst
                 ? (transitionToBoss ? "THREAT LOCK" : "FTL TRANSIT")
                 : (!string.IsNullOrEmpty(activeEventWarning) ? activeEventWarning : (state == GameFlowState.Tutorial ? tutorialStep.ToString().ToUpperInvariant() : currentStage?.Name?.ToUpperInvariant() ?? "RUN"));
             DrawCenteredText(spriteBatch, pixel, stageSubLabel, stageBounds.Center.X, stageBounds.Y + 46f, !string.IsNullOrEmpty(activeEventWarning) ? Color.Orange : Color.White * 0.7f, GetFittedScale(stageSubLabel, stageBounds.Width - 20f, 1.08f, 0.82f));
+            string presentationLabel = string.Concat(
+                presentationTier.ToString().ToUpperInvariant(),
+                CanUseChaseView()
+                    ? (viewMode == ViewMode.Chase3D ? "  V SIDE" : "  V CHASE")
+                    : string.Empty);
+            DrawCenteredText(spriteBatch, pixel, presentationLabel, stageBounds.Center.X, stageBounds.Bottom - 18f, Color.White * 0.55f, GetFittedScale(presentationLabel, stageBounds.Width - 20f, 0.8f, 0.62f));
 #if ANDROID
             Rectangle pauseChip = HudLayoutCalculator.GetAndroidPauseChipBounds(layout);
             DrawPanel(spriteBatch, pixel, pauseChip, Color.Black * 0.3f, Color.Orange * 0.42f);
@@ -3276,7 +3798,7 @@ namespace SpaceBurst
             DrawPanel(spriteBatch, pixel, chip, Color.Black * 0.24f, Color.White * 0.2f);
             string header = transitionToBoss ? "BOSS APPROACH" : "FTL TRANSIT";
             string detail = transitionToBoss
-                ? currentStage?.Boss?.DisplayName?.ToUpperInvariant() ?? "THREAT LOCK"
+                    ? ActiveStageBossDefinition?.DisplayName?.ToUpperInvariant() ?? "THREAT LOCK"
                 : string.Concat("JUMPING TO STAGE ", transitionTargetStageNumber.ToString("00"));
             DrawCenteredText(spriteBatch, pixel, header, chip.Center.X, chip.Y + 6f, Color.White * 0.85f, 1.15f);
             DrawCenteredText(spriteBatch, pixel, detail, chip.Center.X, chip.Y + 24f, Color.Orange * (0.78f + warp * 0.22f), 1.15f);
@@ -3509,6 +4031,8 @@ namespace SpaceBurst
             {
                 CurrentStageNumber = currentStageNumber,
                 CurrentSectionIndex = currentSectionIndex,
+                ViewMode = viewMode,
+                PresentationTier = presentationTier,
                 State = state == GameFlowState.SaveSlots || state == GameFlowState.LoadSlots || state == GameFlowState.Options ? GameFlowState.Paused : state,
                 HelpReturnState = helpReturnState,
                 DraftReturnState = draftReturnState,
@@ -3527,6 +4051,7 @@ namespace SpaceBurst
                 ActiveEventIntensity = activeEventIntensity,
                 HasActiveBoss = activeBoss != null && !activeBoss.IsExpired,
                 PendingBossSpawn = transitionToBoss,
+                ActiveBossDefinition = CaptureBossDefinition(ActiveStageBossDefinition),
                 TransitionTargetStageNumber = transitionTargetStageNumber,
                 TransitionToBoss = transitionToBoss,
                 TransitionScrollFrom = transitionScrollFrom,
@@ -3549,6 +4074,7 @@ namespace SpaceBurst
                 Powerups = EntityManager.CapturePowerups(),
                 ScheduledSpawns = CaptureScheduledSpawns(),
                 ScheduledEvents = CaptureScheduledEvents(),
+                ReentryTickets = CaptureReentryTickets(),
                 GameplayRngState = gameplayRandom.State,
             };
 
@@ -3576,6 +4102,12 @@ namespace SpaceBurst
 
             currentStageNumber = Math.Max(1, save.CurrentStageNumber);
             currentStage = repository.GetStage(currentStageNumber);
+            presentationTier = save.PresentationTier;
+            viewMode = save.ViewMode;
+            resolvedBossDefinition = RestoreBossDefinition(save.ActiveBossDefinition, currentStage?.Boss) ?? ResolveBossDefinitionForStage(currentStageNumber, currentStage);
+            selectedBossVariantId = save.ActiveBossDefinition?.VariantId ?? string.Empty;
+            if (!CanUseChaseView())
+                viewMode = ViewMode.SideScroller;
             currentSectionIndex = save.CurrentSectionIndex;
             helpReturnState = save.HelpReturnState;
             draftReturnState = save.DraftReturnState;
@@ -3652,10 +4184,32 @@ namespace SpaceBurst
                 }
             }
 
+            reentryTickets.Clear();
+            if (save.ReentryTickets != null)
+            {
+                for (int i = 0; i < save.ReentryTickets.Count; i++)
+                {
+                    ReentryTicketSnapshotData snapshot = save.ReentryTickets[i];
+                    if (snapshot?.Enemy == null || string.IsNullOrWhiteSpace(snapshot.Enemy.ArchetypeId))
+                        continue;
+
+                    reentryTickets.Add(new ReentryTicket
+                    {
+                        TriggerAtSeconds = snapshot.TriggerAtSeconds,
+                        SpawnPoint = new Vector2(snapshot.SpawnPoint.X, snapshot.SpawnPoint.Y),
+                        TargetY = snapshot.TargetY,
+                        SpeedMultiplier = snapshot.SpeedMultiplier,
+                        Amplitude = snapshot.Amplitude,
+                        Frequency = snapshot.Frequency,
+                        Enemy = snapshot.Enemy,
+                    });
+                }
+            }
+
             EntityManager.Reset();
             Player1.Instance.RestoreSnapshot(save.Player);
             EntityManager.Add(Player1.Instance);
-            EntityManager.RestoreEnemies(save.Enemies, repository, currentStage?.Boss);
+            EntityManager.RestoreEnemies(save.Enemies, repository, ActiveStageBossDefinition);
             EntityManager.RestoreBullets(save.Bullets);
             EntityManager.RestoreBeams(save.Beams);
             EntityManager.RestorePowerups(save.Powerups);
@@ -3711,6 +4265,27 @@ namespace SpaceBurst
                 {
                     TriggerAtSeconds = scheduledEvent.TriggerAtSeconds,
                     Window = scheduledEvent.Window,
+                });
+            }
+
+            return snapshots;
+        }
+
+        private List<ReentryTicketSnapshotData> CaptureReentryTickets()
+        {
+            var snapshots = new List<ReentryTicketSnapshotData>(reentryTickets.Count);
+            for (int i = 0; i < reentryTickets.Count; i++)
+            {
+                ReentryTicket ticket = reentryTickets[i];
+                snapshots.Add(new ReentryTicketSnapshotData
+                {
+                    TriggerAtSeconds = ticket.TriggerAtSeconds,
+                    SpawnPoint = new Vector2Data(ticket.SpawnPoint.X, ticket.SpawnPoint.Y),
+                    TargetY = ticket.TargetY,
+                    SpeedMultiplier = ticket.SpeedMultiplier,
+                    Amplitude = ticket.Amplitude,
+                    Frequency = ticket.Frequency,
+                    Enemy = ticket.Enemy,
                 });
             }
 
@@ -3945,6 +4520,17 @@ namespace SpaceBurst
         {
             public float TriggerAtSeconds { get; set; }
             public RandomEventWindowDefinition Window { get; set; }
+        }
+
+        private sealed class ReentryTicket
+        {
+            public float TriggerAtSeconds { get; set; }
+            public Vector2 SpawnPoint { get; set; }
+            public float TargetY { get; set; }
+            public float SpeedMultiplier { get; set; } = 1f;
+            public float Amplitude { get; set; }
+            public float Frequency { get; set; } = 1f;
+            public EnemySnapshotData Enemy { get; set; }
         }
 
         private readonly struct UiButton

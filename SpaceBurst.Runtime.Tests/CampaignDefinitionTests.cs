@@ -246,6 +246,27 @@ namespace SpaceBurst.Runtime.Tests
             Assert.False(mask.IsOccupied(1, 2));
         }
 
+        [Fact]
+        public void PresentationTierRolloutFollowsChapterBands()
+        {
+            Assert.Equal(PresentationTier.Pixel2D, PresentationProgression.GetTierForStage(1));
+            Assert.Equal(PresentationTier.VoxelShell, PresentationProgression.GetTierForStage(10));
+            Assert.Equal(PresentationTier.VoxelShell, PresentationProgression.GetTierForStage(24));
+            Assert.Equal(PresentationTier.HybridMesh, PresentationProgression.GetTierForStage(30));
+            Assert.Equal(PresentationTier.Late3D, PresentationProgression.GetTierForStage(40));
+        }
+
+        [Fact]
+        public void ChaseViewUnlockAndBossScaleProgressionIncreaseLateGamePresence()
+        {
+            Assert.False(PresentationProgression.IsChaseViewUnlocked(39));
+            Assert.True(PresentationProgression.IsChaseViewUnlocked(40));
+            Assert.True(PresentationProgression.GetBossPresentationScale(20) > PresentationProgression.GetBossPresentationScale(10));
+            Assert.True(PresentationProgression.GetBossPresentationScale(30) > PresentationProgression.GetBossPresentationScale(20));
+            Assert.True(PresentationProgression.GetBossPresentationScale(50) > PresentationProgression.GetBossPresentationScale(40));
+            Assert.True(PresentationProgression.GetBossCoverageTarget(50) >= 0.5f);
+        }
+
         private static string FindRepositoryRoot()
         {
             DirectoryInfo directory = new(AppContext.BaseDirectory);

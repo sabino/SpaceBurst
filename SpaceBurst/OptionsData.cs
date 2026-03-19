@@ -5,6 +5,7 @@ namespace SpaceBurst
         public bool ShowHelpHints { get; set; } = true;
         public bool TutorialCompleted { get; set; }
         public bool AutoUpgradeDraft { get; set; }
+        public bool DeveloperToolsUnlocked { get; set; }
         public DesktopDisplayMode DisplayMode { get; set; } = DesktopDisplayMode.BorderlessFullscreen;
         public int UiScalePercent { get; set; } =
 #if ANDROID

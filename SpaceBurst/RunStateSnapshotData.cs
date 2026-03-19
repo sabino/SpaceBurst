@@ -82,8 +82,30 @@ namespace SpaceBurst
         public int BossPhase { get; set; }
         public float BossSweepDirection { get; set; }
         public float BossFireCooldown { get; set; }
+        public bool ReentryRollConsumed { get; set; }
+        public bool WasReentrySpawn { get; set; }
         public List<SpawnGroupDefinition> PendingSupportGroups { get; set; } = new List<SpawnGroupDefinition>();
         public MaskSnapshotData Mask { get; set; } = new MaskSnapshotData();
+    }
+
+    sealed class BossDefinitionSnapshotData
+    {
+        public string VariantId { get; set; } = string.Empty;
+        public BossType Type { get; set; } = BossType.DestroyerBoss;
+        public string DisplayName { get; set; } = string.Empty;
+        public string ArchetypeId { get; set; } = string.Empty;
+        public float IntroSeconds { get; set; } = 1.25f;
+        public float TargetY { get; set; } = 0.5f;
+        public float ArenaScrollSpeed { get; set; } = 70f;
+        public int HitPoints { get; set; } = 160;
+        public bool AllowRandomEvents { get; set; }
+        public float PresentationScale { get; set; } = 1f;
+        public float ScreenCoverageTarget { get; set; }
+        public List<float> PhaseThresholds { get; set; } = new List<float>();
+        public List<RandomEventType> HazardOverrides { get; set; } = new List<RandomEventType>();
+        public BackgroundMoodDefinition MoodOverride { get; set; } = new BackgroundMoodDefinition();
+        public MovePattern MovePattern { get; set; } = MovePattern.BossOrbit;
+        public FirePattern FirePattern { get; set; } = FirePattern.BossFan;
     }
 
     sealed class BulletSnapshotData
@@ -149,6 +171,17 @@ namespace SpaceBurst
         public RandomEventWindowDefinition Window { get; set; } = new RandomEventWindowDefinition();
     }
 
+    sealed class ReentryTicketSnapshotData
+    {
+        public float TriggerAtSeconds { get; set; }
+        public Vector2Data SpawnPoint { get; set; } = new Vector2Data();
+        public float TargetY { get; set; }
+        public float SpeedMultiplier { get; set; } = 1f;
+        public float Amplitude { get; set; }
+        public float Frequency { get; set; } = 1f;
+        public EnemySnapshotData Enemy { get; set; } = new EnemySnapshotData();
+    }
+
     sealed class SaveSlotSummary
     {
         public int SlotIndex { get; set; }
@@ -165,6 +198,8 @@ namespace SpaceBurst
         public SaveSlotSummary Summary { get; set; } = new SaveSlotSummary();
         public int CurrentStageNumber { get; set; }
         public int CurrentSectionIndex { get; set; }
+        public ViewMode ViewMode { get; set; } = ViewMode.SideScroller;
+        public PresentationTier PresentationTier { get; set; } = PresentationTier.Pixel2D;
         public GameFlowState State { get; set; } = GameFlowState.Paused;
         public GameFlowState HelpReturnState { get; set; } = GameFlowState.Title;
         public GameFlowState DraftReturnState { get; set; } = GameFlowState.Playing;
@@ -183,6 +218,7 @@ namespace SpaceBurst
         public float ActiveEventIntensity { get; set; }
         public bool HasActiveBoss { get; set; }
         public bool PendingBossSpawn { get; set; }
+        public BossDefinitionSnapshotData ActiveBossDefinition { get; set; } = new BossDefinitionSnapshotData();
         public int TransitionTargetStageNumber { get; set; }
         public bool TransitionToBoss { get; set; }
         public float TransitionScrollFrom { get; set; }
@@ -205,6 +241,7 @@ namespace SpaceBurst
         public List<PowerupSnapshotData> Powerups { get; set; } = new List<PowerupSnapshotData>();
         public List<ScheduledSpawnSnapshotData> ScheduledSpawns { get; set; } = new List<ScheduledSpawnSnapshotData>();
         public List<ScheduledEventSnapshotData> ScheduledEvents { get; set; } = new List<ScheduledEventSnapshotData>();
+        public List<ReentryTicketSnapshotData> ReentryTickets { get; set; } = new List<ReentryTicketSnapshotData>();
         public uint GameplayRngState { get; set; } = 1;
     }
 
