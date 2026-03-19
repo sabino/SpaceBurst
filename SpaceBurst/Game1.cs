@@ -23,6 +23,7 @@ namespace SpaceBurst
         public static Vector2 ScreenSize { get { return new Vector2(VirtualWidth, VirtualHeight); } }
         public static Rectangle RenderBounds { get { return Instance != null ? Instance.worldRenderViewport : new Rectangle(0, 0, VirtualWidth, VirtualHeight); } }
         public static Rectangle UiRenderBounds { get { return Instance != null ? Instance.uiRenderViewport : new Rectangle(0, 0, VirtualWidth, VirtualHeight); } }
+        public static Rectangle SafeUiBounds { get { return Instance != null ? Instance.safeUiBounds : new Rectangle(0, 0, VirtualWidth, VirtualHeight); } }
         public static GameTime GameTime { get; private set; }
 
         private readonly GraphicsDeviceManager graphics;
@@ -30,6 +31,7 @@ namespace SpaceBurst
         private SpriteBatch spriteBatch;
         private Rectangle worldRenderViewport;
         private Rectangle uiRenderViewport;
+        private Rectangle safeUiBounds;
         private Matrix worldScaleMatrix;
         private Matrix uiScaleMatrix;
         private CampaignDirector campaignDirector;
@@ -155,15 +157,6 @@ namespace SpaceBurst
             get { return campaignDirector != null && campaignDirector.EnableNeonOutlines; }
         }
 
-        private float CurrentWorldScale
-        {
-            get
-            {
-                int percent = campaignDirector != null ? campaignDirector.WorldScalePercent : startupOptions.WorldScalePercent;
-                return UiScaleHelper.GetWorldScale(percent);
-            }
-        }
-
         private FontTheme CurrentFontTheme
         {
             get { return campaignDirector != null ? campaignDirector.FontTheme : startupOptions.FontTheme; }
@@ -190,6 +183,15 @@ namespace SpaceBurst
         public VisualPreset VisualPreset
         {
             get { return campaignDirector != null ? campaignDirector.VisualPreset : VisualPreset.Standard; }
+        }
+
+        internal float TouchControlsOpacity
+        {
+            get
+            {
+                int percent = campaignDirector != null ? campaignDirector.TouchControlsOpacity : startupOptions.TouchControlsOpacity;
+                return UiScaleHelper.ClampTouchControlsOpacity(percent) / 100f;
+            }
         }
 
         internal ScreenShakeStrength ScreenShakeStrength
@@ -451,16 +453,14 @@ namespace SpaceBurst
             Viewport viewport = GraphicsDevice.Viewport;
             float fitScale = Math.Min(viewport.Width / (float)virtualWidth, viewport.Height / (float)virtualHeight);
             float uiScale = fitScale;
-            float worldScale = fitScale * CurrentWorldScale;
             if (uiScale <= 0f)
                 uiScale = 1f;
-            if (worldScale <= 0f)
-                worldScale = 1f;
 
             uiRenderViewport = CreateViewport(viewport, uiScale);
-            worldRenderViewport = CreateViewport(viewport, worldScale);
+            worldRenderViewport = uiRenderViewport;
             uiScaleMatrix = Matrix.CreateScale(uiScale, uiScale, 1f) * Matrix.CreateTranslation(uiRenderViewport.X, uiRenderViewport.Y, 0f);
-            worldScaleMatrix = Matrix.CreateScale(worldScale, worldScale, 1f) * Matrix.CreateTranslation(worldRenderViewport.X, worldRenderViewport.Y, 0f);
+            worldScaleMatrix = uiScaleMatrix;
+            safeUiBounds = ComputeSafeUiBounds(viewport);
         }
 
         private Rectangle CreateViewport(Viewport viewport, float scale)
@@ -479,18 +479,29 @@ namespace SpaceBurst
 
         private void UpdateVirtualResolution()
         {
-#if ANDROID
-            int backBufferWidth = graphics.PreferredBackBufferWidth > 0 ? graphics.PreferredBackBufferWidth : GraphicsDevice.PresentationParameters.BackBufferWidth;
-            int backBufferHeight = graphics.PreferredBackBufferHeight > 0 ? graphics.PreferredBackBufferHeight : GraphicsDevice.PresentationParameters.BackBufferHeight;
-            if (backBufferWidth > 0 && backBufferHeight > 0)
-            {
-                virtualWidth = backBufferWidth;
-                virtualHeight = backBufferHeight;
-                return;
-            }
-#endif
             virtualWidth = VirtualBaseWidth;
             virtualHeight = VirtualBaseHeight;
+        }
+
+        private Rectangle ComputeSafeUiBounds(Viewport viewport)
+        {
+            Rectangle safeArea = viewport.TitleSafeArea;
+            if (safeArea.Width <= 0 || safeArea.Height <= 0 || uiRenderViewport.Width <= 0 || uiRenderViewport.Height <= 0)
+                return new Rectangle(0, 0, VirtualWidth, VirtualHeight);
+
+            float x = (safeArea.X - uiRenderViewport.X) * VirtualWidth / (float)uiRenderViewport.Width;
+            float y = (safeArea.Y - uiRenderViewport.Y) * VirtualHeight / (float)uiRenderViewport.Height;
+            float width = safeArea.Width * VirtualWidth / (float)uiRenderViewport.Width;
+            float height = safeArea.Height * VirtualHeight / (float)uiRenderViewport.Height;
+
+            Rectangle bounds = new Rectangle(
+                (int)MathF.Round(x),
+                (int)MathF.Round(y),
+                Math.Max(1, (int)MathF.Round(width)),
+                Math.Max(1, (int)MathF.Round(height)));
+
+            Rectangle full = new Rectangle(0, 0, VirtualWidth, VirtualHeight);
+            return Rectangle.Intersect(full, bounds);
         }
 
         private void EnsureRenderTargets()

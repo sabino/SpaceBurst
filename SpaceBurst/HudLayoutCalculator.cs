@@ -52,9 +52,9 @@ namespace SpaceBurst
             int scoreWidth = MeasureHudWidth(scoreLabel, 1.65f, Scale(186, uiScale), Scale(272, uiScale));
             int ownedWidth = totalWidth - livesWidth - activeWidth - stageWidth - pityWidth - scoreWidth;
 
-            if (ownedWidth < Scale(180, uiScale))
+            if (ownedWidth < Scale(220, uiScale))
             {
-                int deficit = Scale(180, uiScale) - ownedWidth;
+                int deficit = Scale(220, uiScale) - ownedWidth;
                 int reduceScore = System.Math.Min(deficit, System.Math.Max(0, scoreWidth - Scale(240, uiScale)));
                 scoreWidth -= reduceScore;
                 deficit -= reduceScore;
@@ -87,9 +87,14 @@ namespace SpaceBurst
         {
             Rectangle stageBounds = layout.StageBounds;
             float uiScale = Game1.Instance != null ? Game1.Instance.UiLayoutScale : 1f;
-            int width = System.Math.Min(Scale(112, uiScale), stageBounds.Width - Scale(18, uiScale));
-            width = System.Math.Max(width, Scale(78, uiScale));
-            return new Rectangle(stageBounds.Right - width - Scale(10, uiScale), stageBounds.Y + Scale(10, uiScale), width, Scale(28, uiScale));
+            int width = Scale(42, uiScale);
+            int height = Scale(24, uiScale);
+            return new Rectangle(stageBounds.Center.X - width / 2, stageBounds.Bottom - height - Scale(10, uiScale), width, height);
+        }
+
+        public static Rectangle GetAndroidPauseTouchBounds(HudLayout layout)
+        {
+            return layout.StageBounds;
         }
 
         private static int MeasureHudWidth(string text, float scale, int padding, int minimum)

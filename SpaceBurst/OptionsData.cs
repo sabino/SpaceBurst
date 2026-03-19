@@ -12,7 +12,12 @@ namespace SpaceBurst
 #else
             100;
 #endif
-        public int WorldScalePercent { get; set; } = 100;
+        public int TouchControlsOpacity { get; set; } =
+#if ANDROID
+            58;
+#else
+            75;
+#endif
         public FontTheme FontTheme { get; set; } =
 #if ANDROID
             FontTheme.Readable;

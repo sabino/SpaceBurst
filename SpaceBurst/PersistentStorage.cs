@@ -52,18 +52,10 @@ namespace SpaceBurst
                 else
                     options.UiScalePercent = UiScaleHelper.ClampUiScalePercent(uiScale.GetInt32());
 
-                if (root.TryGetProperty(nameof(OptionsData.WorldScalePercent), out JsonElement worldScale))
-                {
-                    options.WorldScalePercent = UiScaleHelper.ClampWorldScalePercent(worldScale.GetInt32());
-                }
-                else if (root.TryGetProperty("GameScale", out JsonElement legacyGameScale) && legacyGameScale.TryGetSingle(out float legacyScale))
-                {
-                    options.WorldScalePercent = UiScaleHelper.ClampWorldScalePercent((int)System.MathF.Round(legacyScale * 100f));
-                }
+                if (root.TryGetProperty(nameof(OptionsData.TouchControlsOpacity), out JsonElement touchOpacity))
+                    options.TouchControlsOpacity = UiScaleHelper.ClampTouchControlsOpacity(touchOpacity.GetInt32());
                 else
-                {
-                    options.WorldScalePercent = UiScaleHelper.ClampWorldScalePercent(options.WorldScalePercent);
-                }
+                    options.TouchControlsOpacity = UiScaleHelper.ClampTouchControlsOpacity(options.TouchControlsOpacity);
 
                 if (!root.TryGetProperty(nameof(OptionsData.FontTheme), out _))
                 {
@@ -88,7 +80,7 @@ namespace SpaceBurst
                 return;
 
             options.UiScalePercent = UiScaleHelper.ClampUiScalePercent(options.UiScalePercent);
-            options.WorldScalePercent = UiScaleHelper.ClampWorldScalePercent(options.WorldScalePercent);
+            options.TouchControlsOpacity = UiScaleHelper.ClampTouchControlsOpacity(options.TouchControlsOpacity);
             SaveFile(OptionsPath, options);
         }
 

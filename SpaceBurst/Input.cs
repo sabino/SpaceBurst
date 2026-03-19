@@ -23,22 +23,35 @@ namespace SpaceBurst
         private static Vector2 pointerPosition;
 
 #if ANDROID
+        private const float MenuTapThreshold = 18f;
         private const float StickRadiusFactor = 0.11f;
+        private static Vector2 menuDragDelta;
         private static Vector2 touchMovementDirection;
         private static Vector2 touchAimDirection;
-        private static int menuHorizontalDelta;
         private static int menuTouchId = -1;
         private static Vector2 menuTouchStartPosition;
+        private static Vector2 menuTouchLastPosition;
+        private static bool menuTouchHeld;
+        private static bool menuTouchDragging;
         private static int movementTouchId = -1;
         private static int aimTouchId = -1;
         private static int rewindTouchId = -1;
         private static bool touchPausePressed;
         private static bool touchStyleCyclePressed;
         private static int touchTopButtonId = -1;
+        private static Vector2 touchTopButtonStartPosition;
+        private static TouchTopButton touchTopButtonTarget = TouchTopButton.None;
         private static Vector2 movementTouchOrigin;
         private static Vector2 movementTouchPosition;
         private static Vector2 aimTouchOrigin;
         private static Vector2 aimTouchPosition;
+
+        private enum TouchTopButton
+        {
+            None,
+            WeaponSwap,
+            Pause,
+        }
 #endif
 
         public static Vector2 PointerPosition
@@ -55,7 +68,8 @@ namespace SpaceBurst
             fireHeld = false;
             rewindHeld = false;
 #if ANDROID
-            menuHorizontalDelta = 0;
+            menuDragDelta = Vector2.Zero;
+            menuTouchHeld = false;
 #endif
 
             keyboardState = Keyboard.GetState();
@@ -90,7 +104,11 @@ namespace SpaceBurst
 
         public static bool WasConfirmPressed()
         {
+#if ANDROID
+            return WasKeyPressed(Keys.Enter) || WasKeyPressed(Keys.Space) || WasButtonPressed(Buttons.A);
+#else
             return WasPrimaryActionPressed() || WasKeyPressed(Keys.Enter) || WasKeyPressed(Keys.Space) || WasButtonPressed(Buttons.A);
+#endif
         }
 
         public static bool WasCancelPressed()
@@ -136,14 +154,32 @@ namespace SpaceBurst
             return rewindHeld;
         }
 
-        public static int ConsumeMenuHorizontalDelta()
+        public static Vector2 ConsumeMenuDragDelta()
         {
 #if ANDROID
-            int delta = menuHorizontalDelta;
-            menuHorizontalDelta = 0;
+            Vector2 delta = menuDragDelta;
+            menuDragDelta = Vector2.Zero;
             return delta;
 #else
-            return 0;
+            return Vector2.Zero;
+#endif
+        }
+
+        public static bool IsMenuPointerHeld()
+        {
+#if ANDROID
+            return menuTouchHeld;
+#else
+            return false;
+#endif
+        }
+
+        public static bool IsMenuPointerDragging()
+        {
+#if ANDROID
+            return menuTouchDragging;
+#else
+            return false;
 #endif
         }
 
@@ -252,7 +288,7 @@ namespace SpaceBurst
             Rectangle rewindBounds = GetRewindButtonBounds(gameplayBounds, stickRadius);
             HudLayout layout = GetTouchHudLayout();
             Rectangle weaponBounds = HudLayoutCalculator.GetAndroidWeaponTouchBounds(layout);
-            Rectangle pauseBounds = HudLayoutCalculator.GetAndroidPauseChipBounds(layout);
+                Rectangle pauseBounds = HudLayoutCalculator.GetAndroidPauseTouchBounds(layout);
             bool topButtonFound = false;
 
             foreach (TouchLocation touch in touches)
@@ -278,7 +314,24 @@ namespace SpaceBurst
 
                 if (touch.Id == touchTopButtonId)
                 {
-                    topButtonFound = true;
+                    topButtonFound = touch.State != TouchLocationState.Released && touch.State != TouchLocationState.Invalid;
+                    Vector2 delta = uiPosition - touchTopButtonStartPosition;
+                    bool tapRelease = touch.State == TouchLocationState.Released && delta.LengthSquared() <= MenuTapThreshold * MenuTapThreshold;
+                    if (tapRelease)
+                    {
+                        if (touchTopButtonTarget == TouchTopButton.WeaponSwap)
+                            touchStyleCyclePressed = true;
+                        else if (touchTopButtonTarget == TouchTopButton.Pause)
+                            touchPausePressed = true;
+                    }
+
+                    if (!topButtonFound)
+                    {
+                        touchTopButtonId = -1;
+                        touchTopButtonTarget = TouchTopButton.None;
+                        touchTopButtonStartPosition = Vector2.Zero;
+                    }
+
                     continue;
                 }
 
@@ -307,13 +360,15 @@ namespace SpaceBurst
                 {
                     touchTopButtonId = touch.Id;
                     topButtonFound = true;
-                    touchStyleCyclePressed = touch.State == TouchLocationState.Pressed;
+                    touchTopButtonTarget = TouchTopButton.WeaponSwap;
+                    touchTopButtonStartPosition = uiPosition;
                 }
                 else if (pauseBounds.Contains(uiPosition))
                 {
                     touchTopButtonId = touch.Id;
                     topButtonFound = true;
-                    touchPausePressed = touch.State == TouchLocationState.Pressed;
+                    touchTopButtonTarget = TouchTopButton.Pause;
+                    touchTopButtonStartPosition = uiPosition;
                 }
                 else if (screenPosition.X < gameplayBounds.Center.X)
                 {
@@ -352,7 +407,11 @@ namespace SpaceBurst
             if (!rewindFound)
                 rewindTouchId = -1;
             if (!topButtonFound)
+            {
                 touchTopButtonId = -1;
+                touchTopButtonTarget = TouchTopButton.None;
+                touchTopButtonStartPosition = Vector2.Zero;
+            }
 
             touchMovementDirection = GetVirtualStickDirection(movementTouchOrigin, movementTouchPosition, stickRadius);
 
@@ -374,28 +433,29 @@ namespace SpaceBurst
             if (controlTexture == null)
                 return;
 
+            float opacity = Game1.Instance != null ? Game1.Instance.TouchControlsOpacity : 0.58f;
             Rectangle gameplayBounds = Game1.RenderBounds;
             float stickRadius = GetStickRadius(gameplayBounds);
             Vector2 leftStick = GetMovementStickOrigin(gameplayBounds, stickRadius);
             Vector2 thumb = movementTouchId == -1 ? leftStick : movementTouchPosition;
             Vector2 rightPad = GetAimStickOrigin(gameplayBounds, stickRadius);
 
-            DrawCircle(spriteBatch, controlTexture, leftStick, stickRadius * 1.12f, Color.White * 0.12f);
-            DrawCircle(spriteBatch, controlTexture, leftStick, stickRadius * 0.7f, Color.White * 0.08f);
-            DrawCircle(spriteBatch, controlTexture, thumb, stickRadius * 0.42f, Color.White * 0.28f);
+            DrawCircle(spriteBatch, controlTexture, leftStick, stickRadius * 1.12f, Color.White * (0.12f * opacity));
+            DrawCircle(spriteBatch, controlTexture, leftStick, stickRadius * 0.7f, Color.White * (0.08f * opacity));
+            DrawCircle(spriteBatch, controlTexture, thumb, stickRadius * 0.42f, Color.White * (0.28f * opacity));
 
-            DrawCircle(spriteBatch, controlTexture, rightPad, stickRadius * 1.05f, Color.White * 0.08f);
+            DrawCircle(spriteBatch, controlTexture, rightPad, stickRadius * 1.05f, Color.White * (0.08f * opacity));
             if (aimTouchId != -1)
             {
-                DrawCircle(spriteBatch, controlTexture, aimTouchPosition, stickRadius * 0.34f, Color.White * 0.18f);
+                DrawCircle(spriteBatch, controlTexture, aimTouchPosition, stickRadius * 0.34f, Color.White * (0.18f * opacity));
                 if (touchAimDirection != Vector2.Zero)
-                    DrawCircle(spriteBatch, controlTexture, aimTouchOrigin, stickRadius * 0.16f, Color.White * 0.24f);
+                    DrawCircle(spriteBatch, controlTexture, aimTouchOrigin, stickRadius * 0.16f, Color.White * (0.24f * opacity));
             }
 
             Rectangle rewindBounds = GetRewindButtonBounds(gameplayBounds, stickRadius);
             Vector2 rewindCenter = new Vector2(rewindBounds.Center.X, rewindBounds.Center.Y);
-            DrawCircle(spriteBatch, controlTexture, rewindCenter, rewindBounds.Width * 0.5f, Color.White * (rewindTouchId == -1 ? 0.1f : 0.24f));
-            BitmapFontRenderer.Draw(spriteBatch, Game1.UiPixel, "R", rewindCenter - new Vector2(6f, 8f), Color.White, 1.4f);
+            DrawCircle(spriteBatch, controlTexture, rewindCenter, rewindBounds.Width * 0.5f, Color.White * ((rewindTouchId == -1 ? 0.1f : 0.24f) * opacity));
+            BitmapFontRenderer.Draw(spriteBatch, Game1.UiPixel, "R", rewindCenter - new Vector2(6f, 8f), Color.White * opacity, 1.4f);
         }
 
         private static Vector2 GetVirtualStickDirection(Vector2 origin, Vector2 current, float maxDistance)
@@ -451,24 +511,41 @@ namespace SpaceBurst
 
                 Vector2 uiPosition = Game1.ScreenToUi(screenPosition);
                 pointerPosition = uiPosition;
-                if (touch.State == TouchLocationState.Pressed)
-                    primaryActionPressed = true;
 
                 if (touch.Id == menuTouchId)
                 {
                     trackedMenuTouchFound = touch.State != TouchLocationState.Released && touch.State != TouchLocationState.Invalid;
+                    menuTouchHeld = trackedMenuTouchFound;
                     if (touch.State == TouchLocationState.Moved)
                     {
-                        Vector2 delta = uiPosition - menuTouchStartPosition;
-                        if (System.MathF.Abs(delta.X) >= 28f && System.MathF.Abs(delta.X) > System.MathF.Abs(delta.Y) * 1.25f)
+                        Vector2 delta = uiPosition - menuTouchLastPosition;
+                        menuDragDelta += delta;
+                        menuTouchLastPosition = uiPosition;
+                        if (!menuTouchDragging)
                         {
-                            menuHorizontalDelta = delta.X > 0f ? 1 : -1;
-                            menuTouchStartPosition = uiPosition;
+                            Vector2 totalDelta = uiPosition - menuTouchStartPosition;
+                            menuTouchDragging = totalDelta.LengthSquared() > MenuTapThreshold * MenuTapThreshold;
                         }
                     }
                     else if (touch.State == TouchLocationState.Pressed)
                     {
                         menuTouchStartPosition = uiPosition;
+                        menuTouchLastPosition = uiPosition;
+                        menuTouchDragging = false;
+                        menuTouchHeld = true;
+                    }
+                    else if (touch.State == TouchLocationState.Released)
+                    {
+                        Vector2 totalDelta = uiPosition - menuTouchStartPosition;
+                        if (!menuTouchDragging && totalDelta.LengthSquared() <= MenuTapThreshold * MenuTapThreshold)
+                            primaryActionPressed = true;
+
+                        menuTouchId = -1;
+                        menuTouchStartPosition = Vector2.Zero;
+                        menuTouchLastPosition = Vector2.Zero;
+                        menuTouchDragging = false;
+                        menuTouchHeld = false;
+                        trackedMenuTouchFound = false;
                     }
 
                     continue;
@@ -478,6 +555,9 @@ namespace SpaceBurst
                 {
                     menuTouchId = touch.Id;
                     menuTouchStartPosition = uiPosition;
+                    menuTouchLastPosition = uiPosition;
+                    menuTouchHeld = true;
+                    menuTouchDragging = false;
                     trackedMenuTouchFound = true;
                 }
             }
@@ -485,6 +565,8 @@ namespace SpaceBurst
             if (!trackedMenuTouchFound)
             {
                 menuTouchId = -1;
+                menuTouchHeld = false;
+                menuTouchDragging = false;
             }
         }
 
@@ -492,11 +574,16 @@ namespace SpaceBurst
         {
             menuTouchId = -1;
             menuTouchStartPosition = Vector2.Zero;
-            menuHorizontalDelta = 0;
+            menuTouchLastPosition = Vector2.Zero;
+            menuTouchHeld = false;
+            menuTouchDragging = false;
+            menuDragDelta = Vector2.Zero;
             movementTouchId = -1;
             aimTouchId = -1;
             rewindTouchId = -1;
             touchTopButtonId = -1;
+            touchTopButtonTarget = TouchTopButton.None;
+            touchTopButtonStartPosition = Vector2.Zero;
             movementTouchOrigin = Vector2.Zero;
             movementTouchPosition = Vector2.Zero;
             aimTouchOrigin = Vector2.Zero;
