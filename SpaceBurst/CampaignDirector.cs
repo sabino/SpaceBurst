@@ -98,6 +98,7 @@ namespace SpaceBurst
         private TutorialStep tutorialStep;
         private float tutorialProgressSeconds;
         private bool titleIntroActive = true;
+        private bool titleIntroSeen;
         private bool titleIntroExploded;
         private float titleIntroTimer = TitleIntroDurationSeconds;
         private readonly List<IntroPixel> introPixels = new List<IntroPixel>();
@@ -1046,7 +1047,15 @@ namespace SpaceBurst
             draftFromTutorial = false;
             tutorialStep = TutorialStep.Move;
             tutorialProgressSeconds = 0f;
-            ResetTitleIntro();
+            if (!titleIntroSeen)
+                ResetTitleIntro();
+            else
+            {
+                titleIntroActive = false;
+                titleIntroExploded = true;
+                titleIntroTimer = 0f;
+                introPixels.Clear();
+            }
             EntityManager.Reset();
             ResetRewindBuffer();
         }
@@ -1116,7 +1125,10 @@ namespace SpaceBurst
             }
 
             if (titleIntroTimer <= 0f)
+            {
                 titleIntroActive = false;
+                titleIntroSeen = true;
+            }
         }
 
         private void TriggerIntroExplosion()
@@ -1991,7 +2003,7 @@ namespace SpaceBurst
             }
 
             float promptPulse = 0.4f + 0.6f * MathF.Abs(MathF.Sin((float)Game1.GameTime.TotalGameTime.TotalSeconds * 4.2f));
-            DrawCenteredText(spriteBatch, pixel, "TOUCH LOGO TO DETONATE + SKIP", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 120f, Color.White * (0.35f + promptPulse * 0.35f), 1.12f);
+            DrawCenteredText(spriteBatch, pixel, "TAP OR CLICK LOGO TO DETONATE + SKIP", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 120f, Color.White * (0.35f + promptPulse * 0.35f), 1.12f);
             DrawCenteredText(spriteBatch, pixel, "GENERATING PROCEDURAL SYSTEMS...", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 86f, Color.White * 0.58f, 1.04f);
         }
 
@@ -2130,10 +2142,6 @@ namespace SpaceBurst
 
         private void DrawHud(SpriteBatch spriteBatch, Texture2D pixel)
         {
-            const int margin = 12;
-            const int gap = 10;
-            const int top = 10;
-            const int height = 88;
             float hudPulse = Game1.Instance?.HudPulse ?? 0f;
             float pickupPulse = Game1.Instance?.PickupPulse ?? 0f;
             WeaponInventoryState inventory = PlayerStatus.RunProgress.Weapons;
@@ -2147,33 +2155,13 @@ namespace SpaceBurst
                 _ => string.Concat("STAGE ", currentStageNumber.ToString("00")),
             };
             string scoreLabel = string.Concat("SCORE ", PlayerStatus.Score.ToString());
-            int totalWidth = Game1.VirtualWidth - margin * 2 - gap * 5;
-            int livesWidth = MeasureHudWidth(string.Concat("LIVES ", PlayerStatus.Lives.ToString()), 2f, 40, 200);
-            int activeWidth = MeasureHudWidth(activeStyle.DisplayName, 1.8f, 110, 220);
-            int stageWidth = MeasureHudWidth(stageLabel, 1.7f, 54, 170);
-            int pityWidth = 190;
-            int scoreWidth = MeasureHudWidth(scoreLabel, 1.65f, 186, 272);
-            int ownedWidth = totalWidth - livesWidth - activeWidth - stageWidth - pityWidth - scoreWidth;
-            if (ownedWidth < 180)
-            {
-                int deficit = 180 - ownedWidth;
-                int reduceScore = System.Math.Min(deficit, System.Math.Max(0, scoreWidth - 240));
-                scoreWidth -= reduceScore;
-                deficit -= reduceScore;
-                int reduceActive = System.Math.Min(deficit, System.Math.Max(0, activeWidth - 200));
-                activeWidth -= reduceActive;
-                deficit -= reduceActive;
-                int reduceStage = System.Math.Min(deficit, System.Math.Max(0, stageWidth - 150));
-                stageWidth -= reduceStage;
-                ownedWidth = totalWidth - livesWidth - activeWidth - stageWidth - pityWidth - scoreWidth;
-            }
-
-            Rectangle livesBounds = new Rectangle(margin, top, livesWidth, height);
-            Rectangle activeBounds = new Rectangle(livesBounds.Right + gap, top, activeWidth, height);
-            Rectangle ownedBounds = new Rectangle(activeBounds.Right + gap, top, ownedWidth, height);
-            Rectangle stageBounds = new Rectangle(ownedBounds.Right + gap, top, stageWidth, height);
-            Rectangle pityBounds = new Rectangle(stageBounds.Right + gap, top, pityWidth, height);
-            Rectangle scoreBounds = new Rectangle(pityBounds.Right + gap, top, scoreWidth, height);
+            HudLayout layout = HudLayoutCalculator.Calculate(Game1.VirtualWidth, state, currentStageNumber, transitionTargetStageNumber, transitionToBoss, inventory, PlayerStatus.Score);
+            Rectangle livesBounds = layout.LivesBounds;
+            Rectangle activeBounds = layout.ActiveBounds;
+            Rectangle ownedBounds = layout.OwnedBounds;
+            Rectangle stageBounds = layout.StageBounds;
+            Rectangle pityBounds = layout.PityBounds;
+            Rectangle scoreBounds = layout.ScoreBounds;
 
             DrawPanel(spriteBatch, pixel, livesBounds, Color.Black * (0.22f + hudPulse * 0.05f), Color.White * (0.18f + hudPulse * 0.08f));
             DrawPanel(spriteBatch, pixel, activeBounds, Color.Black * (0.18f + pickupPulse * 0.06f), Color.White * (0.14f + pickupPulse * 0.12f));
@@ -2188,12 +2176,20 @@ namespace SpaceBurst
 
             DrawStyleHud(spriteBatch, pixel, activeBounds);
             DrawOwnedStyleHud(spriteBatch, pixel, ownedBounds, inventory);
+#if ANDROID
+            BitmapFontRenderer.Draw(spriteBatch, pixel, "TAP WEAPONS TO SWAP", new Vector2(ownedBounds.X + 12f, ownedBounds.Y + 24f), Color.White * 0.4f, 0.78f);
+#endif
 
             DrawCenteredText(spriteBatch, pixel, stageLabel, stageBounds.Center.X, stageBounds.Y + 14f, Color.White, GetFittedScale(stageLabel, stageBounds.Width - 20f, 1.7f, 1.15f));
             string stageSubLabel = state == GameFlowState.StageTransition
                 ? (transitionToBoss ? "THREAT LOCK" : "FTL TRANSIT")
                 : (!string.IsNullOrEmpty(activeEventWarning) ? activeEventWarning : (state == GameFlowState.Tutorial ? tutorialStep.ToString().ToUpperInvariant() : currentStage?.Name?.ToUpperInvariant() ?? "RUN"));
             DrawCenteredText(spriteBatch, pixel, stageSubLabel, stageBounds.Center.X, stageBounds.Y + 46f, !string.IsNullOrEmpty(activeEventWarning) ? Color.Orange : Color.White * 0.7f, GetFittedScale(stageSubLabel, stageBounds.Width - 20f, 1.08f, 0.82f));
+#if ANDROID
+            Rectangle pauseChip = HudLayoutCalculator.GetAndroidPauseChipBounds(layout);
+            DrawPanel(spriteBatch, pixel, pauseChip, Color.Black * 0.24f, Color.White * 0.25f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, "II", new Vector2(pauseChip.X + 3f, pauseChip.Y + 2f), Color.White, 0.96f);
+#endif
 
             BitmapFontRenderer.Draw(spriteBatch, pixel, "PITY", new Vector2(pityBounds.X + 12f, pityBounds.Y + 10f), Color.White, 1.25f);
             DrawBar(spriteBatch, pixel, new Rectangle(pityBounds.X + 12, pityBounds.Y + 34, pityBounds.Width - 24, 12), PlayerStatus.RunProgress.Powerups.PityMeter, Color.Lerp(Color.Orange, Color.White, pickupPulse * 0.35f));
@@ -2283,11 +2279,6 @@ namespace SpaceBurst
 
             if (chargedStyles.Count > visibleCount)
                 BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("+", (chargedStyles.Count - visibleCount).ToString()), new Vector2(bounds.Right - 28f, bounds.Y + 55f), Color.White * 0.7f, 0.95f);
-        }
-
-        private static int MeasureHudWidth(string text, float scale, int padding, int minimum)
-        {
-            return System.Math.Max(minimum, (int)System.MathF.Ceiling(BitmapFontRenderer.Measure(text, scale).X) + padding);
         }
 
         private static float GetFittedScale(string text, float maxWidth, float preferredScale, float minimumScale)
@@ -2387,7 +2378,7 @@ namespace SpaceBurst
             BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("TUTORIAL ", stepIndex.ToString(), " / 8  ", title), new Vector2(panel.X + 16f, panel.Y + 12f), Color.White, 1.35f);
             BitmapFontRenderer.Draw(spriteBatch, pixel, body, new Vector2(panel.X + 16f, panel.Y + 38f), Color.White * 0.82f, 1.15f);
 #if ANDROID
-            BitmapFontRenderer.Draw(spriteBatch, pixel, "TOP LEFT SWAP  TOP CENTER PAUSE", new Vector2(panel.X + 16f, panel.Bottom - 24f), Color.White * 0.6f, 0.95f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, "WEAPON HUD SWAPS  STAGE CHIP PAUSES", new Vector2(panel.X + 16f, panel.Bottom - 24f), Color.White * 0.6f, 0.95f);
 #else
             BitmapFontRenderer.Draw(spriteBatch, pixel, "ESC PAUSE  F1 HELP", new Vector2(panel.X + 16f, panel.Bottom - 24f), Color.White * 0.6f, 0.95f);
 #endif
@@ -2486,7 +2477,7 @@ namespace SpaceBurst
                     stepIndex = 7;
                     title = "STYLE SWAP";
 #if ANDROID
-                    body = "TAP THE TOP-LEFT SW BUTTON TO ROTATE OWNED STYLES. THE HUD CAROUSEL SHOWS YOUR LOADOUT.";
+                    body = "TAP THE WEAPON HUD AT THE TOP TO ROTATE OWNED STYLES. THE HUD CAROUSEL SHOWS YOUR LOADOUT.";
 #else
                     body = "PRESS Q OR E TO ROTATE BETWEEN OWNED STYLES. THE HUD CAROUSEL SHOWS WHAT YOU HAVE.";
 #endif

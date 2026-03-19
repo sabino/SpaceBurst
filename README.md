@@ -17,6 +17,7 @@ License: **The Unlicense**
 - Deterministic rewind, save slots, and transition-time upgrade drafts.
 - Ten weapon styles with style-specific power cores and progression.
 - Procedural art, feedback effects, chapter-aware music, and runtime-generated audio.
+- Sabino Software falling-pixel splash intro that doubles as procedural warm-up/loading presentation.
 - Desktop, Linux, and Android packaging paths.
 - GitHub Actions for PR checks, prereleases, and Pages docs.
 
@@ -37,6 +38,8 @@ License: **The Unlicense**
 - Left touch pad: move
 - Right touch pad: aim and fire
 - `R` touch button: rewind
+- Tap the weapon HUD at the top to cycle owned weapon styles
+- Tap the pause chip in the top stage panel to pause
 
 ## Saves, Rewind, and Progression
 

@@ -85,6 +85,11 @@ namespace SpaceBurst
             get { return campaignDirector != null ? campaignDirector.CurrentPowerDropBonusChance : 0f; }
         }
 
+        internal CampaignDirector CampaignDirector
+        {
+            get { return campaignDirector; }
+        }
+
         public DeterministicRngState GameplayRandom
         {
             get { return campaignDirector != null ? campaignDirector.GameplayRandom : null; }
