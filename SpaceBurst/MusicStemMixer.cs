@@ -325,7 +325,7 @@ namespace SpaceBurst
 
         private static float[] ResolveLayerVolumes(GameAudioState state)
         {
-            float pause = state.FlowState == GameFlowState.Paused || state.FlowState == GameFlowState.Help || state.FlowState == GameFlowState.Options || state.FlowState == GameFlowState.SaveSlots || state.FlowState == GameFlowState.LoadSlots ? 0.22f : 1f;
+            float pause = state.FlowState == GameFlowState.Paused || state.FlowState == GameFlowState.Help || state.FlowState == GameFlowState.Options || state.FlowState == GameFlowState.SaveSlots || state.FlowState == GameFlowState.LoadSlots ? 0.78f : 1f;
             float rewind = MathHelper.Clamp(state.RewindStrength, 0f, 1f);
             float rewindDuck = 1f - rewind * 0.72f;
             float transition = MathHelper.Clamp(state.TransitionWarpStrength, 0f, 1f);

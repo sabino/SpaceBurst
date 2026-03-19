@@ -7,13 +7,9 @@ namespace SpaceBurst
             return percent < 70 ? 70 : percent > 220 ? 220 : percent;
         }
 
-        public static int ClampWorldScalePercent(int percent)
+        public static int ClampTouchControlsOpacity(int percent)
         {
-#if ANDROID
-            return percent < 70 ? 70 : percent > 140 ? 140 : percent;
-#else
-            return percent < 70 ? 70 : percent > 160 ? 160 : percent;
-#endif
+            return percent < 20 ? 20 : percent > 100 ? 100 : percent;
         }
 
         public static float GetUiLayoutMultiplier(int percent)
@@ -34,11 +30,6 @@ namespace SpaceBurst
             const float platformBase = 1f;
 #endif
             return platformBase * ClampUiScalePercent(percent) / 100f;
-        }
-
-        public static float GetWorldScale(int percent)
-        {
-            return ClampWorldScalePercent(percent) / 100f;
         }
     }
 }
