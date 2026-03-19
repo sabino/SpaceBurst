@@ -13,6 +13,9 @@ namespace SpaceBurst
         private static MouseState lastMouseState;
         private static GamePadState gamepadState;
         private static GamePadState lastGamepadState;
+#if ANDROID
+        private static bool androidCancelPressed;
+#endif
 
         private static bool primaryActionPressed;
         private static bool fireHeld;
@@ -23,6 +26,9 @@ namespace SpaceBurst
         private const float StickRadiusFactor = 0.11f;
         private static Vector2 touchMovementDirection;
         private static Vector2 touchAimDirection;
+        private static int menuHorizontalDelta;
+        private static int menuTouchId = -1;
+        private static Vector2 menuTouchStartPosition;
         private static int movementTouchId = -1;
         private static int aimTouchId = -1;
         private static int rewindTouchId = -1;
@@ -48,6 +54,9 @@ namespace SpaceBurst
             primaryActionPressed = false;
             fireHeld = false;
             rewindHeld = false;
+#if ANDROID
+            menuHorizontalDelta = 0;
+#endif
 
             keyboardState = Keyboard.GetState();
             gamepadState = GamePad.GetState(PlayerIndex.One);
@@ -87,10 +96,20 @@ namespace SpaceBurst
         public static bool WasCancelPressed()
         {
 #if ANDROID
-            if (touchPausePressed)
+            if (touchPausePressed || androidCancelPressed)
+            {
+                androidCancelPressed = false;
                 return true;
+            }
 #endif
             return WasKeyPressed(Keys.Escape) || WasButtonPressed(Buttons.Back) || WasButtonPressed(Buttons.B);
+        }
+
+        public static void NotifyAndroidBackPressed()
+        {
+#if ANDROID
+            androidCancelPressed = true;
+#endif
         }
 
         public static bool WasHelpPressed()
@@ -115,6 +134,17 @@ namespace SpaceBurst
         public static bool IsRewindHeld()
         {
             return rewindHeld;
+        }
+
+        public static int ConsumeMenuHorizontalDelta()
+        {
+#if ANDROID
+            int delta = menuHorizontalDelta;
+            menuHorizontalDelta = 0;
+            return delta;
+#else
+            return 0;
+#endif
         }
 
         public static bool WasNavigateUpPressed()
@@ -410,6 +440,8 @@ namespace SpaceBurst
 
         private static void UpdateMenuTouchState(TouchCollection touches)
         {
+            bool trackedMenuTouchFound = false;
+
             foreach (TouchLocation touch in touches)
             {
                 Vector2 screenPosition = Vector2.Clamp(
@@ -417,14 +449,50 @@ namespace SpaceBurst
                     Vector2.Zero,
                     Game1.ScreenSize - Vector2.One);
 
-                pointerPosition = Game1.ScreenToUi(screenPosition);
+                Vector2 uiPosition = Game1.ScreenToUi(screenPosition);
+                pointerPosition = uiPosition;
                 if (touch.State == TouchLocationState.Pressed)
                     primaryActionPressed = true;
+
+                if (touch.Id == menuTouchId)
+                {
+                    trackedMenuTouchFound = touch.State != TouchLocationState.Released && touch.State != TouchLocationState.Invalid;
+                    if (touch.State == TouchLocationState.Moved)
+                    {
+                        Vector2 delta = uiPosition - menuTouchStartPosition;
+                        if (System.MathF.Abs(delta.X) >= 28f && System.MathF.Abs(delta.X) > System.MathF.Abs(delta.Y) * 1.25f)
+                        {
+                            menuHorizontalDelta = delta.X > 0f ? 1 : -1;
+                            menuTouchStartPosition = uiPosition;
+                        }
+                    }
+                    else if (touch.State == TouchLocationState.Pressed)
+                    {
+                        menuTouchStartPosition = uiPosition;
+                    }
+
+                    continue;
+                }
+
+                if (menuTouchId == -1 && touch.State == TouchLocationState.Pressed)
+                {
+                    menuTouchId = touch.Id;
+                    menuTouchStartPosition = uiPosition;
+                    trackedMenuTouchFound = true;
+                }
+            }
+
+            if (!trackedMenuTouchFound)
+            {
+                menuTouchId = -1;
             }
         }
 
         private static void ResetGameplayTouchState()
         {
+            menuTouchId = -1;
+            menuTouchStartPosition = Vector2.Zero;
+            menuHorizontalDelta = 0;
             movementTouchId = -1;
             aimTouchId = -1;
             rewindTouchId = -1;

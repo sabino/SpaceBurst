@@ -49,6 +49,7 @@ namespace SpaceBurst
 
         private readonly CampaignRepository repository = new CampaignRepository();
         private readonly OptionsData options;
+        private OptionsData optionsSnapshot;
         private readonly MedalProgress medals;
         private readonly List<ScheduledSpawn> scheduledSpawns = new List<ScheduledSpawn>();
         private readonly List<ScheduledEvent> scheduledEvents = new List<ScheduledEvent>();
@@ -158,6 +159,7 @@ namespace SpaceBurst
         public CampaignDirector()
         {
             options = PersistentStorage.LoadOptions();
+            optionsSnapshot = CloneOptions(options);
             medals = PersistentStorage.LoadMedals();
         }
 
@@ -588,9 +590,7 @@ namespace SpaceBurst
                     state = GameFlowState.LoadSlots;
                     break;
                 case 3:
-                    slotReturnState = GameFlowState.Paused;
-                    optionsSelection = 0;
-                    state = GameFlowState.Options;
+                    OpenOptions(GameFlowState.Paused);
                     break;
                 case 4:
                     helpReturnState = GameFlowState.Paused;
@@ -624,22 +624,53 @@ namespace SpaceBurst
 
         private void UpdateOptions()
         {
+            Rectangle[] optionBounds = GetOptionRowBounds();
+
+#if ANDROID
+            (Rectangle discardBounds, Rectangle applyBounds) = GetOptionActionBounds();
+            if (Input.WasPrimaryActionPressed())
+            {
+                Vector2 pointer = Input.PointerPosition;
+                if (discardBounds.Contains(pointer))
+                {
+                    DiscardOptionsAndClose();
+                    return;
+                }
+
+                if (applyBounds.Contains(pointer))
+                {
+                    ConfirmOptionsAndClose();
+                    return;
+                }
+            }
+#endif
+
             if (Input.WasCancelPressed())
             {
-                PersistentStorage.SaveOptions(options);
-                state = slotReturnState;
+#if ANDROID
+                DiscardOptionsAndClose();
+#else
+                ConfirmOptionsAndClose();
+#endif
                 return;
             }
 
-            Rectangle[] optionBounds = GetOptionRowBounds();
             UpdateVerticalSelection(ref optionsSelection, optionBounds.Length);
             HandlePointerSelection(optionBounds, ref optionsSelection);
 
             int delta = 0;
-            if (Input.WasNavigateLeftPressed())
+            int swipeDelta = Input.ConsumeMenuHorizontalDelta();
+            if (swipeDelta != 0)
+                delta = swipeDelta;
+            else if (Input.WasNavigateLeftPressed())
                 delta = -1;
             else if (Input.WasNavigateRightPressed() || Input.WasConfirmPressed() || Input.WasPrimaryActionPressed())
                 delta = 1;
+
+#if ANDROID
+            if (delta != 0 && Input.WasPrimaryActionPressed() && optionsSelection >= 0 && optionsSelection < optionBounds.Length && optionBounds[optionsSelection].Contains(Input.PointerPosition))
+                delta = Input.PointerPosition.X < optionBounds[optionsSelection].Center.X ? -1 : 1;
+#endif
 
             if (delta == 0)
                 return;
@@ -1954,9 +1985,7 @@ namespace SpaceBurst
 
             if (selection == index++)
             {
-                slotReturnState = GameFlowState.Title;
-                optionsSelection = 0;
-                state = GameFlowState.Options;
+                OpenOptions(GameFlowState.Title);
                 return;
             }
 
@@ -2079,6 +2108,83 @@ namespace SpaceBurst
             return Math.Max(1, (int)MathF.Round(value * uiScale));
         }
 
+        private OptionsData CloneOptions(OptionsData source)
+        {
+            return new OptionsData
+            {
+                ShowHelpHints = source.ShowHelpHints,
+                TutorialCompleted = source.TutorialCompleted,
+                AutoUpgradeDraft = source.AutoUpgradeDraft,
+                DisplayMode = source.DisplayMode,
+                UiScalePercent = source.UiScalePercent,
+                WorldScalePercent = source.WorldScalePercent,
+                FontTheme = source.FontTheme,
+                VisualPreset = source.VisualPreset,
+                EnableBloom = source.EnableBloom,
+                EnableShockwaves = source.EnableShockwaves,
+                EnableNeonOutlines = source.EnableNeonOutlines,
+                MasterVolume = source.MasterVolume,
+                MusicVolume = source.MusicVolume,
+                SfxVolume = source.SfxVolume,
+                AudioQualityPreset = source.AudioQualityPreset,
+                ScreenShakeStrength = source.ScreenShakeStrength,
+            };
+        }
+
+        private void CopyOptions(OptionsData source, OptionsData target)
+        {
+            target.ShowHelpHints = source.ShowHelpHints;
+            target.TutorialCompleted = source.TutorialCompleted;
+            target.AutoUpgradeDraft = source.AutoUpgradeDraft;
+            target.DisplayMode = source.DisplayMode;
+            target.UiScalePercent = source.UiScalePercent;
+            target.WorldScalePercent = source.WorldScalePercent;
+            target.FontTheme = source.FontTheme;
+            target.VisualPreset = source.VisualPreset;
+            target.EnableBloom = source.EnableBloom;
+            target.EnableShockwaves = source.EnableShockwaves;
+            target.EnableNeonOutlines = source.EnableNeonOutlines;
+            target.MasterVolume = source.MasterVolume;
+            target.MusicVolume = source.MusicVolume;
+            target.SfxVolume = source.SfxVolume;
+            target.AudioQualityPreset = source.AudioQualityPreset;
+            target.ScreenShakeStrength = source.ScreenShakeStrength;
+        }
+
+        private void ApplyOptionsState()
+        {
+#if !ANDROID
+            Game1.Instance?.ApplyDisplayMode(options.DisplayMode);
+#endif
+            Game1.Instance?.ApplyAudioQuality(options.AudioQualityPreset);
+        }
+
+        private void OpenOptions(GameFlowState returnState)
+        {
+            slotReturnState = returnState;
+            optionsSelection = 0;
+            optionsSnapshot = CloneOptions(options);
+            state = GameFlowState.Options;
+        }
+
+        private void ConfirmOptionsAndClose()
+        {
+            optionsSnapshot = CloneOptions(options);
+            PersistentStorage.SaveOptions(options);
+            state = slotReturnState;
+        }
+
+        private void DiscardOptionsAndClose()
+        {
+            if (optionsSnapshot != null)
+            {
+                CopyOptions(optionsSnapshot, options);
+                ApplyOptionsState();
+            }
+
+            state = slotReturnState;
+        }
+
         private Rectangle[] GetOptionRowBounds()
         {
             string[] rows = GetOptionRows();
@@ -2092,6 +2198,24 @@ namespace SpaceBurst
                 bounds[i] = new Rectangle(rowX, top + i * rowStep, rowWidth, rowHeight);
 
             return bounds;
+        }
+
+        private (Rectangle discardBounds, Rectangle applyBounds) GetOptionActionBounds()
+        {
+            Rectangle[] rows = GetOptionRowBounds();
+            int buttonWidth = UiPx(220);
+            int buttonHeight = UiPx(42);
+            int gap = UiPx(28);
+            int totalWidth = buttonWidth * 2 + gap;
+            int x = (Game1.VirtualWidth - totalWidth) / 2;
+            int y = rows.Length > 0 ? rows[rows.Length - 1].Bottom + UiPx(18) : Game1.VirtualHeight - UiPx(160);
+            int maxY = Game1.VirtualHeight - UiPx(148);
+            y = Math.Min(y, maxY);
+            return
+            (
+                new Rectangle(x, y, buttonWidth, buttonHeight),
+                new Rectangle(x + buttonWidth + gap, y, buttonWidth, buttonHeight)
+            );
         }
 
         private Rectangle[] GetSaveSlotSelectionBounds()
@@ -2362,7 +2486,13 @@ namespace SpaceBurst
             }
 
 #if ANDROID
-            DrawCenteredText(spriteBatch, pixel, "TAP A ROW TO ADVANCE  USE ANDROID BACK TO CLOSE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - UiPx(96), Color.White * 0.75f, 1.06f);
+            (Rectangle discardBounds, Rectangle applyBounds) = GetOptionActionBounds();
+            DrawPanel(spriteBatch, pixel, discardBounds, Color.Black * 0.22f, Color.Orange * 0.85f);
+            DrawPanel(spriteBatch, pixel, applyBounds, Color.Black * 0.18f, Color.LimeGreen * 0.78f);
+            DrawCenteredText(spriteBatch, pixel, "X DISCARD", discardBounds.Center.X, discardBounds.Y + UiPx(8), Color.White, 1.02f);
+            DrawCenteredText(spriteBatch, pixel, "V APPLY", applyBounds.Center.X, applyBounds.Y + UiPx(8), Color.White, 1.02f);
+            DrawCenteredText(spriteBatch, pixel, "SWIPE A ROW LEFT OR RIGHT TO ADJUST  TAP LEFT TO LOWER  TAP RIGHT TO RAISE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - UiPx(104), Color.White * 0.75f, 0.96f);
+            DrawCenteredText(spriteBatch, pixel, "TAP V TO SAVE  TAP X OR USE ANDROID BACK TO DISCARD", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - UiPx(72), Color.White * 0.62f, 0.98f);
 #else
             DrawCenteredText(spriteBatch, pixel, "LEFT RIGHT OR ENTER TO CHANGE  ESC TO CLOSE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - UiPx(96), Color.White * 0.75f, 1.1f);
 #endif
@@ -2456,7 +2586,7 @@ namespace SpaceBurst
             }
 
 #if ANDROID
-            DrawCenteredText(spriteBatch, pixel, helpPageIndex == 0 ? "SWIPE LEFT OR RIGHT  TAP TO REPLAY TUTORIAL  USE ANDROID BACK TO CLOSE" : "SWIPE LEFT OR RIGHT  USE ANDROID BACK TO CLOSE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 120f, Color.White * 0.75f, 1.08f);
+            DrawCenteredText(spriteBatch, pixel, helpPageIndex == 0 ? "SWIPE LEFT OR RIGHT  TAP TO REPLAY TUTORIAL  USE ANDROID BACK TO CLOSE" : "SWIPE LEFT OR RIGHT  TAP TO CLOSE OR USE ANDROID BACK", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 120f, Color.White * 0.75f, 1.05f);
 #else
             DrawCenteredText(spriteBatch, pixel, helpPageIndex == 0 ? "LEFT RIGHT TO CHANGE PAGE  ENTER TO REPLAY TUTORIAL  ESC TO CLOSE" : "LEFT RIGHT TO CHANGE PAGE  ENTER ESC F1 TO CLOSE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 120f, Color.White * 0.75f, 1.35f);
 #endif

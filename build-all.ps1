@@ -2,7 +2,7 @@ param(
     [string]$AndroidSdkDirectory = "",
     [string]$WindowsRuntimeIdentifier = "win-x64",
     [string]$WindowsConfiguration = "Release",
-    [string]$AndroidConfiguration = "Debug",
+    [string]$AndroidConfiguration = "Release",
     [switch]$SkipAndroid,
     [switch]$InstallAndroidDependencies,
     [switch]$InstallOnDevice
@@ -41,6 +41,34 @@ function Resolve-AndroidSdkDirectory {
     return "C:\Android\sdk"
 }
 
+function Resolve-LocalReleaseSigning {
+    $signingRoot = Join-Path $env:USERPROFILE ".spaceburst\android-signing"
+    $keystorePath = Join-Path $signingRoot "spaceburst-release.keystore"
+    $credentialsPath = Join-Path $signingRoot "spaceburst-release-credentials.txt"
+
+    if (-not (Test-Path $keystorePath) -or -not (Test-Path $credentialsPath)) {
+        return $null
+    }
+
+    $values = @{}
+    foreach ($line in Get-Content $credentialsPath) {
+        if ($line -match '^\s*([^:]+):\s*(.+?)\s*$') {
+            $values[$matches[1].Trim()] = $matches[2].Trim()
+        }
+    }
+
+    if (-not $values.ContainsKey("Alias") -or -not $values.ContainsKey("Store password") -or -not $values.ContainsKey("Key password")) {
+        return $null
+    }
+
+    return [pscustomobject]@{
+        SigningKeyStorePath = $keystorePath
+        SigningStorePass = $values["Store password"]
+        SigningKeyAlias = $values["Alias"]
+        SigningKeyPass = $values["Key password"]
+    }
+}
+
 $root = $PSScriptRoot
 $gameProject = Join-Path $root "SpaceBurst\SpaceBurst.csproj"
 $levelToolProject = Join-Path $root "SpaceBurst.LevelTool\SpaceBurst.LevelTool.csproj"
@@ -52,7 +80,10 @@ if (-not $commit) {
     throw "Unable to determine git commit."
 }
 
-$artifactsRoot = Join-Path $root "artifacts\release\bundle-$commit"
+$versionInfo = & (Join-Path $root "tools\Get-BuildVersion.ps1") -Commit $commit | ConvertFrom-Json
+$localReleaseSigning = Resolve-LocalReleaseSigning
+
+$artifactsRoot = Join-Path $root "artifacts\release\bundle-$($versionInfo.ArtifactTag)-$commit"
 $latestRoot = Join-Path $root "artifacts\release\latest"
 $gameOutput = Join-Path $artifactsRoot "game-$WindowsRuntimeIdentifier"
 $levelToolOutput = Join-Path $artifactsRoot "leveltool-$WindowsRuntimeIdentifier"
@@ -109,6 +140,9 @@ Invoke-Step "Publishing Windows game single-file exe" {
         -p:IncludeNativeLibrariesForSelfExtract=true `
         -p:DebugType=None `
         -p:DebugSymbols=false `
+        -p:Version=$($versionInfo.BuildVersion) `
+        -p:FileVersion=$($versionInfo.FileVersion) `
+        -p:InformationalVersion=$($versionInfo.InformationalVersion) `
         -o $gameOutput
 
     if ($LASTEXITCODE -ne 0) {
@@ -125,6 +159,9 @@ Invoke-Step "Publishing Windows level editor single-file exe" {
         -p:IncludeNativeLibrariesForSelfExtract=true `
         -p:DebugType=None `
         -p:DebugSymbols=false `
+        -p:Version=$($versionInfo.BuildVersion) `
+        -p:FileVersion=$($versionInfo.FileVersion) `
+        -p:InformationalVersion=$($versionInfo.InformationalVersion) `
         -o $levelToolOutput
 
     if ($LASTEXITCODE -ne 0) {
@@ -144,6 +181,23 @@ if (-not $SkipAndroid) {
         $adb = Join-Path $AndroidSdkDirectory "platform-tools\adb.exe"
         $env:ANDROID_SDK_ROOT = $AndroidSdkDirectory
         $env:ANDROID_HOME = $AndroidSdkDirectory
+        $androidBuildProperties = @(
+            "-p:AndroidSdkDirectory=$AndroidSdkDirectory",
+            "-p:ApplicationVersion=$($versionInfo.AndroidVersionCode)",
+            "-p:ApplicationDisplayVersion=$($versionInfo.DisplayVersion)",
+            "-p:Version=$($versionInfo.BuildVersion)",
+            "-p:FileVersion=$($versionInfo.FileVersion)",
+            "-p:InformationalVersion=$($versionInfo.InformationalVersion)"
+        )
+
+        if ($localReleaseSigning) {
+            Write-Host "Using release signing keystore: $($localReleaseSigning.SigningKeyStorePath)"
+            $androidBuildProperties += "-p:AndroidKeyStore=True"
+            $androidBuildProperties += "-p:AndroidSigningKeyStore=$($localReleaseSigning.SigningKeyStorePath)"
+            $androidBuildProperties += "-p:AndroidSigningStorePass=$($localReleaseSigning.SigningStorePass)"
+            $androidBuildProperties += "-p:AndroidSigningKeyAlias=$($localReleaseSigning.SigningKeyAlias)"
+            $androidBuildProperties += "-p:AndroidSigningKeyPass=$($localReleaseSigning.SigningKeyPass)"
+        }
 
         if ($InstallAndroidDependencies -or -not (Test-Path $adb)) {
             dotnet build $androidProject `
@@ -185,7 +239,7 @@ if (-not $SkipAndroid) {
         dotnet build $androidProject `
             -f $framework `
             -c $AndroidConfiguration `
-            -p:AndroidSdkDirectory=$AndroidSdkDirectory `
+            @androidBuildProperties `
             -v minimal
 
         if ($LASTEXITCODE -ne 0) {
@@ -203,7 +257,8 @@ if (-not $SkipAndroid) {
     }
 
     New-Item -ItemType Directory -Path $androidOutput | Out-Null
-    Copy-Item $apkSource.FullName (Join-Path $androidOutput $apkSource.Name) -Force
+    $versionedApkName = "SpaceBurst-android-$($versionInfo.ArtifactTag).apk"
+    Copy-Item $apkSource.FullName (Join-Path $androidOutput $versionedApkName) -Force
 
     if ($InstallOnDevice) {
         $adb = Join-Path $AndroidSdkDirectory "platform-tools\adb.exe"
@@ -218,13 +273,22 @@ if (-not $SkipAndroid) {
     }
 }
 
+$versionedGameExe = Join-Path $artifactsRoot "SpaceBurst-$WindowsRuntimeIdentifier-$($versionInfo.ArtifactTag).exe"
+Copy-Item (Join-Path $gameOutput "SpaceBurst.exe") $versionedGameExe -Force
+
+$versionedLevelToolExe = Join-Path $artifactsRoot "SpaceBurst.LevelTool-$WindowsRuntimeIdentifier-$($versionInfo.ArtifactTag).exe"
+Copy-Item (Join-Path $levelToolOutput "SpaceBurst.LevelTool.exe") $versionedLevelToolExe -Force
+
 $summaryPath = Join-Path $artifactsRoot "build-summary.txt"
 $summary = [System.Collections.Generic.List[string]]::new()
+$summary.Add("Version: $($versionInfo.DisplayVersion)")
 $summary.Add("Commit: $commit")
 $summary.Add("Game EXE: $(Join-Path $gameOutput 'SpaceBurst.exe')")
+$summary.Add("Versioned Game EXE: $versionedGameExe")
 $summary.Add("Level Tool EXE: $(Join-Path $levelToolOutput 'SpaceBurst.LevelTool.exe')")
+$summary.Add("Versioned Level Tool EXE: $versionedLevelToolExe")
 if (-not $SkipAndroid) {
-    $apkCopied = Get-ChildItem $androidOutput -Filter "*.apk" | Select-Object -First 1
+    $apkCopied = Get-ChildItem $androidOutput -Filter "*.apk" | Sort-Object Name | Select-Object -First 1
     $summary.Add("Android APK: $($apkCopied.FullName)")
 }
 $summary | Set-Content -Path $summaryPath
@@ -238,9 +302,12 @@ Copy-Item (Join-Path $artifactsRoot '*') $latestRoot -Recurse -Force
 
 $latestSummaryPath = Join-Path $latestRoot "build-summary.txt"
 $latestSummary = [System.Collections.Generic.List[string]]::new()
+$latestSummary.Add("Version: $($versionInfo.DisplayVersion)")
 $latestSummary.Add("Commit: $commit")
 $latestSummary.Add("Game EXE: $(Join-Path $latestRoot "game-$WindowsRuntimeIdentifier\SpaceBurst.exe")")
+$latestSummary.Add("Versioned Game EXE: $(Join-Path $latestRoot "SpaceBurst-$WindowsRuntimeIdentifier-$($versionInfo.ArtifactTag).exe")")
 $latestSummary.Add("Level Tool EXE: $(Join-Path $latestRoot "leveltool-$WindowsRuntimeIdentifier\SpaceBurst.LevelTool.exe")")
+$latestSummary.Add("Versioned Level Tool EXE: $(Join-Path $latestRoot "SpaceBurst.LevelTool-$WindowsRuntimeIdentifier-$($versionInfo.ArtifactTag).exe")")
 if (-not $SkipAndroid) {
     $latestApk = Get-ChildItem (Join-Path $latestRoot "android-apk") -Filter "*.apk" | Select-Object -First 1
     if ($latestApk) {
