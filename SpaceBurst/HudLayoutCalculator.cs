@@ -85,7 +85,9 @@ namespace SpaceBurst
         public static Rectangle GetAndroidPauseChipBounds(HudLayout layout)
         {
             Rectangle stageBounds = layout.StageBounds;
-            return new Rectangle(stageBounds.Right - 34, stageBounds.Y + 10, 20, 18);
+            int width = System.Math.Min(84, stageBounds.Width - 18);
+            width = System.Math.Max(width, 60);
+            return new Rectangle(stageBounds.Right - width - 10, stageBounds.Y + 10, width, 24);
         }
 
         private static int MeasureHudWidth(string text, float scale, int padding, int minimum)

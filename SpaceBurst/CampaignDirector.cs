@@ -17,8 +17,8 @@ namespace SpaceBurst
         private const float RewindSnapshotInterval = 1f / 30f;
         private const int HelpPageCount = 7;
         private const int AboutHelpPageIndex = 5;
-        private const float TitleIntroDurationSeconds = 2.8f;
-        private const float TitleIntroSkipDurationSeconds = 0.7f;
+        private const float TitleIntroDurationSeconds = 4.8f;
+        private const float TitleIntroSkipDurationSeconds = 1.05f;
 
         private const string AboutHelpText =
             "ABOUT SPACEBURST\n" +
@@ -55,6 +55,7 @@ namespace SpaceBurst
         private readonly DeterministicRngState gameplayRandom = new DeterministicRngState(1u);
         private readonly List<RunSaveData> rewindFrames = new List<RunSaveData>();
         private readonly List<UpgradeDraftCard> draftCards = new List<UpgradeDraftCard>();
+        private readonly Random titleVisualRandom = new Random(unchecked(Environment.TickCount * 397));
 
         private StageDefinition currentStage;
         private BossEnemy activeBoss;
@@ -102,6 +103,27 @@ namespace SpaceBurst
         private bool titleIntroExploded;
         private float titleIntroTimer = TitleIntroDurationSeconds;
         private readonly List<IntroPixel> introPixels = new List<IntroPixel>();
+        private Color titleIntroBackgroundColor = new Color(7, 12, 24);
+        private Color titleIntroGlowColorA = new Color(110, 193, 255);
+        private Color titleIntroGlowColorB = new Color(246, 198, 116);
+        private Color titleIntroPrimaryColor = Color.White;
+        private Color titleIntroSecondaryColor = new Color(110, 193, 255);
+        private Color titleIntroPromptColor = Color.White;
+
+#if ANDROID
+        private static readonly float[] GameScaleOptions = { 0.8f, 0.9f, 1.0f };
+#else
+        private static readonly float[] GameScaleOptions = { 0.8f, 0.9f, 1.0f, 1.1f, 1.2f };
+#endif
+
+        private static readonly IntroPalette[] IntroPalettes =
+        {
+            new IntroPalette(new Color(8, 12, 26), new Color(88, 196, 255), new Color(255, 188, 96), Color.White, new Color(88, 196, 255), new Color(255, 188, 96)),
+            new IntroPalette(new Color(14, 8, 24), new Color(201, 116, 255), new Color(86, 237, 193), Color.White, new Color(201, 116, 255), new Color(86, 237, 193)),
+            new IntroPalette(new Color(8, 16, 18), new Color(123, 229, 176), new Color(244, 232, 120), Color.White, new Color(123, 229, 176), new Color(244, 232, 120)),
+            new IntroPalette(new Color(16, 10, 18), new Color(255, 132, 165), new Color(116, 170, 255), Color.White, new Color(255, 132, 165), new Color(116, 170, 255)),
+            new IntroPalette(new Color(6, 14, 30), new Color(92, 160, 255), new Color(152, 246, 255), Color.White, new Color(152, 246, 255), new Color(92, 160, 255)),
+        };
 
         private struct IntroPixel
         {
@@ -109,6 +131,26 @@ namespace SpaceBurst
             public Vector2 Velocity;
             public Vector2 Target;
             public Color Color;
+        }
+
+        private readonly struct IntroPalette
+        {
+            public IntroPalette(Color background, Color glowA, Color glowB, Color primary, Color secondary, Color prompt)
+            {
+                Background = background;
+                GlowA = glowA;
+                GlowB = glowB;
+                Primary = primary;
+                Secondary = secondary;
+                Prompt = prompt;
+            }
+
+            public Color Background { get; }
+            public Color GlowA { get; }
+            public Color GlowB { get; }
+            public Color Primary { get; }
+            public Color Secondary { get; }
+            public Color Prompt { get; }
         }
 
         public CampaignDirector()
@@ -226,6 +268,11 @@ namespace SpaceBurst
         public ScreenShakeStrength ScreenShakeStrength
         {
             get { return options.ScreenShakeStrength; }
+        }
+
+        public float GameScale
+        {
+            get { return options.GameScale; }
         }
 
         public float MasterVolume
@@ -553,7 +600,7 @@ namespace SpaceBurst
                 return;
             }
 
-            UpdateVerticalSelection(ref optionsSelection, 12);
+            UpdateVerticalSelection(ref optionsSelection, GetOptionRows().Length);
 
             int delta = 0;
             if (Input.WasNavigateLeftPressed())
@@ -566,11 +613,9 @@ namespace SpaceBurst
 
             switch (optionsSelection)
             {
+#if ANDROID
                 case 0:
-                    options.DisplayMode = options.DisplayMode == DesktopDisplayMode.BorderlessFullscreen
-                        ? DesktopDisplayMode.Windowed
-                        : DesktopDisplayMode.BorderlessFullscreen;
-                    Game1.Instance.ApplyDisplayMode(options.DisplayMode);
+                    options.GameScale = AdjustGameScale(options.GameScale, delta);
                     break;
                 case 1:
                     options.VisualPreset = (VisualPreset)(((int)options.VisualPreset + 3 + delta) % 3);
@@ -606,6 +651,51 @@ namespace SpaceBurst
                 case 11:
                     options.ShowHelpHints = !options.ShowHelpHints;
                     break;
+#else
+                case 0:
+                    options.DisplayMode = options.DisplayMode == DesktopDisplayMode.BorderlessFullscreen
+                        ? DesktopDisplayMode.Windowed
+                        : DesktopDisplayMode.BorderlessFullscreen;
+                    Game1.Instance.ApplyDisplayMode(options.DisplayMode);
+                    break;
+                case 1:
+                    options.GameScale = AdjustGameScale(options.GameScale, delta);
+                    break;
+                case 2:
+                    options.VisualPreset = (VisualPreset)(((int)options.VisualPreset + 3 + delta) % 3);
+                    break;
+                case 3:
+                    options.EnableBloom = !options.EnableBloom;
+                    break;
+                case 4:
+                    options.EnableShockwaves = !options.EnableShockwaves;
+                    break;
+                case 5:
+                    options.EnableNeonOutlines = !options.EnableNeonOutlines;
+                    break;
+                case 6:
+                    options.ScreenShakeStrength = (ScreenShakeStrength)(((int)options.ScreenShakeStrength + 3 + delta) % 3);
+                    break;
+                case 7:
+                    options.AudioQualityPreset = (AudioQualityPreset)(((int)options.AudioQualityPreset + 3 + delta) % 3);
+                    Game1.Instance.ApplyAudioQuality(options.AudioQualityPreset);
+                    break;
+                case 8:
+                    options.MasterVolume = AdjustVolume(options.MasterVolume, delta);
+                    break;
+                case 9:
+                    options.MusicVolume = AdjustVolume(options.MusicVolume, delta);
+                    break;
+                case 10:
+                    options.SfxVolume = AdjustVolume(options.SfxVolume, delta);
+                    break;
+                case 11:
+                    options.AutoUpgradeDraft = !options.AutoUpgradeDraft;
+                    break;
+                case 12:
+                    options.ShowHelpHints = !options.ShowHelpHints;
+                    break;
+#endif
             }
         }
 
@@ -1066,6 +1156,7 @@ namespace SpaceBurst
             titleIntroExploded = false;
             titleIntroTimer = TitleIntroDurationSeconds;
             introPixels.Clear();
+            RandomizeTitleIntroPalette();
 
             Rectangle logo = GetTitleLogoBounds();
             int columns = 56;
@@ -1083,7 +1174,7 @@ namespace SpaceBurst
                     Vector2 target = new Vector2(logo.Left + spacingX * (x + 0.5f), logo.Top + spacingY * (y + 0.5f));
                     float seed = MathF.Abs(MathF.Sin((x + 1) * 12.73f + (y + 1) * 19.19f));
                     Vector2 start = new Vector2(target.X, -64f - seed * 320f - y * 8f);
-                    Color color = Color.Lerp(new Color(110, 193, 255), new Color(246, 198, 116), MathF.Abs(MathF.Sin((x + y) * 0.37f)));
+                    Color color = Color.Lerp(titleIntroGlowColorA, titleIntroGlowColorB, MathF.Abs(MathF.Sin((x + y) * 0.37f)));
 
                     introPixels.Add(new IntroPixel
                     {
@@ -1791,35 +1882,55 @@ namespace SpaceBurst
 
         private void ActivateTitleSelection(int selection)
         {
-            switch (selection)
+            bool showSkipTutorial = !options.TutorialCompleted;
+            int index = 0;
+            if (selection == index++)
             {
-                case 1:
-                    slotReturnState = GameFlowState.Title;
-                    slotSelection = 0;
-                    state = GameFlowState.LoadSlots;
-                    break;
-                case 2:
-                    slotReturnState = GameFlowState.Title;
-                    optionsSelection = 0;
-                    state = GameFlowState.Options;
-                    break;
-                case 3:
-                    helpReturnState = GameFlowState.Title;
-                    helpPageIndex = 0;
-                    state = GameFlowState.Help;
-                    break;
-                case 4:
-                    helpReturnState = GameFlowState.Title;
-                    helpPageIndex = AboutHelpPageIndex;
-                    state = GameFlowState.Help;
-                    break;
-                case 5:
-                    Game1.Instance.Exit();
-                    break;
-                default:
-                    StartCampaign();
-                    break;
+                StartCampaign();
+                return;
             }
+
+            if (showSkipTutorial && selection == index++)
+            {
+                options.TutorialCompleted = true;
+                PersistentStorage.SaveOptions(options);
+                BeginFreshCampaign();
+                return;
+            }
+
+            if (selection == index++)
+            {
+                slotReturnState = GameFlowState.Title;
+                slotSelection = 0;
+                state = GameFlowState.LoadSlots;
+                return;
+            }
+
+            if (selection == index++)
+            {
+                slotReturnState = GameFlowState.Title;
+                optionsSelection = 0;
+                state = GameFlowState.Options;
+                return;
+            }
+
+            if (selection == index++)
+            {
+                helpReturnState = GameFlowState.Title;
+                helpPageIndex = 0;
+                state = GameFlowState.Help;
+                return;
+            }
+
+            if (selection == index++)
+            {
+                helpReturnState = GameFlowState.Title;
+                helpPageIndex = AboutHelpPageIndex;
+                state = GameFlowState.Help;
+                return;
+            }
+
+            Game1.Instance.Exit();
         }
 
         private void HandlePointerSelection(List<UiButton> buttons, ref int selection)
@@ -1848,15 +1959,22 @@ namespace SpaceBurst
 
         private List<UiButton> GetTitleButtons()
         {
-            return new List<UiButton>
+            int total = options.TutorialCompleted ? 6 : 7;
+            var buttons = new List<UiButton>
             {
-                CreateButton("START CAMPAIGN", 0, 6),
-                CreateButton("LOAD GAME", 1, 6),
-                CreateButton("OPTIONS", 2, 6),
-                CreateButton("HELP", 3, 6),
-                CreateButton("ABOUT / LEGAL", 4, 6),
-                CreateButton("QUIT", 5, 6),
+                CreateButton("START CAMPAIGN", 0, total),
             };
+
+            int nextIndex = 1;
+            if (!options.TutorialCompleted)
+                buttons.Add(CreateButton("START WITHOUT TUTORIAL", nextIndex++, total));
+
+            buttons.Add(CreateButton("LOAD GAME", nextIndex++, total));
+            buttons.Add(CreateButton("OPTIONS", nextIndex++, total));
+            buttons.Add(CreateButton("HELP", nextIndex++, total));
+            buttons.Add(CreateButton("ABOUT / LEGAL", nextIndex++, total));
+            buttons.Add(CreateButton("QUIT", nextIndex, total));
+            return buttons;
         }
 
         private List<UiButton> GetPauseButtons()
@@ -1894,9 +2012,10 @@ namespace SpaceBurst
 
         private string[] GetOptionRows()
         {
+#if ANDROID
             return new[]
             {
-                string.Concat("DISPLAY MODE  ", options.DisplayMode == DesktopDisplayMode.BorderlessFullscreen ? "BORDERLESS FULLSCREEN" : "WINDOWED"),
+                string.Concat("GAME SCALE  ", (int)MathF.Round(options.GameScale * 100f), "%"),
                 string.Concat("VISUAL PRESET  ", options.VisualPreset.ToString().ToUpperInvariant()),
                 string.Concat("BLOOM  ", options.EnableBloom ? "ON" : "OFF"),
                 string.Concat("SHOCKWAVES  ", options.EnableShockwaves ? "ON" : "OFF"),
@@ -1909,12 +2028,86 @@ namespace SpaceBurst
                 string.Concat("AUTO DRAFT  ", options.AutoUpgradeDraft ? "ON" : "OFF"),
                 string.Concat("HELP HINTS  ", options.ShowHelpHints ? "ON" : "OFF"),
             };
+#else
+            return new[]
+            {
+                string.Concat("DISPLAY MODE  ", options.DisplayMode == DesktopDisplayMode.BorderlessFullscreen ? "BORDERLESS FULLSCREEN" : "WINDOWED"),
+                string.Concat("GAME SCALE  ", (int)MathF.Round(options.GameScale * 100f), "%"),
+                string.Concat("VISUAL PRESET  ", options.VisualPreset.ToString().ToUpperInvariant()),
+                string.Concat("BLOOM  ", options.EnableBloom ? "ON" : "OFF"),
+                string.Concat("SHOCKWAVES  ", options.EnableShockwaves ? "ON" : "OFF"),
+                string.Concat("NEON OUTLINES  ", options.EnableNeonOutlines ? "ON" : "OFF"),
+                string.Concat("SCREEN SHAKE  ", options.ScreenShakeStrength.ToString().ToUpperInvariant()),
+                string.Concat("AUDIO QUALITY  ", options.AudioQualityPreset.ToString().ToUpperInvariant()),
+                string.Concat("MASTER VOLUME  ", (int)(options.MasterVolume * 100f), "%"),
+                string.Concat("MUSIC VOLUME  ", (int)(options.MusicVolume * 100f), "%"),
+                string.Concat("SFX VOLUME  ", (int)(options.SfxVolume * 100f), "%"),
+                string.Concat("AUTO DRAFT  ", options.AutoUpgradeDraft ? "ON" : "OFF"),
+                string.Concat("HELP HINTS  ", options.ShowHelpHints ? "ON" : "OFF"),
+            };
+#endif
         }
 
         private static float AdjustVolume(float value, int delta)
         {
             float adjusted = value + delta * 0.05f;
             return MathF.Round(MathHelper.Clamp(adjusted, 0f, 1f) * 20f) / 20f;
+        }
+
+        private static float AdjustGameScale(float current, int delta)
+        {
+            int nearestIndex = 0;
+            float nearestDistance = float.MaxValue;
+            for (int i = 0; i < GameScaleOptions.Length; i++)
+            {
+                float distance = MathF.Abs(GameScaleOptions[i] - current);
+                if (distance < nearestDistance)
+                {
+                    nearestDistance = distance;
+                    nearestIndex = i;
+                }
+            }
+
+            int nextIndex = Math.Clamp(nearestIndex + delta, 0, GameScaleOptions.Length - 1);
+            return GameScaleOptions[nextIndex];
+        }
+
+        private void RandomizeTitleIntroPalette()
+        {
+            IntroPalette palette = IntroPalettes[titleVisualRandom.Next(IntroPalettes.Length)];
+            titleIntroBackgroundColor = palette.Background;
+            titleIntroGlowColorA = palette.GlowA;
+            titleIntroGlowColorB = palette.GlowB;
+            titleIntroPrimaryColor = palette.Primary;
+            titleIntroSecondaryColor = palette.Secondary;
+            titleIntroPromptColor = palette.Prompt;
+        }
+
+        private void DrawIntroBackdrop(SpriteBatch spriteBatch, Texture2D pixel)
+        {
+            Rectangle full = new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight);
+            spriteBatch.Draw(pixel, full, titleIntroBackgroundColor);
+
+            float time = (float)Game1.GameTime.TotalGameTime.TotalSeconds;
+            for (int i = 0; i < 80; i++)
+            {
+                float xSeed = MathF.Abs(MathF.Sin(i * 12.913f + 0.71f));
+                float ySeed = MathF.Abs(MathF.Sin(i * 31.137f + 2.31f));
+                float twinkle = 0.4f + 0.6f * MathF.Abs(MathF.Sin(time * (0.8f + i * 0.03f) + i));
+                int x = (int)(xSeed * (Game1.VirtualWidth - 8));
+                int y = (int)(18f + ySeed * (Game1.VirtualHeight - 36f));
+                int size = i % 9 == 0 ? 3 : 2;
+                spriteBatch.Draw(pixel, new Rectangle(x, y, size, size), Color.White * (0.12f + twinkle * 0.18f));
+            }
+
+            if (Game1.RadialTexture == null)
+                return;
+
+            Texture2D radial = Game1.RadialTexture;
+            Vector2 origin = new Vector2(radial.Width / 2f, radial.Height / 2f);
+            spriteBatch.Draw(radial, new Vector2(Game1.VirtualWidth * 0.18f, Game1.VirtualHeight * 0.24f), null, titleIntroGlowColorA * 0.18f, 0f, origin, 2.8f, SpriteEffects.None, 0f);
+            spriteBatch.Draw(radial, new Vector2(Game1.VirtualWidth * 0.82f, Game1.VirtualHeight * 0.2f), null, titleIntroGlowColorB * 0.16f, 0f, origin, 2.45f, SpriteEffects.None, 0f);
+            spriteBatch.Draw(radial, new Vector2(Game1.VirtualWidth * 0.56f, Game1.VirtualHeight * 0.72f), null, Color.Lerp(titleIntroGlowColorA, titleIntroGlowColorB, 0.5f) * 0.08f, 0f, origin, 3.2f, SpriteEffects.None, 0f);
         }
 
         private void DrawBackdrop(SpriteBatch spriteBatch, Texture2D pixel, float strength, string headline = "")
@@ -1959,7 +2152,10 @@ namespace SpaceBurst
         }
         private void DrawTitle(SpriteBatch spriteBatch, Texture2D pixel)
         {
-            DrawBackdrop(spriteBatch, pixel, 0.92f, "SEAMLESS CAMPAIGN WITH REWIND");
+            if (titleIntroActive)
+                DrawIntroBackdrop(spriteBatch, pixel);
+            else
+                DrawBackdrop(spriteBatch, pixel, 0.92f, "SEAMLESS CAMPAIGN WITH REWIND");
 
             if (titleIntroActive)
             {
@@ -1979,32 +2175,43 @@ namespace SpaceBurst
                 DrawButton(spriteBatch, pixel, buttons[i], i == titleSelection);
 
             if (!options.TutorialCompleted)
+            {
                 DrawCenteredText(spriteBatch, pixel, "FIRST LAUNCH STARTS THE TUTORIAL PROLOGUE", Game1.ScreenSize.X / 2f, 230f, Color.Orange * 0.9f, 1.25f);
+                DrawCenteredText(spriteBatch, pixel, "START WITHOUT TUTORIAL SKIPS IT IMMEDIATELY", Game1.ScreenSize.X / 2f, 254f, Color.White * 0.66f, 1.05f);
+            }
 
             DrawCenteredText(spriteBatch, pixel, "DEVELOPED BY SABINO SOFTWARE  RELEASED UNDER THE UNLICENSE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 150f, Color.White * 0.66f, 1.08f);
             string medalText = medals.CampaignClear
                 ? (medals.PerfectCampaign ? "PERFECT CAMPAIGN MEDAL UNLOCKED" : "CAMPAIGN CLEAR MEDAL UNLOCKED")
                 : "NO CAMPAIGN MEDALS YET";
             DrawCenteredText(spriteBatch, pixel, medalText, Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 116f, Color.White * 0.65f, 1.35f);
+#if ANDROID
+            DrawCenteredText(spriteBatch, pixel, "TAP A BUTTON TO NAVIGATE  HELP AND LEGAL ARE BELOW", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 82f, Color.White * 0.58f, 1.15f);
+#else
             DrawCenteredText(spriteBatch, pixel, "ENTER CONFIRM  F1 HELP  ARROWS OR POINTER NAVIGATE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 82f, Color.White * 0.58f, 1.15f);
+#endif
         }
 
         private void DrawSabinoIntro(SpriteBatch spriteBatch, Texture2D pixel)
         {
             Rectangle logoBounds = GetTitleLogoBounds();
-            DrawCenteredText(spriteBatch, pixel, "SABINO SOFTWARE", Game1.ScreenSize.X / 2f, logoBounds.Y + 72f, Color.White * 0.92f, 2.45f);
-            DrawCenteredText(spriteBatch, pixel, "PIXEL FOUNDRY", Game1.ScreenSize.X / 2f, logoBounds.Bottom - 46f, new Color(110, 193, 255) * 0.85f, 1.35f);
+            float progress = 1f - MathHelper.Clamp(titleIntroTimer / TitleIntroDurationSeconds, 0f, 1f);
+            float fade = MathHelper.Clamp(progress / 0.38f, 0f, 1f);
+            float promptPulse = 0.4f + 0.6f * MathF.Abs(MathF.Sin((float)Game1.GameTime.TotalGameTime.TotalSeconds * 4.2f));
+
+            DrawCenteredText(spriteBatch, pixel, "SABINO SOFTWARE", Game1.ScreenSize.X / 2f, logoBounds.Y + 72f, titleIntroPrimaryColor * (0.92f * fade), 2.45f);
+            DrawCenteredText(spriteBatch, pixel, "PIXEL FOUNDRY", Game1.ScreenSize.X / 2f, logoBounds.Bottom - 46f, titleIntroSecondaryColor * (0.88f * fade), 1.35f);
 
             for (int i = 0; i < introPixels.Count; i++)
             {
                 IntroPixel px = introPixels[i];
-                Color tint = px.Color * (titleIntroExploded ? 0.75f : 0.9f);
+                Color tint = px.Color * (titleIntroExploded ? 0.75f * fade : 0.92f * fade);
                 spriteBatch.Draw(pixel, new Rectangle((int)px.Position.X, (int)px.Position.Y, 4, 4), tint);
             }
 
-            float promptPulse = 0.4f + 0.6f * MathF.Abs(MathF.Sin((float)Game1.GameTime.TotalGameTime.TotalSeconds * 4.2f));
-            DrawCenteredText(spriteBatch, pixel, "TAP OR CLICK LOGO TO DETONATE + SKIP", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 120f, Color.White * (0.35f + promptPulse * 0.35f), 1.12f);
-            DrawCenteredText(spriteBatch, pixel, "GENERATING PROCEDURAL SYSTEMS...", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 86f, Color.White * 0.58f, 1.04f);
+            DrawCenteredText(spriteBatch, pixel, "TAP OR CLICK LOGO TO DETONATE + SKIP", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 120f, titleIntroPromptColor * ((0.35f + promptPulse * 0.35f) * fade), 1.12f);
+            DrawCenteredText(spriteBatch, pixel, "GENERATING PROCEDURAL SYSTEMS...", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 86f, titleIntroSecondaryColor * (0.62f * fade), 1.04f);
+            spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), Color.Black * (1f - fade));
         }
 
         private void DrawPause(SpriteBatch spriteBatch, Texture2D pixel)
@@ -2029,14 +2236,15 @@ namespace SpaceBurst
             DrawCenteredText(spriteBatch, pixel, "OPTIONS", Game1.ScreenSize.X / 2f, 112f, Color.White, 3f);
 
             string[] rows = GetOptionRows();
-            int rowHeight = 32;
-            int rowSpacing = 42;
+            int rowHeight = rows.Length > 12 ? 28 : 32;
+            int rowStep = rows.Length > 12 ? 34 : 42;
+            int top = rows.Length > 12 ? 156 : 172;
 
             for (int i = 0; i < rows.Length; i++)
             {
-                Rectangle rowBounds = new Rectangle(180, 172 + i * rowSpacing, 920, rowHeight);
+                Rectangle rowBounds = new Rectangle(180, top + i * rowStep, 920, rowHeight);
                 DrawPanel(spriteBatch, pixel, rowBounds, i == optionsSelection ? Color.White * 0.12f : Color.White * 0.05f, i == optionsSelection ? Color.Orange : Color.White * 0.2f);
-                BitmapFontRenderer.Draw(spriteBatch, pixel, rows[i], new Vector2(rowBounds.X + 18f, rowBounds.Y + 6f), Color.White, 1.15f);
+                BitmapFontRenderer.Draw(spriteBatch, pixel, rows[i], new Vector2(rowBounds.X + 18f, rowBounds.Y + 4f), Color.White, rows.Length > 12 ? 1.05f : 1.15f);
             }
 
             DrawCenteredText(spriteBatch, pixel, "LEFT RIGHT OR ENTER TO CHANGE  ESC TO CLOSE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 96f, Color.White * 0.75f, 1.1f);
@@ -2087,7 +2295,11 @@ namespace SpaceBurst
             switch (helpPageIndex)
             {
                 case 0:
+#if ANDROID
+                    DrawHelpPage(spriteBatch, pixel, "CONTROLS\nLEFT PAD MOVE  RIGHT PAD AIM AND FIRE\nTOP WEAPON HUD SWAPS STYLE  TOP STAGE CHIP PAUSES\nHOLD THE TOP RIGHT R BUTTON TO REWIND\nTAP HERE TO REPLAY THE TUTORIAL", 186f);
+#else
                     DrawHelpPage(spriteBatch, pixel, "CONTROLS\nWASD MOVE  ARROWS AIM  SPACE FIRE\nQ E SWITCH STYLE  R REWIND  ESC PAUSE  F1 HELP\nPRESS ENTER HERE TO REPLAY THE TUTORIAL", 186f);
+#endif
                     break;
                 case 1:
                     DrawHelpPage(spriteBatch, pixel, "POWER CORES\nEACH P CORE MATCHES A WEAPON STYLE\nMATCH YOUR ACTIVE STYLE TO BOOST IT IMMEDIATELY UP TO LEVEL 3\nOTHER CORES STORE STYLE SPECIFIC CHARGES FOR TRANSITION DRAFTS\nIF TIME RUNS OUT THE HIGHLIGHTED CARD IS AUTO PICKED", 186f);
@@ -2111,7 +2323,11 @@ namespace SpaceBurst
                     break;
             }
 
+#if ANDROID
+            DrawCenteredText(spriteBatch, pixel, helpPageIndex == 0 ? "LEFT RIGHT TO CHANGE PAGE  TAP TO REPLAY TUTORIAL  TAP BACK TO CLOSE" : "LEFT RIGHT TO CHANGE PAGE  TAP BACK TO CLOSE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 120f, Color.White * 0.75f, 1.22f);
+#else
             DrawCenteredText(spriteBatch, pixel, helpPageIndex == 0 ? "LEFT RIGHT TO CHANGE PAGE  ENTER TO REPLAY TUTORIAL  ESC TO CLOSE" : "LEFT RIGHT TO CHANGE PAGE  ENTER ESC F1 TO CLOSE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 120f, Color.White * 0.75f, 1.35f);
+#endif
         }
 
         private void DrawWeaponIcons(SpriteBatch spriteBatch, Texture2D pixel, float y, int startIndex, int count)
@@ -2187,8 +2403,8 @@ namespace SpaceBurst
             DrawCenteredText(spriteBatch, pixel, stageSubLabel, stageBounds.Center.X, stageBounds.Y + 46f, !string.IsNullOrEmpty(activeEventWarning) ? Color.Orange : Color.White * 0.7f, GetFittedScale(stageSubLabel, stageBounds.Width - 20f, 1.08f, 0.82f));
 #if ANDROID
             Rectangle pauseChip = HudLayoutCalculator.GetAndroidPauseChipBounds(layout);
-            DrawPanel(spriteBatch, pixel, pauseChip, Color.Black * 0.24f, Color.White * 0.25f);
-            BitmapFontRenderer.Draw(spriteBatch, pixel, "II", new Vector2(pauseChip.X + 3f, pauseChip.Y + 2f), Color.White, 0.96f);
+            DrawPanel(spriteBatch, pixel, pauseChip, Color.Black * 0.3f, Color.Orange * 0.42f);
+            DrawCenteredText(spriteBatch, pixel, "PAUSE", pauseChip.Center.X, pauseChip.Y + 5f, Color.White, 0.84f);
 #endif
 
             BitmapFontRenderer.Draw(spriteBatch, pixel, "PITY", new Vector2(pityBounds.X + 12f, pityBounds.Y + 10f), Color.White, 1.25f);
@@ -2378,7 +2594,7 @@ namespace SpaceBurst
             BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("TUTORIAL ", stepIndex.ToString(), " / 8  ", title), new Vector2(panel.X + 16f, panel.Y + 12f), Color.White, 1.35f);
             BitmapFontRenderer.Draw(spriteBatch, pixel, body, new Vector2(panel.X + 16f, panel.Y + 38f), Color.White * 0.82f, 1.15f);
 #if ANDROID
-            BitmapFontRenderer.Draw(spriteBatch, pixel, "WEAPON HUD SWAPS  STAGE CHIP PAUSES", new Vector2(panel.X + 16f, panel.Bottom - 24f), Color.White * 0.6f, 0.95f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, "WEAPON HUD SWAPS  PAUSE CHIP OPENS SKIP MENU", new Vector2(panel.X + 16f, panel.Bottom - 24f), Color.White * 0.6f, 0.87f);
 #else
             BitmapFontRenderer.Draw(spriteBatch, pixel, "ESC PAUSE  F1 HELP", new Vector2(panel.X + 16f, panel.Bottom - 24f), Color.White * 0.6f, 0.95f);
 #endif

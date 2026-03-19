@@ -6,6 +6,7 @@ namespace SpaceBurst
         public bool TutorialCompleted { get; set; }
         public bool AutoUpgradeDraft { get; set; }
         public DesktopDisplayMode DisplayMode { get; set; } = DesktopDisplayMode.BorderlessFullscreen;
+        public float GameScale { get; set; } = 1f;
         public VisualPreset VisualPreset { get; set; } = VisualPreset.Standard;
         public bool EnableBloom { get; set; } = true;
         public bool EnableShockwaves { get; set; } = true;

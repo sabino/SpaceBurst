@@ -115,6 +115,11 @@ namespace SpaceBurst
             get { return campaignDirector != null && campaignDirector.EnableNeonOutlines; }
         }
 
+        private float CurrentGameScale
+        {
+            get { return campaignDirector != null ? campaignDirector.GameScale : startupOptions.GameScale; }
+        }
+
         public VisualPreset VisualPreset
         {
             get { return campaignDirector != null ? campaignDirector.VisualPreset : VisualPreset.Standard; }
@@ -358,7 +363,8 @@ namespace SpaceBurst
             UpdateVirtualResolution();
 
             Viewport viewport = GraphicsDevice.Viewport;
-            float scale = Math.Min(viewport.Width / (float)virtualWidth, viewport.Height / (float)virtualHeight);
+            float fitScale = Math.Min(viewport.Width / (float)virtualWidth, viewport.Height / (float)virtualHeight);
+            float scale = fitScale * MathHelper.Clamp(CurrentGameScale, 0.8f, 1.2f);
             if (scale <= 0f)
                 scale = 1f;
 
