@@ -85,6 +85,11 @@ namespace SpaceBurst
             get { return campaignDirector != null ? campaignDirector.CurrentPowerDropBonusChance : 0f; }
         }
 
+        internal CampaignDirector CampaignDirector
+        {
+            get { return campaignDirector; }
+        }
+
         public DeterministicRngState GameplayRandom
         {
             get { return campaignDirector != null ? campaignDirector.GameplayRandom : null; }
@@ -368,6 +373,16 @@ namespace SpaceBurst
 
         private void UpdateVirtualResolution()
         {
+#if ANDROID
+            int backBufferWidth = graphics.PreferredBackBufferWidth > 0 ? graphics.PreferredBackBufferWidth : GraphicsDevice.PresentationParameters.BackBufferWidth;
+            int backBufferHeight = graphics.PreferredBackBufferHeight > 0 ? graphics.PreferredBackBufferHeight : GraphicsDevice.PresentationParameters.BackBufferHeight;
+            if (backBufferWidth > 0 && backBufferHeight > 0)
+            {
+                virtualWidth = backBufferWidth;
+                virtualHeight = backBufferHeight;
+                return;
+            }
+#endif
             virtualWidth = VirtualBaseWidth;
             virtualHeight = VirtualBaseHeight;
         }

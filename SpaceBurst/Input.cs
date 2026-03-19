@@ -26,6 +26,9 @@ namespace SpaceBurst
         private static int movementTouchId = -1;
         private static int aimTouchId = -1;
         private static int rewindTouchId = -1;
+        private static bool touchPausePressed;
+        private static bool touchStyleCyclePressed;
+        private static int touchTopButtonId = -1;
         private static Vector2 movementTouchOrigin;
         private static Vector2 movementTouchPosition;
         private static Vector2 aimTouchOrigin;
@@ -83,6 +86,10 @@ namespace SpaceBurst
 
         public static bool WasCancelPressed()
         {
+#if ANDROID
+            if (touchPausePressed)
+                return true;
+#endif
             return WasKeyPressed(Keys.Escape) || WasButtonPressed(Buttons.Back) || WasButtonPressed(Buttons.B);
         }
 
@@ -98,6 +105,10 @@ namespace SpaceBurst
 
         public static bool WasNextStylePressed()
         {
+#if ANDROID
+            if (touchStyleCyclePressed)
+                return true;
+#endif
             return WasKeyPressed(Keys.E) || WasButtonPressed(Buttons.DPadRight);
         }
 
@@ -186,10 +197,22 @@ namespace SpaceBurst
         private static void UpdateTouchState()
         {
             TouchCollection touches = TouchPanel.GetState();
+            pointerPosition = Game1.ScreenSize / 2f;
+            touchPausePressed = false;
+            touchStyleCyclePressed = false;
+            fireHeld = false;
+            rewindHeld = false;
+
+            if (!ShouldUseGameplayTouchControls())
+            {
+                ResetGameplayTouchState();
+                UpdateMenuTouchState(touches);
+                return;
+            }
+
             Rectangle gameplayBounds = Game1.RenderBounds;
             float stickRadius = GetStickRadius(gameplayBounds);
             Vector2 movementOrigin = GetMovementStickOrigin(gameplayBounds, stickRadius);
-            pointerPosition = Game1.ScreenSize / 2f;
 
             bool movementFound = false;
             bool aimFound = false;
@@ -197,6 +220,10 @@ namespace SpaceBurst
             fireHeld = aimTouchId != -1;
             rewindHeld = false;
             Rectangle rewindBounds = GetRewindButtonBounds(gameplayBounds, stickRadius);
+            HudLayout layout = GetTouchHudLayout();
+            Rectangle weaponBounds = HudLayoutCalculator.GetAndroidWeaponTouchBounds(layout);
+            Rectangle pauseBounds = HudLayoutCalculator.GetAndroidPauseChipBounds(layout);
+            bool topButtonFound = false;
 
             foreach (TouchLocation touch in touches)
             {
@@ -214,6 +241,12 @@ namespace SpaceBurst
                 {
                     rewindFound = true;
                     rewindHeld = true;
+                    continue;
+                }
+
+                if (touch.Id == touchTopButtonId)
+                {
+                    topButtonFound = true;
                     continue;
                 }
 
@@ -237,6 +270,18 @@ namespace SpaceBurst
                     rewindTouchId = touch.Id;
                     rewindFound = true;
                     rewindHeld = true;
+                }
+                else if (weaponBounds.Contains(screenPosition))
+                {
+                    touchTopButtonId = touch.Id;
+                    topButtonFound = true;
+                    touchStyleCyclePressed = touch.State == TouchLocationState.Pressed;
+                }
+                else if (pauseBounds.Contains(screenPosition))
+                {
+                    touchTopButtonId = touch.Id;
+                    topButtonFound = true;
+                    touchPausePressed = touch.State == TouchLocationState.Pressed;
                 }
                 else if (screenPosition.X < gameplayBounds.Center.X)
                 {
@@ -274,6 +319,8 @@ namespace SpaceBurst
 
             if (!rewindFound)
                 rewindTouchId = -1;
+            if (!topButtonFound)
+                touchTopButtonId = -1;
 
             touchMovementDirection = GetVirtualStickDirection(movementTouchOrigin, movementTouchPosition, stickRadius);
 
@@ -352,6 +399,54 @@ namespace SpaceBurst
                 (int)(gameplayBounds.Top + margin),
                 size,
                 size);
+        }
+
+        private static bool ShouldUseGameplayTouchControls()
+        {
+            return Game1.Instance?.CampaignDirector != null && Game1.Instance.CampaignDirector.ShouldDrawTouchControls;
+        }
+
+        private static void UpdateMenuTouchState(TouchCollection touches)
+        {
+            foreach (TouchLocation touch in touches)
+            {
+                Vector2 screenPosition = Vector2.Clamp(
+                    touch.Position,
+                    Vector2.Zero,
+                    Game1.ScreenSize - Vector2.One);
+
+                pointerPosition = Game1.ScreenToWorld(screenPosition);
+                if (touch.State == TouchLocationState.Pressed)
+                    primaryActionPressed = true;
+            }
+        }
+
+        private static void ResetGameplayTouchState()
+        {
+            movementTouchId = -1;
+            aimTouchId = -1;
+            rewindTouchId = -1;
+            touchTopButtonId = -1;
+            movementTouchOrigin = Vector2.Zero;
+            movementTouchPosition = Vector2.Zero;
+            aimTouchOrigin = Vector2.Zero;
+            aimTouchPosition = Vector2.Zero;
+            touchMovementDirection = Vector2.Zero;
+            touchAimDirection = Vector2.Zero;
+        }
+
+        private static HudLayout GetTouchHudLayout()
+        {
+            CampaignDirector director = Game1.Instance?.CampaignDirector;
+            WeaponInventoryState inventory = PlayerStatus.RunProgress.Weapons;
+            return HudLayoutCalculator.Calculate(
+                Game1.VirtualWidth,
+                director != null ? director.CurrentState : GameFlowState.Playing,
+                director != null ? director.CurrentStageNumber : 1,
+                director != null ? director.TransitionTargetStageNumber : 0,
+                director != null && director.TransitionToBoss,
+                inventory,
+                PlayerStatus.Score);
         }
 
         private static float GetStickRadius(Rectangle gameplayBounds)

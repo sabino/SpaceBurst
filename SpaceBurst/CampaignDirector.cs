@@ -17,6 +17,8 @@ namespace SpaceBurst
         private const float RewindSnapshotInterval = 1f / 30f;
         private const int HelpPageCount = 7;
         private const int AboutHelpPageIndex = 5;
+        private const float TitleIntroDurationSeconds = 2.8f;
+        private const float TitleIntroSkipDurationSeconds = 0.7f;
 
         private const string AboutHelpText =
             "ABOUT SPACEBURST\n" +
@@ -95,6 +97,19 @@ namespace SpaceBurst
         private bool tutorialReplayMode;
         private TutorialStep tutorialStep;
         private float tutorialProgressSeconds;
+        private bool titleIntroActive = true;
+        private bool titleIntroSeen;
+        private bool titleIntroExploded;
+        private float titleIntroTimer = TitleIntroDurationSeconds;
+        private readonly List<IntroPixel> introPixels = new List<IntroPixel>();
+
+        private struct IntroPixel
+        {
+            public Vector2 Position;
+            public Vector2 Velocity;
+            public Vector2 Target;
+            public Color Color;
+        }
 
         public CampaignDirector()
         {
@@ -435,6 +450,11 @@ namespace SpaceBurst
         }
         private void UpdateTitle()
         {
+            float deltaSeconds = (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
+            UpdateTitleIntro(deltaSeconds);
+            if (titleIntroActive)
+                return;
+
             List<UiButton> buttons = GetTitleButtons();
             UpdateVerticalSelection(ref titleSelection, buttons.Count);
             HandlePointerSelection(buttons, ref titleSelection);
@@ -1027,8 +1047,116 @@ namespace SpaceBurst
             draftFromTutorial = false;
             tutorialStep = TutorialStep.Move;
             tutorialProgressSeconds = 0f;
+            if (!titleIntroSeen)
+                ResetTitleIntro();
+            else
+            {
+                titleIntroActive = false;
+                titleIntroExploded = true;
+                titleIntroTimer = 0f;
+                introPixels.Clear();
+            }
             EntityManager.Reset();
             ResetRewindBuffer();
+        }
+
+        private void ResetTitleIntro()
+        {
+            titleIntroActive = true;
+            titleIntroExploded = false;
+            titleIntroTimer = TitleIntroDurationSeconds;
+            introPixels.Clear();
+
+            Rectangle logo = GetTitleLogoBounds();
+            int columns = 56;
+            int rows = 18;
+            float spacingX = logo.Width / (float)columns;
+            float spacingY = logo.Height / (float)rows;
+
+            for (int y = 0; y < rows; y++)
+            {
+                for (int x = 0; x < columns; x++)
+                {
+                    if ((x + y) % 3 == 1)
+                        continue;
+
+                    Vector2 target = new Vector2(logo.Left + spacingX * (x + 0.5f), logo.Top + spacingY * (y + 0.5f));
+                    float seed = MathF.Abs(MathF.Sin((x + 1) * 12.73f + (y + 1) * 19.19f));
+                    Vector2 start = new Vector2(target.X, -64f - seed * 320f - y * 8f);
+                    Color color = Color.Lerp(new Color(110, 193, 255), new Color(246, 198, 116), MathF.Abs(MathF.Sin((x + y) * 0.37f)));
+
+                    introPixels.Add(new IntroPixel
+                    {
+                        Position = start,
+                        Velocity = new Vector2((seed - 0.5f) * 42f, 220f + seed * 180f),
+                        Target = target,
+                        Color = color
+                    });
+                }
+            }
+        }
+
+        private void UpdateTitleIntro(float deltaSeconds)
+        {
+            if (!titleIntroActive)
+                return;
+
+            titleIntroTimer -= deltaSeconds;
+            Rectangle logoBounds = GetTitleLogoBounds();
+            if (Input.WasPrimaryActionPressed() && logoBounds.Contains(Input.PointerPosition))
+                TriggerIntroExplosion();
+
+            for (int i = 0; i < introPixels.Count; i++)
+            {
+                IntroPixel pixel = introPixels[i];
+                if (!titleIntroExploded)
+                {
+                    Vector2 toTarget = pixel.Target - pixel.Position;
+                    pixel.Velocity += toTarget * MathF.Min(9f * deltaSeconds, 0.28f);
+                    pixel.Velocity *= 0.94f;
+                }
+                else
+                {
+                    pixel.Velocity *= 0.985f;
+                }
+
+                pixel.Position += pixel.Velocity * deltaSeconds;
+                introPixels[i] = pixel;
+            }
+
+            if (titleIntroTimer <= 0f)
+            {
+                titleIntroActive = false;
+                titleIntroSeen = true;
+            }
+        }
+
+        private void TriggerIntroExplosion()
+        {
+            if (titleIntroExploded)
+                return;
+
+            titleIntroExploded = true;
+            titleIntroTimer = Math.Min(titleIntroTimer, TitleIntroSkipDurationSeconds);
+            Rectangle logoBounds = GetTitleLogoBounds();
+            Vector2 origin = new Vector2(logoBounds.Center.X, logoBounds.Center.Y);
+            for (int i = 0; i < introPixels.Count; i++)
+            {
+                IntroPixel pixel = introPixels[i];
+                Vector2 direction = pixel.Position - origin;
+                if (direction == Vector2.Zero)
+                    direction = new Vector2(0f, -1f);
+                direction.Normalize();
+                pixel.Velocity = direction * (220f + (i % 13) * 16f);
+                introPixels[i] = pixel;
+            }
+        }
+
+        private static Rectangle GetTitleLogoBounds()
+        {
+            int width = Math.Min(Game1.VirtualWidth - 280, 760);
+            int height = Math.Min(Game1.VirtualHeight / 3, 210);
+            return new Rectangle((Game1.VirtualWidth - width) / 2, 96, width, height);
         }
 
         private void EnterEndState(GameFlowState endState, string text)
@@ -1833,6 +1961,12 @@ namespace SpaceBurst
         {
             DrawBackdrop(spriteBatch, pixel, 0.92f, "SEAMLESS CAMPAIGN WITH REWIND");
 
+            if (titleIntroActive)
+            {
+                DrawSabinoIntro(spriteBatch, pixel);
+                return;
+            }
+
             Rectangle shell = new Rectangle(150, 62, Game1.VirtualWidth - 300, Game1.VirtualHeight - 124);
             DrawPanel(spriteBatch, pixel, shell, Color.Black * 0.18f, Color.White * 0.15f);
 
@@ -1853,6 +1987,24 @@ namespace SpaceBurst
                 : "NO CAMPAIGN MEDALS YET";
             DrawCenteredText(spriteBatch, pixel, medalText, Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 116f, Color.White * 0.65f, 1.35f);
             DrawCenteredText(spriteBatch, pixel, "ENTER CONFIRM  F1 HELP  ARROWS OR POINTER NAVIGATE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 82f, Color.White * 0.58f, 1.15f);
+        }
+
+        private void DrawSabinoIntro(SpriteBatch spriteBatch, Texture2D pixel)
+        {
+            Rectangle logoBounds = GetTitleLogoBounds();
+            DrawCenteredText(spriteBatch, pixel, "SABINO SOFTWARE", Game1.ScreenSize.X / 2f, logoBounds.Y + 72f, Color.White * 0.92f, 2.45f);
+            DrawCenteredText(spriteBatch, pixel, "PIXEL FOUNDRY", Game1.ScreenSize.X / 2f, logoBounds.Bottom - 46f, new Color(110, 193, 255) * 0.85f, 1.35f);
+
+            for (int i = 0; i < introPixels.Count; i++)
+            {
+                IntroPixel px = introPixels[i];
+                Color tint = px.Color * (titleIntroExploded ? 0.75f : 0.9f);
+                spriteBatch.Draw(pixel, new Rectangle((int)px.Position.X, (int)px.Position.Y, 4, 4), tint);
+            }
+
+            float promptPulse = 0.4f + 0.6f * MathF.Abs(MathF.Sin((float)Game1.GameTime.TotalGameTime.TotalSeconds * 4.2f));
+            DrawCenteredText(spriteBatch, pixel, "TAP OR CLICK LOGO TO DETONATE + SKIP", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 120f, Color.White * (0.35f + promptPulse * 0.35f), 1.12f);
+            DrawCenteredText(spriteBatch, pixel, "GENERATING PROCEDURAL SYSTEMS...", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 86f, Color.White * 0.58f, 1.04f);
         }
 
         private void DrawPause(SpriteBatch spriteBatch, Texture2D pixel)
@@ -1990,10 +2142,6 @@ namespace SpaceBurst
 
         private void DrawHud(SpriteBatch spriteBatch, Texture2D pixel)
         {
-            const int margin = 12;
-            const int gap = 10;
-            const int top = 10;
-            const int height = 88;
             float hudPulse = Game1.Instance?.HudPulse ?? 0f;
             float pickupPulse = Game1.Instance?.PickupPulse ?? 0f;
             WeaponInventoryState inventory = PlayerStatus.RunProgress.Weapons;
@@ -2007,33 +2155,13 @@ namespace SpaceBurst
                 _ => string.Concat("STAGE ", currentStageNumber.ToString("00")),
             };
             string scoreLabel = string.Concat("SCORE ", PlayerStatus.Score.ToString());
-            int totalWidth = Game1.VirtualWidth - margin * 2 - gap * 5;
-            int livesWidth = MeasureHudWidth(string.Concat("LIVES ", PlayerStatus.Lives.ToString()), 2f, 40, 200);
-            int activeWidth = MeasureHudWidth(activeStyle.DisplayName, 1.8f, 110, 220);
-            int stageWidth = MeasureHudWidth(stageLabel, 1.7f, 54, 170);
-            int pityWidth = 190;
-            int scoreWidth = MeasureHudWidth(scoreLabel, 1.65f, 186, 272);
-            int ownedWidth = totalWidth - livesWidth - activeWidth - stageWidth - pityWidth - scoreWidth;
-            if (ownedWidth < 180)
-            {
-                int deficit = 180 - ownedWidth;
-                int reduceScore = System.Math.Min(deficit, System.Math.Max(0, scoreWidth - 240));
-                scoreWidth -= reduceScore;
-                deficit -= reduceScore;
-                int reduceActive = System.Math.Min(deficit, System.Math.Max(0, activeWidth - 200));
-                activeWidth -= reduceActive;
-                deficit -= reduceActive;
-                int reduceStage = System.Math.Min(deficit, System.Math.Max(0, stageWidth - 150));
-                stageWidth -= reduceStage;
-                ownedWidth = totalWidth - livesWidth - activeWidth - stageWidth - pityWidth - scoreWidth;
-            }
-
-            Rectangle livesBounds = new Rectangle(margin, top, livesWidth, height);
-            Rectangle activeBounds = new Rectangle(livesBounds.Right + gap, top, activeWidth, height);
-            Rectangle ownedBounds = new Rectangle(activeBounds.Right + gap, top, ownedWidth, height);
-            Rectangle stageBounds = new Rectangle(ownedBounds.Right + gap, top, stageWidth, height);
-            Rectangle pityBounds = new Rectangle(stageBounds.Right + gap, top, pityWidth, height);
-            Rectangle scoreBounds = new Rectangle(pityBounds.Right + gap, top, scoreWidth, height);
+            HudLayout layout = HudLayoutCalculator.Calculate(Game1.VirtualWidth, state, currentStageNumber, transitionTargetStageNumber, transitionToBoss, inventory, PlayerStatus.Score);
+            Rectangle livesBounds = layout.LivesBounds;
+            Rectangle activeBounds = layout.ActiveBounds;
+            Rectangle ownedBounds = layout.OwnedBounds;
+            Rectangle stageBounds = layout.StageBounds;
+            Rectangle pityBounds = layout.PityBounds;
+            Rectangle scoreBounds = layout.ScoreBounds;
 
             DrawPanel(spriteBatch, pixel, livesBounds, Color.Black * (0.22f + hudPulse * 0.05f), Color.White * (0.18f + hudPulse * 0.08f));
             DrawPanel(spriteBatch, pixel, activeBounds, Color.Black * (0.18f + pickupPulse * 0.06f), Color.White * (0.14f + pickupPulse * 0.12f));
@@ -2048,12 +2176,20 @@ namespace SpaceBurst
 
             DrawStyleHud(spriteBatch, pixel, activeBounds);
             DrawOwnedStyleHud(spriteBatch, pixel, ownedBounds, inventory);
+#if ANDROID
+            BitmapFontRenderer.Draw(spriteBatch, pixel, "TAP WEAPONS TO SWAP", new Vector2(ownedBounds.X + 12f, ownedBounds.Y + 24f), Color.White * 0.4f, 0.78f);
+#endif
 
             DrawCenteredText(spriteBatch, pixel, stageLabel, stageBounds.Center.X, stageBounds.Y + 14f, Color.White, GetFittedScale(stageLabel, stageBounds.Width - 20f, 1.7f, 1.15f));
             string stageSubLabel = state == GameFlowState.StageTransition
                 ? (transitionToBoss ? "THREAT LOCK" : "FTL TRANSIT")
                 : (!string.IsNullOrEmpty(activeEventWarning) ? activeEventWarning : (state == GameFlowState.Tutorial ? tutorialStep.ToString().ToUpperInvariant() : currentStage?.Name?.ToUpperInvariant() ?? "RUN"));
             DrawCenteredText(spriteBatch, pixel, stageSubLabel, stageBounds.Center.X, stageBounds.Y + 46f, !string.IsNullOrEmpty(activeEventWarning) ? Color.Orange : Color.White * 0.7f, GetFittedScale(stageSubLabel, stageBounds.Width - 20f, 1.08f, 0.82f));
+#if ANDROID
+            Rectangle pauseChip = HudLayoutCalculator.GetAndroidPauseChipBounds(layout);
+            DrawPanel(spriteBatch, pixel, pauseChip, Color.Black * 0.24f, Color.White * 0.25f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, "II", new Vector2(pauseChip.X + 3f, pauseChip.Y + 2f), Color.White, 0.96f);
+#endif
 
             BitmapFontRenderer.Draw(spriteBatch, pixel, "PITY", new Vector2(pityBounds.X + 12f, pityBounds.Y + 10f), Color.White, 1.25f);
             DrawBar(spriteBatch, pixel, new Rectangle(pityBounds.X + 12, pityBounds.Y + 34, pityBounds.Width - 24, 12), PlayerStatus.RunProgress.Powerups.PityMeter, Color.Lerp(Color.Orange, Color.White, pickupPulse * 0.35f));
@@ -2143,11 +2279,6 @@ namespace SpaceBurst
 
             if (chargedStyles.Count > visibleCount)
                 BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("+", (chargedStyles.Count - visibleCount).ToString()), new Vector2(bounds.Right - 28f, bounds.Y + 55f), Color.White * 0.7f, 0.95f);
-        }
-
-        private static int MeasureHudWidth(string text, float scale, int padding, int minimum)
-        {
-            return System.Math.Max(minimum, (int)System.MathF.Ceiling(BitmapFontRenderer.Measure(text, scale).X) + padding);
         }
 
         private static float GetFittedScale(string text, float maxWidth, float preferredScale, float minimumScale)
@@ -2246,7 +2377,11 @@ namespace SpaceBurst
             GetTutorialPrompt(out title, out body, out stepIndex);
             BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("TUTORIAL ", stepIndex.ToString(), " / 8  ", title), new Vector2(panel.X + 16f, panel.Y + 12f), Color.White, 1.35f);
             BitmapFontRenderer.Draw(spriteBatch, pixel, body, new Vector2(panel.X + 16f, panel.Y + 38f), Color.White * 0.82f, 1.15f);
+#if ANDROID
+            BitmapFontRenderer.Draw(spriteBatch, pixel, "WEAPON HUD SWAPS  STAGE CHIP PAUSES", new Vector2(panel.X + 16f, panel.Bottom - 24f), Color.White * 0.6f, 0.95f);
+#else
             BitmapFontRenderer.Draw(spriteBatch, pixel, "ESC PAUSE  F1 HELP", new Vector2(panel.X + 16f, panel.Bottom - 24f), Color.White * 0.6f, 0.95f);
+#endif
         }
 
         private void DrawUpgradeDraft(SpriteBatch spriteBatch, Texture2D pixel)
@@ -2295,22 +2430,38 @@ namespace SpaceBurst
                 case TutorialStep.Move:
                     stepIndex = 1;
                     title = "MOVE";
+#if ANDROID
+                    body = "DRAG THE LEFT PAD TO ROAM THE FIELD. KEEP MOVING FOR A MOMENT TO CONTINUE.";
+#else
                     body = "USE WASD TO ROAM THE FIELD. KEEP MOVING FOR A MOMENT TO CONTINUE.";
+#endif
                     break;
                 case TutorialStep.Aim:
                     stepIndex = 2;
                     title = "AIM";
+#if ANDROID
+                    body = "DRAG THE RIGHT PAD TO AIM THE CANNON. KEEP IT OFF CENTER FOR A MOMENT.";
+#else
                     body = "USE THE ARROW KEYS TO SWING THE CANNON. KEEP IT OFF CENTER FOR A MOMENT.";
+#endif
                     break;
                 case TutorialStep.Fire:
                     stepIndex = 3;
                     title = "FIRE";
+#if ANDROID
+                    body = "HOLD THE RIGHT PAD TO FIRE FORWARD. BREAK THE TRAINING TARGET TO ADVANCE.";
+#else
                     body = "PRESS SPACE TO FIRE FORWARD. BREAK THE TRAINING TARGET TO ADVANCE.";
+#endif
                     break;
                 case TutorialStep.Rewind:
                     stepIndex = 4;
                     title = "REWIND";
+#if ANDROID
+                    body = "TOUCH AND HOLD THE TOP-RIGHT R BUTTON TO REWIND. IT STARTS SLOW, THEN ACCELERATES.";
+#else
                     body = "HOLD R. REWIND STARTS VERY SLOW AND SPEEDS UP THE LONGER YOU HOLD IT.";
+#endif
                     break;
                 case TutorialStep.CollectPower:
                     stepIndex = 5;
@@ -2325,12 +2476,20 @@ namespace SpaceBurst
                 case TutorialStep.SwitchStyle:
                     stepIndex = 7;
                     title = "STYLE SWAP";
+#if ANDROID
+                    body = "TAP THE WEAPON HUD AT THE TOP TO ROTATE OWNED STYLES. THE HUD CAROUSEL SHOWS YOUR LOADOUT.";
+#else
                     body = "PRESS Q OR E TO ROTATE BETWEEN OWNED STYLES. THE HUD CAROUSEL SHOWS WHAT YOU HAVE.";
+#endif
                     break;
                 case TutorialStep.ShipsAndLives:
                     stepIndex = 8;
                     title = "SHIPS AND LIVES";
+#if ANDROID
+                    body = "SHIPS RESPAWN YOU IN PLACE. RUN OUT OF SHIPS AND A LIFE IS SPENT TO RESTART THE STAGE. TAP TO CONTINUE.";
+#else
                     body = "SHIPS RESPAWN YOU IN PLACE. RUN OUT OF SHIPS AND THE NEXT DEATH SPENDS A LIFE TO RESTART THE STAGE. PRESS ENTER.";
+#endif
                     break;
                 default:
                     stepIndex = 8;
