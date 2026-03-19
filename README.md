@@ -49,7 +49,7 @@ License: **The Unlicense**
 ## Release Downloads
 
 - Releases: [github.com/sabino/SpaceBurst/releases](https://github.com/sabino/SpaceBurst/releases)
-- Documentation: [sabino.github.io/SpaceBurst](https://sabino.github.io/SpaceBurst/)
+- Documentation: [sabino.pro/SpaceBurst](http://sabino.pro/SpaceBurst/)
 
 ## Local Build
 

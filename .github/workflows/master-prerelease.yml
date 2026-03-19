@@ -204,7 +204,7 @@ jobs:
             echo
             echo "Commit: ${GITHUB_SHA}"
             echo "Developer: Sabino Software"
-            echo "Docs: https://sabino.github.io/SpaceBurst/"
+            echo "Docs: http://sabino.pro/SpaceBurst/"
             echo "License: The Unlicense"
             echo
             echo "Included assets:"
