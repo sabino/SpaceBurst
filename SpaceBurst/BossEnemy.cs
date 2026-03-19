@@ -35,6 +35,16 @@ namespace SpaceBurst
             get { return definition.DisplayName; }
         }
 
+        public BossDefinition Definition
+        {
+            get { return definition; }
+        }
+
+        internal override float PresentationScaleMultiplier
+        {
+            get { return Math.Max(1f, definition.PresentationScale); }
+        }
+
         public IReadOnlyList<float> PhaseThresholds
         {
             get { return phaseThresholds; }
@@ -127,6 +137,7 @@ namespace SpaceBurst
                     break;
 
                 case BossType.FinalBoss:
+                case BossType.CombinedBossSixth:
                     if (currentPhase % 2 == 0)
                     {
                         desiredX = Game1.ScreenSize.X * 0.74f + (float)Math.Cos(phase * 0.7f) * 80f;
@@ -183,11 +194,22 @@ namespace SpaceBurst
                     break;
 
                 default:
-                    SpawnBullet(new Vector2(-1f, -0.35f));
-                    SpawnBullet(new Vector2(-1f, -0.15f));
-                    SpawnBullet(new Vector2(-1f, 0f));
-                    SpawnBullet(new Vector2(-1f, 0.15f));
-                    SpawnBullet(new Vector2(-1f, 0.35f));
+                    float fanStep = definition.Type == BossType.CombinedBossSixth ? 0.12f : 0.17f;
+                    int fanCount = definition.Type == BossType.CombinedBossSixth ? 7 : 5;
+                    int fanHalf = fanCount / 2;
+                    for (int index = -fanHalf; index <= fanHalf; index++)
+                        SpawnBullet(new Vector2(-1f, index * fanStep));
+
+                    if (definition.Type == BossType.CombinedBossSixth && currentPhase >= 1)
+                    {
+                        Vector2 combinedAimed = Player1.Instance.Position - Position;
+                        if (combinedAimed == Vector2.Zero)
+                            combinedAimed = -Vector2.UnitX;
+                        else
+                            combinedAimed.Normalize();
+
+                        SpawnBullet(combinedAimed);
+                    }
                     break;
             }
         }
@@ -239,6 +261,24 @@ namespace SpaceBurst
                         FirePatternOverride = FirePattern.SpreadPulse,
                         Amplitude = 72f + currentPhase * 8f,
                         Frequency = 0.8f + currentPhase * 0.1f,
+                    });
+                    break;
+
+                case BossType.CombinedBossSixth:
+                    pendingSupportGroups.Enqueue(new SpawnGroupDefinition
+                    {
+                        ArchetypeId = currentPhase % 3 == 0 ? "Bulwark" : (currentPhase % 2 == 0 ? "Destroyer" : "Carrier"),
+                        StartSeconds = 0f,
+                        Lane = currentPhase % 5,
+                        Count = 4 + currentPhase,
+                        SpawnLeadDistance = 320f,
+                        SpawnIntervalSeconds = 0.2f,
+                        SpacingX = 92f,
+                        SpeedMultiplier = 1.12f + currentPhase * 0.12f,
+                        MovePatternOverride = currentPhase % 2 == 0 ? MovePattern.Dive : MovePattern.SineWave,
+                        FirePatternOverride = FirePattern.SpreadPulse,
+                        Amplitude = 68f + currentPhase * 10f,
+                        Frequency = 0.9f + currentPhase * 0.12f,
                     });
                     break;
 

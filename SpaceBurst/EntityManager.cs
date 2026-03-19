@@ -24,6 +24,11 @@ namespace SpaceBurst
             get { return enemies; }
         }
 
+        public static IEnumerable<Entity> AllEntities
+        {
+            get { return entities; }
+        }
+
         public static IEnumerable<PowerupPickup> Powerups
         {
             get { return powerups; }

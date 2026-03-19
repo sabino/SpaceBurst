@@ -43,6 +43,26 @@ namespace SpaceBurst
             get { return sprite == null ? Vector2.Zero : sprite.WorldSize * RenderScale; }
         }
 
+        internal ProceduralSpriteInstance SpriteInstance
+        {
+            get { return sprite; }
+        }
+
+        internal Color RenderTint
+        {
+            get { return color; }
+        }
+
+        internal virtual float PresentationScaleMultiplier
+        {
+            get { return 1f; }
+        }
+
+        internal virtual float PresentationDepthBias
+        {
+            get { return 0f; }
+        }
+
         public Rectangle Bounds
         {
             get

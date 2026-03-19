@@ -149,6 +149,15 @@ namespace SpaceBurst
             return WasKeyPressed(Keys.E) || WasButtonPressed(Buttons.DPadRight);
         }
 
+        public static bool WasToggleViewPressed()
+        {
+#if ANDROID
+            return false;
+#else
+            return WasKeyPressed(Keys.V) || WasButtonPressed(Buttons.RightShoulder);
+#endif
+        }
+
         public static bool IsRewindHeld()
         {
             return rewindHeld;

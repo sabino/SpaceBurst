@@ -16,6 +16,7 @@ namespace SpaceBurst
         private readonly Texture2D texture;
         private readonly Color[] pixels;
         private MaskGrid mask;
+        private string renderStateKey;
 
         public ProceduralSpriteDefinition Definition
         {
@@ -60,6 +61,11 @@ namespace SpaceBurst
         public Vector2 WorldSize
         {
             get { return TextureSize * PixelScale; }
+        }
+
+        public string RenderStateKey
+        {
+            get { return renderStateKey; }
         }
 
         public ProceduralSpriteInstance(GraphicsDevice graphicsDevice, ProceduralSpriteDefinition definition)
@@ -258,6 +264,30 @@ namespace SpaceBurst
             }
 
             texture.SetData(pixels);
+            renderStateKey = BuildRenderStateKey();
+        }
+
+        private string BuildRenderStateKey()
+        {
+            unchecked
+            {
+                int hash = 17;
+                hash = hash * 31 + mask.Width;
+                hash = hash * 31 + mask.Height;
+                hash = hash * 31 + mask.OccupiedCount;
+                hash = hash * 31 + mask.RemainingCoreCount;
+                hash = hash * 31 + (definition.Id?.GetHashCode(StringComparison.Ordinal) ?? 0);
+                for (int y = 0; y < mask.Height; y++)
+                {
+                    for (int x = 0; x < mask.Width; x++)
+                    {
+                        if (mask.IsOccupied(x, y))
+                            hash = hash * 31 + ((y * mask.Width + x + 1) * (mask.IsCore(x, y) ? 7 : 3));
+                    }
+                }
+
+                return string.Concat(definition.Id ?? "sprite", ":", hash.ToString("X8"));
+            }
         }
 
         private Color ResolveGlyphColor(char glyph, bool isCore)
