@@ -23,6 +23,8 @@ $latestRoot = Join-Path $root "artifacts\release\latest"
 $gameOutput = Join-Path $artifactsRoot "game-$WindowsRuntimeIdentifier"
 $levelToolOutput = Join-Path $artifactsRoot "leveltool-$WindowsRuntimeIdentifier"
 $androidOutput = Join-Path $artifactsRoot "android-apk"
+$contentBin = Join-Path $root "SpaceBurst\Content\bin"
+$contentObj = Join-Path $root "SpaceBurst\Content\obj"
 
 function Invoke-Step {
     param(
@@ -44,6 +46,16 @@ Invoke-Step "Restoring local tools" {
     dotnet tool restore
     if ($LASTEXITCODE -ne 0) {
         throw "dotnet tool restore failed."
+    }
+}
+
+Invoke-Step "Cleaning generated content outputs" {
+    if (Test-Path $contentBin) {
+        cmd /c rmdir /s /q "$contentBin"
+    }
+
+    if (Test-Path $contentObj) {
+        cmd /c rmdir /s /q "$contentObj"
     }
 }
 

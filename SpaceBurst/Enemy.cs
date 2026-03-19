@@ -244,7 +244,7 @@ namespace SpaceBurst
             EntityManager.SpawnFlash(Position, accentColor * 0.24f, 28f, coreBreach ? 92f : 64f, coreBreach ? 0.22f : 0.16f);
             if (coreBreach)
                 EntityManager.SpawnShockwave(Position, accentColor * 0.22f, 12f, IsBoss ? 160f : 88f, 0.28f);
-            Sound.Explosion.Play(0.45f, cosmeticRandom.NextFloat(-0.2f, 0.2f), 0);
+            Game1.Instance.Feedback?.Handle(new FeedbackEvent(FeedbackEventType.EnemyDestroyed, Position, IsBoss ? 1f : 0.65f, WeaponStyleId.Pulse, coreBreach || IsBoss));
             PlayerStatus.AddPoints(PointValue);
             PlayerStatus.IncreaseMultiplier();
 
@@ -364,7 +364,7 @@ namespace SpaceBurst
                 3.2f,
                 0f,
                 1f));
-            Sound.Shot.Play(0.08f, cosmeticRandom.NextFloat(-0.25f, 0.25f), -0.2f);
+            Game1.Instance.Audio?.PlayEnemyShot(0.8f);
         }
 
         private void ApplyImpact(Vector2 impactPoint, int damage, ImpactProfileDefinition impactProfile, Vector2 sourceVelocity, ImpactFxStyle impactFxStyle, bool causeShockwave)
@@ -378,6 +378,7 @@ namespace SpaceBurst
                 int debris = impactProfile.DebrisBurstCount + (result.CoreCellsRemoved > 0 ? 6 : 0);
                 float speed = impactProfile.DebrisSpeed * (result.CoreCellsRemoved > 0 ? 1.15f : 1f);
                 EntityManager.SpawnImpactParticles(impactPoint, accentColor, debris, speed, -sourceVelocity * 0.08f);
+                Game1.Instance.Feedback?.Handle(new FeedbackEvent(FeedbackEventType.EnemyHit, impactPoint, result.CoreCellsRemoved > 0 ? 0.85f : 0.45f, WeaponStyleId.Pulse, result.CoreCellsRemoved > 0));
 
                 if (impactFxStyle == ImpactFxStyle.Plasma || impactFxStyle == ImpactFxStyle.Missile || impactFxStyle == ImpactFxStyle.Fortress)
                     EntityManager.SpawnShockwave(impactPoint, accentColor * 0.2f, 6f, 34f + damage * 6f, 0.16f);

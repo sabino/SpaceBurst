@@ -1,6 +1,5 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Media;
 using SpaceBurst.RuntimeData;
 using System;
 
@@ -27,6 +26,9 @@ namespace SpaceBurst
         private Rectangle renderViewport;
         private Matrix scaleMatrix;
         private CampaignDirector campaignDirector;
+        private AudioDirector audioDirector;
+        private FeedbackDirector feedbackDirector;
+        private CameraRig cameraRig;
         private Texture2D uiPixel;
         private Texture2D radialTexture;
         private RenderTarget2D worldRenderTarget;
@@ -107,6 +109,46 @@ namespace SpaceBurst
             get { return campaignDirector != null ? campaignDirector.VisualPreset : VisualPreset.Standard; }
         }
 
+        internal ScreenShakeStrength ScreenShakeStrength
+        {
+            get { return campaignDirector != null ? campaignDirector.ScreenShakeStrength : startupOptions.ScreenShakeStrength; }
+        }
+
+        internal AudioQualityPreset AudioQualityPreset
+        {
+            get { return campaignDirector != null ? campaignDirector.AudioQualityPreset : startupOptions.AudioQualityPreset; }
+        }
+
+        internal FeedbackDirector Feedback
+        {
+            get { return feedbackDirector; }
+        }
+
+        internal AudioDirector Audio
+        {
+            get { return audioDirector; }
+        }
+
+        public Vector2 CameraOffset
+        {
+            get { return cameraRig != null ? cameraRig.WorldOffset : Vector2.Zero; }
+        }
+
+        internal float ImpactPulse
+        {
+            get { return feedbackDirector != null ? feedbackDirector.ImpactPulse : 0f; }
+        }
+
+        internal float HudPulse
+        {
+            get { return feedbackDirector != null ? feedbackDirector.HudPulse : 0f; }
+        }
+
+        internal float PickupPulse
+        {
+            get { return feedbackDirector != null ? feedbackDirector.PickupPulse : 0f; }
+        }
+
         public Game1()
         {
             Instance = this;
@@ -138,7 +180,6 @@ namespace SpaceBurst
         {
             spriteBatch = new SpriteBatch(GraphicsDevice);
             Element.Load();
-            Sound.Load(Content);
 
             uiPixel = new Texture2D(GraphicsDevice, 1, 1);
             uiPixel.SetData(new[] { Color.White });
@@ -150,9 +191,9 @@ namespace SpaceBurst
 
             campaignDirector = new CampaignDirector();
             campaignDirector.Load();
-
-            MediaPlayer.IsRepeating = true;
-            MediaPlayer.Play(Sound.Music);
+            cameraRig = new CameraRig();
+            audioDirector = new AudioDirector(AudioQualityPreset);
+            feedbackDirector = new FeedbackDirector(cameraRig, audioDirector);
         }
 
         protected override void Update(GameTime gameTime)
@@ -161,6 +202,16 @@ namespace SpaceBurst
             RecalculateScaleMatrix();
             Input.Update();
             campaignDirector.Update();
+            GameAudioState audioState = new GameAudioState(
+                campaignDirector.CurrentState,
+                campaignDirector.HasActiveBoss,
+                campaignDirector.TransitionToBoss,
+                campaignDirector.CurrentDifficultyFactor,
+                campaignDirector.TransitionWarpStrength,
+                campaignDirector.RewindVisualStrength,
+                campaignDirector.CurrentScrollSpeed);
+            feedbackDirector.Update((float)gameTime.ElapsedGameTime.TotalSeconds, audioState, ScreenShakeStrength);
+            audioDirector.Update(audioState, campaignDirector.MasterVolume, campaignDirector.MusicVolume, campaignDirector.SfxVolume, (float)gameTime.ElapsedGameTime.TotalSeconds);
             base.Update(gameTime);
         }
 
@@ -172,7 +223,8 @@ namespace SpaceBurst
             {
                 if (VisualPreset == VisualPreset.Low)
                 {
-                    spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, scaleMatrix);
+                    Matrix worldScaleMatrix = Matrix.CreateTranslation(CameraOffset.X, CameraOffset.Y, 0f) * scaleMatrix;
+                    spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, worldScaleMatrix);
                     DrawBackground(spriteBatch, uiPixel);
                     EntityManager.Draw(spriteBatch);
                     spriteBatch.End();
@@ -183,7 +235,8 @@ namespace SpaceBurst
                     GraphicsDevice.SetRenderTarget(worldRenderTarget);
                     GraphicsDevice.Clear(Color.Transparent);
 
-                    spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
+                    Matrix worldMatrix = Matrix.CreateTranslation(CameraOffset.X, CameraOffset.Y, 0f);
+                    spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, worldMatrix);
                     DrawBackground(spriteBatch, uiPixel);
                     EntityManager.Draw(spriteBatch);
                     spriteBatch.End();
@@ -228,13 +281,25 @@ namespace SpaceBurst
                 CurrentScrollSpeed,
                 CurrentDifficultyFactor,
                 ActiveEventType,
-                ActiveEventIntensity);
+                ActiveEventIntensity,
+                CameraOffset,
+                campaignDirector != null ? campaignDirector.TransitionWarpStrength : 0f,
+                campaignDirector != null ? campaignDirector.RewindVisualStrength : 0f,
+                ImpactPulse,
+                PickupPulse,
+                VisualPreset);
         }
 
         private void DrawWorldComposite()
         {
+            Rectangle destination = renderViewport;
+            float warp = campaignDirector != null ? campaignDirector.TransitionWarpStrength : 0f;
+            float pulse = MathHelper.Clamp((cameraRig != null ? cameraRig.PulseStrength : 0f) + ImpactPulse * 0.35f, 0f, 1f);
+            if (pulse > 0f)
+                destination = new Rectangle(destination.X - (int)(pulse * 2f), destination.Y - (int)(pulse * 2f), destination.Width + (int)(pulse * 4f), destination.Height + (int)(pulse * 4f));
+
             spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
-            spriteBatch.Draw(worldRenderTarget, renderViewport, Color.White);
+            spriteBatch.Draw(worldRenderTarget, destination, Color.White);
             spriteBatch.End();
 
             if (!EnableBloom)
@@ -244,12 +309,17 @@ namespace SpaceBurst
             int offset = VisualPreset == VisualPreset.Neon ? 4 : 2;
 
             spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.Additive, SamplerState.PointClamp);
-            spriteBatch.Draw(worldRenderTarget, new Rectangle(renderViewport.X - offset, renderViewport.Y, renderViewport.Width, renderViewport.Height), Color.White * glowStrength);
-            spriteBatch.Draw(worldRenderTarget, new Rectangle(renderViewport.X + offset, renderViewport.Y, renderViewport.Width, renderViewport.Height), Color.White * glowStrength);
-            spriteBatch.Draw(worldRenderTarget, new Rectangle(renderViewport.X, renderViewport.Y - offset, renderViewport.Width, renderViewport.Height), Color.White * glowStrength);
-            spriteBatch.Draw(worldRenderTarget, new Rectangle(renderViewport.X, renderViewport.Y + offset, renderViewport.Width, renderViewport.Height), Color.White * glowStrength);
+            spriteBatch.Draw(worldRenderTarget, new Rectangle(destination.X - offset, destination.Y, destination.Width, destination.Height), Color.White * glowStrength);
+            spriteBatch.Draw(worldRenderTarget, new Rectangle(destination.X + offset, destination.Y, destination.Width, destination.Height), Color.White * glowStrength);
+            spriteBatch.Draw(worldRenderTarget, new Rectangle(destination.X, destination.Y - offset, destination.Width, destination.Height), Color.White * glowStrength);
+            spriteBatch.Draw(worldRenderTarget, new Rectangle(destination.X, destination.Y + offset, destination.Width, destination.Height), Color.White * glowStrength);
             if (VisualPreset == VisualPreset.Neon)
-                spriteBatch.Draw(worldRenderTarget, new Rectangle(renderViewport.X - 2, renderViewport.Y - 2, renderViewport.Width + 4, renderViewport.Height + 4), Color.White * 0.06f);
+            {
+                int neonInset = 2 + (int)(warp * 5f);
+                spriteBatch.Draw(worldRenderTarget, new Rectangle(destination.X - neonInset, destination.Y - 2, destination.Width + neonInset * 2, destination.Height + 4), Color.White * (0.06f + pulse * 0.08f));
+                if (pulse > 0.08f)
+                    spriteBatch.Draw(worldRenderTarget, new Rectangle(destination.X - 4, destination.Y - 4, destination.Width + 8, destination.Height + 8), Color.Cyan * (0.03f + pulse * 0.06f));
+            }
             spriteBatch.End();
         }
 
@@ -287,6 +357,25 @@ namespace SpaceBurst
 
             if (worldRenderTarget == null)
                 worldRenderTarget = new RenderTarget2D(GraphicsDevice, virtualWidth, virtualHeight, false, SurfaceFormat.Color, DepthFormat.None, 0, RenderTargetUsage.DiscardContents);
+        }
+
+        protected override void UnloadContent()
+        {
+            audioDirector?.Dispose();
+            worldRenderTarget?.Dispose();
+            radialTexture?.Dispose();
+            uiPixel?.Dispose();
+#if ANDROID
+            touchControlTexture?.Dispose();
+#endif
+            base.UnloadContent();
+        }
+
+        internal void ApplyAudioQuality(AudioQualityPreset qualityPreset)
+        {
+            audioDirector?.Dispose();
+            audioDirector = new AudioDirector(qualityPreset);
+            feedbackDirector = new FeedbackDirector(cameraRig, audioDirector);
         }
 
         public void ApplyDisplayMode(DesktopDisplayMode mode)

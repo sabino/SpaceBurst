@@ -174,6 +174,46 @@ namespace SpaceBurst
             get { return options.VisualPreset; }
         }
 
+        public AudioQualityPreset AudioQualityPreset
+        {
+            get { return options.AudioQualityPreset; }
+        }
+
+        public ScreenShakeStrength ScreenShakeStrength
+        {
+            get { return options.ScreenShakeStrength; }
+        }
+
+        public float MasterVolume
+        {
+            get { return options.MasterVolume; }
+        }
+
+        public float MusicVolume
+        {
+            get { return options.MusicVolume; }
+        }
+
+        public float SfxVolume
+        {
+            get { return options.SfxVolume; }
+        }
+
+        public GameFlowState CurrentState
+        {
+            get { return state; }
+        }
+
+        public bool HasActiveBoss
+        {
+            get { return activeBoss != null && !activeBoss.IsExpired; }
+        }
+
+        public bool TransitionToBoss
+        {
+            get { return transitionToBoss; }
+        }
+
         public bool EnableBloom
         {
             get { return options.EnableBloom && options.VisualPreset != VisualPreset.Low; }
@@ -422,7 +462,7 @@ namespace SpaceBurst
                 return;
             }
 
-            UpdateVerticalSelection(ref optionsSelection, 7);
+            UpdateVerticalSelection(ref optionsSelection, 12);
 
             int delta = 0;
             if (Input.WasNavigateLeftPressed())
@@ -454,9 +494,25 @@ namespace SpaceBurst
                     options.EnableNeonOutlines = !options.EnableNeonOutlines;
                     break;
                 case 5:
-                    options.AutoUpgradeDraft = !options.AutoUpgradeDraft;
+                    options.ScreenShakeStrength = (ScreenShakeStrength)(((int)options.ScreenShakeStrength + 3 + delta) % 3);
                     break;
                 case 6:
+                    options.AudioQualityPreset = (AudioQualityPreset)(((int)options.AudioQualityPreset + 3 + delta) % 3);
+                    Game1.Instance.ApplyAudioQuality(options.AudioQualityPreset);
+                    break;
+                case 7:
+                    options.MasterVolume = AdjustVolume(options.MasterVolume, delta);
+                    break;
+                case 8:
+                    options.MusicVolume = AdjustVolume(options.MusicVolume, delta);
+                    break;
+                case 9:
+                    options.SfxVolume = AdjustVolume(options.SfxVolume, delta);
+                    break;
+                case 10:
+                    options.AutoUpgradeDraft = !options.AutoUpgradeDraft;
+                    break;
+                case 11:
                     options.ShowHelpHints = !options.ShowHelpHints;
                     break;
             }
@@ -798,6 +854,7 @@ namespace SpaceBurst
             transitionScrollTo = Math.Max(70f, GetStageBaseScrollSpeed(currentStageNumber + 1, repository.GetStage(currentStageNumber + 1)) * 0.88f);
             transitionHudBlend = 0f;
             bannerText = string.Concat("STAGE ", currentStageNumber.ToString("00"), " TO ", (currentStageNumber + 1).ToString("00"));
+            Game1.Instance.Feedback?.Handle(new FeedbackEvent(FeedbackEventType.StageTransition, Player1.Instance.Position, 0.7f));
         }
 
         private void BeginFreshCampaign()
@@ -936,6 +993,7 @@ namespace SpaceBurst
             activeEventWarning = "THREAT APPROACH";
             bossApproachTimer = BossApproachSeconds;
             ResetRewindBuffer();
+            Game1.Instance.Feedback?.Handle(new FeedbackEvent(FeedbackEventType.BossEntry, Player1.Instance.Position, 1f));
         }
 
         private void StartStageFromTransition(int stageNumber)
@@ -1287,8 +1345,8 @@ namespace SpaceBurst
                 Player1.Instance.RefreshLoadout();
             }
 
-            Sound.Spawn.Play(0.18f, 0.15f, 0f);
             EntityManager.SpawnShockwave(Player1.Instance.Position, ColorUtil.ParseHex(card.AccentColor, Color.Orange) * 0.16f, 14f, 72f, 0.22f);
+            Game1.Instance.Feedback?.Handle(new FeedbackEvent(FeedbackEventType.Upgrade, Player1.Instance.Position, 0.8f, card.StyleId, true));
 
             if (draftFromTutorial && tutorialStep == TutorialStep.UpgradeDraft)
                 AdvanceTutorialStep(TutorialStep.SwitchStyle);
@@ -1636,9 +1694,20 @@ namespace SpaceBurst
                 string.Concat("BLOOM  ", options.EnableBloom ? "ON" : "OFF"),
                 string.Concat("SHOCKWAVES  ", options.EnableShockwaves ? "ON" : "OFF"),
                 string.Concat("NEON OUTLINES  ", options.EnableNeonOutlines ? "ON" : "OFF"),
+                string.Concat("SCREEN SHAKE  ", options.ScreenShakeStrength.ToString().ToUpperInvariant()),
+                string.Concat("AUDIO QUALITY  ", options.AudioQualityPreset.ToString().ToUpperInvariant()),
+                string.Concat("MASTER VOLUME  ", (int)(options.MasterVolume * 100f), "%"),
+                string.Concat("MUSIC VOLUME  ", (int)(options.MusicVolume * 100f), "%"),
+                string.Concat("SFX VOLUME  ", (int)(options.SfxVolume * 100f), "%"),
                 string.Concat("AUTO DRAFT  ", options.AutoUpgradeDraft ? "ON" : "OFF"),
                 string.Concat("HELP HINTS  ", options.ShowHelpHints ? "ON" : "OFF"),
             };
+        }
+
+        private static float AdjustVolume(float value, int delta)
+        {
+            float adjusted = value + delta * 0.05f;
+            return MathF.Round(MathHelper.Clamp(adjusted, 0f, 1f) * 20f) / 20f;
         }
 
         private void DrawBackdrop(SpriteBatch spriteBatch, Texture2D pixel, float strength, string headline = "")
@@ -1728,15 +1797,17 @@ namespace SpaceBurst
             DrawCenteredText(spriteBatch, pixel, "OPTIONS", Game1.ScreenSize.X / 2f, 112f, Color.White, 3f);
 
             string[] rows = GetOptionRows();
+            int rowHeight = 32;
+            int rowSpacing = 42;
 
             for (int i = 0; i < rows.Length; i++)
             {
-                Rectangle rowBounds = new Rectangle(180, 182 + i * 56, 920, 42);
+                Rectangle rowBounds = new Rectangle(180, 172 + i * rowSpacing, 920, rowHeight);
                 DrawPanel(spriteBatch, pixel, rowBounds, i == optionsSelection ? Color.White * 0.12f : Color.White * 0.05f, i == optionsSelection ? Color.Orange : Color.White * 0.2f);
-                BitmapFontRenderer.Draw(spriteBatch, pixel, rows[i], new Vector2(rowBounds.X + 18f, rowBounds.Y + 8f), Color.White, 1.45f);
+                BitmapFontRenderer.Draw(spriteBatch, pixel, rows[i], new Vector2(rowBounds.X + 18f, rowBounds.Y + 6f), Color.White, 1.15f);
             }
 
-            DrawCenteredText(spriteBatch, pixel, "LEFT RIGHT OR ENTER TO CHANGE  ESC TO CLOSE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 120f, Color.White * 0.75f, 1.3f);
+            DrawCenteredText(spriteBatch, pixel, "LEFT RIGHT OR ENTER TO CHANGE  ESC TO CLOSE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 96f, Color.White * 0.75f, 1.1f);
         }
 
         private void DrawSaveSlots(SpriteBatch spriteBatch, Texture2D pixel, bool saving)
@@ -1832,6 +1903,8 @@ namespace SpaceBurst
             const int gap = 10;
             const int top = 10;
             const int height = 88;
+            float hudPulse = Game1.Instance?.HudPulse ?? 0f;
+            float pickupPulse = Game1.Instance?.PickupPulse ?? 0f;
             WeaponInventoryState inventory = PlayerStatus.RunProgress.Weapons;
             WeaponStyleDefinition activeStyle = WeaponCatalog.GetStyle(inventory.ActiveStyle);
             string stageLabel = state switch
@@ -1871,12 +1944,12 @@ namespace SpaceBurst
             Rectangle pityBounds = new Rectangle(stageBounds.Right + gap, top, pityWidth, height);
             Rectangle scoreBounds = new Rectangle(pityBounds.Right + gap, top, scoreWidth, height);
 
-            DrawPanel(spriteBatch, pixel, livesBounds, Color.Black * 0.22f, Color.White * 0.18f);
-            DrawPanel(spriteBatch, pixel, activeBounds, Color.Black * 0.18f, Color.White * 0.14f);
+            DrawPanel(spriteBatch, pixel, livesBounds, Color.Black * (0.22f + hudPulse * 0.05f), Color.White * (0.18f + hudPulse * 0.08f));
+            DrawPanel(spriteBatch, pixel, activeBounds, Color.Black * (0.18f + pickupPulse * 0.06f), Color.White * (0.14f + pickupPulse * 0.12f));
             DrawPanel(spriteBatch, pixel, ownedBounds, Color.Black * 0.16f, Color.White * 0.12f);
-            DrawPanel(spriteBatch, pixel, stageBounds, Color.Black * 0.18f, Color.White * 0.14f);
-            DrawPanel(spriteBatch, pixel, pityBounds, Color.Black * 0.18f, Color.White * 0.14f);
-            DrawPanel(spriteBatch, pixel, scoreBounds, Color.Black * 0.22f, Color.White * 0.18f);
+            DrawPanel(spriteBatch, pixel, stageBounds, Color.Black * (0.18f + hudPulse * 0.03f), Color.White * 0.14f);
+            DrawPanel(spriteBatch, pixel, pityBounds, Color.Black * (0.18f + pickupPulse * 0.04f), Color.White * (0.14f + pickupPulse * 0.08f));
+            DrawPanel(spriteBatch, pixel, scoreBounds, Color.Black * 0.22f, Color.White * (0.18f + hudPulse * 0.05f));
 
             BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("LIVES ", PlayerStatus.Lives.ToString()), new Vector2(livesBounds.X + 12f, livesBounds.Y + 12f), Color.White, 2f);
             BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("SHIPS ", PlayerStatus.Ships.ToString()), new Vector2(livesBounds.X + 12f, livesBounds.Y + 38f), Color.White, 2f);
@@ -1892,13 +1965,13 @@ namespace SpaceBurst
             DrawCenteredText(spriteBatch, pixel, stageSubLabel, stageBounds.Center.X, stageBounds.Y + 46f, !string.IsNullOrEmpty(activeEventWarning) ? Color.Orange : Color.White * 0.7f, GetFittedScale(stageSubLabel, stageBounds.Width - 20f, 1.08f, 0.82f));
 
             BitmapFontRenderer.Draw(spriteBatch, pixel, "PITY", new Vector2(pityBounds.X + 12f, pityBounds.Y + 10f), Color.White, 1.25f);
-            DrawBar(spriteBatch, pixel, new Rectangle(pityBounds.X + 12, pityBounds.Y + 34, pityBounds.Width - 24, 12), PlayerStatus.RunProgress.Powerups.PityMeter, Color.Orange);
+            DrawBar(spriteBatch, pixel, new Rectangle(pityBounds.X + 12, pityBounds.Y + 34, pityBounds.Width - 24, 12), PlayerStatus.RunProgress.Powerups.PityMeter, Color.Lerp(Color.Orange, Color.White, pickupPulse * 0.35f));
             DrawChargeTray(spriteBatch, pixel, pityBounds, inventory);
 
             BitmapFontRenderer.Draw(spriteBatch, pixel, scoreLabel, new Vector2(scoreBounds.X + 12f, scoreBounds.Y + 10f), Color.White, 1.65f);
             BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("MULTI ", PlayerStatus.Multiplier.ToString()), new Vector2(scoreBounds.X + 12f, scoreBounds.Y + 34f), Color.White, 1.45f);
             BitmapFontRenderer.Draw(spriteBatch, pixel, "REWIND", new Vector2(scoreBounds.X + 12f, scoreBounds.Y + 56f), Color.White * 0.85f, 1.08f);
-            DrawBar(spriteBatch, pixel, new Rectangle(scoreBounds.X + 92, scoreBounds.Y + 58, scoreBounds.Width - 104, 10), rewindMeterSeconds / RewindCapacitySeconds, Color.Cyan * 0.9f);
+            DrawBar(spriteBatch, pixel, new Rectangle(scoreBounds.X + 92, scoreBounds.Y + 58, scoreBounds.Width - 104, 10), rewindMeterSeconds / RewindCapacitySeconds, Color.Lerp(Color.Cyan, Color.White, hudPulse * 0.2f) * 0.9f);
 
             if (activeBoss != null && !activeBoss.IsExpired)
                 DrawBossHealthBar(spriteBatch, pixel, activeBoss);

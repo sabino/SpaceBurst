@@ -190,6 +190,7 @@ namespace SpaceBurst
             {
                 invulnerabilityTimer = ContactInvulnerabilitySeconds;
                 EntityManager.SpawnImpactParticles(impactPoint, ColorUtil.ParseHex(WeaponCatalog.GetStyle(ActiveStyle).AccentColor, Color.Orange), damageMask.ContactImpact.DebrisBurstCount, damageMask.ContactImpact.DebrisSpeed, Vector2.Zero);
+                Game1.Instance.Feedback?.Handle(new FeedbackEvent(FeedbackEventType.PlayerDamaged, impactPoint, MathHelper.Clamp(damage * 0.18f, 0.45f, 1f), ActiveStyle, result.CoreCellsRemoved > 0));
             }
 
             if (result.Destroyed)
@@ -239,11 +240,11 @@ namespace SpaceBurst
                 PlayerStatus.RunProgress.AddUpgradeCharge(styleId);
             }
 
-            Sound.Spawn.Play(0.15f, 0.2f, 0.1f);
             invulnerabilityTimer = Math.Max(invulnerabilityTimer, 0.2f);
             Color accent = ColorUtil.ParseHex(style.AccentColor, Color.Orange);
             EntityManager.SpawnShockwave(Position, accent * (immediateUpgrade ? 0.28f : 0.18f), 10f, immediateUpgrade ? 74f : 52f, immediateUpgrade ? 0.22f : 0.18f);
             EntityManager.SpawnFlash(Position, accent * 0.22f, 14f, immediateUpgrade ? 66f : 54f, 0.14f);
+            Game1.Instance.Feedback?.Handle(new FeedbackEvent(immediateUpgrade ? FeedbackEventType.Upgrade : FeedbackEventType.Pickup, Position, immediateUpgrade ? 0.9f : 0.55f, styleId, immediateUpgrade));
         }
 
         public void RefreshLoadout()
@@ -339,6 +340,8 @@ namespace SpaceBurst
                     FirePulseLike(level);
                     break;
             }
+
+            Game1.Instance.Feedback?.Handle(new FeedbackEvent(FeedbackEventType.PlayerShot, Position + cannonDirection * 28f, 0.55f + ActiveWeaponLevel * 0.12f, ActiveStyle));
         }
 
         private void FirePulseLike(WeaponLevelDefinition level)
@@ -468,7 +471,6 @@ namespace SpaceBurst
                 level.ExplosionRadius,
                 level.ChainCount,
                 level.HomingDelaySeconds));
-            Sound.Shot.Play(0.16f, ResolveShotPitch(level), 0f);
         }
 
         private void UpdateDrones()

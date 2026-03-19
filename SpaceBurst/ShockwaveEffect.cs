@@ -48,6 +48,8 @@ namespace SpaceBurst
             spriteBatch.Draw(radial, Position, null, coreTint, 0f, origin, baseScale * 0.9f, SpriteEffects.None, 0f);
             spriteBatch.Draw(radial, Position, null, ringTint, 0f, origin, new Vector2(baseScale * (1.02f + normalized * 0.05f), baseScale * 0.44f), SpriteEffects.None, 0f);
             spriteBatch.Draw(radial, Position, null, ringTint * 0.75f, 0f, origin, new Vector2(baseScale * 0.82f, baseScale * 0.22f), SpriteEffects.None, 0f);
+            if (preset != VisualPreset.Low)
+                spriteBatch.Draw(radial, Position, null, ringTint * 0.55f, 0f, origin, new Vector2(baseScale * (1.14f + normalized * 0.16f), baseScale * 0.12f), SpriteEffects.None, 0f);
 
             if (preset != VisualPreset.Low)
             {
@@ -59,6 +61,7 @@ namespace SpaceBurst
             {
                 spriteBatch.Draw(radial, Position, null, haloTint * 0.95f, 0f, origin, new Vector2(baseScale * 1.48f, baseScale * 0.14f), SpriteEffects.None, 0f);
                 spriteBatch.Draw(radial, Position + new Vector2(radius * 0.03f, -radius * 0.03f), null, Color.White * (0.08f * alpha), 0f, origin, baseScale * 0.68f, SpriteEffects.None, 0f);
+                spriteBatch.Draw(radial, Position, null, color * (0.05f * alpha), 0f, origin, new Vector2(baseScale * (1.65f + normalized * 0.24f), baseScale * 0.08f), SpriteEffects.None, 0f);
             }
         }
     }
