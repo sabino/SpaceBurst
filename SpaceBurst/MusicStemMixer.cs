@@ -197,12 +197,18 @@ namespace SpaceBurst
                 108,
                 45,
                 new[] { 0, 3, 7, 10, 12 },
-                new[] { 0, 3, 4, 2 },
-                new[] { 0, -99, 0, 1, 0, -99, 2, 1 },
-                new[] { 0, 2, 4, 2, 1, 2, 4, 5, 0, 2, 4, 2, 1, 3, 4, 5 },
-                new[] { -99, 0, 2, 4, -99, 2, 1, 0, -99, 1, 2, 4, -99, 3, 5, 4 },
-                new[] { 4, -99, 2, 1, 0, -99, 2, 3, 4, -99, 5, 4, 2, -99, 1, 0 },
-                new[] { 0, 0, 2, 0, 3, 0, 2, 0 },
+                ChainPatterns(new[] { 0, 3, 4, 2 }, new[] { 0, 5, 4, 3 }),
+                ChainPatterns(new[] { 0, -99, 0, 1, 0, -99, 2, 1 }, new[] { 0, -99, 1, 2, 0, -99, 3, 2 }),
+                ChainPatterns(
+                    new[] { 0, 2, 4, 2, 1, 2, 4, 5, 0, 2, 4, 2, 1, 3, 4, 5 },
+                    new[] { 4, 5, 7, 5, 4, 5, 7, 9, 4, 5, 7, 5, 3, 5, 7, 9 }),
+                ChainPatterns(
+                    new[] { -99, 0, 2, 4, -99, 2, 1, 0, -99, 1, 2, 4, -99, 3, 5, 4 },
+                    new[] { -99, 4, 5, 7, -99, 7, 5, 4, -99, 5, 7, 9, -99, 7, 5, 4 }),
+                ChainPatterns(
+                    new[] { 4, -99, 2, 1, 0, -99, 2, 3, 4, -99, 5, 4, 2, -99, 1, 0 },
+                    new[] { 9, -99, 7, 5, 4, -99, 5, 7, 9, -99, 10, 9, 7, -99, 5, 4 }),
+                ChainPatterns(new[] { 0, 0, 2, 0, 3, 0, 2, 0 }, new[] { 0, 0, 4, 0, 3, 0, 2, 0 }),
                 0.52f,
                 0.34f,
                 0.76f,
@@ -245,7 +251,8 @@ namespace SpaceBurst
                 0.05f,
                 0.18f,
                 0.3f,
-                0.1f));
+                0.1f,
+                8));
 
             foreach (ChapterProfile profile in BuildChapterProfiles())
                 RegisterChapterThemes(profile);
@@ -256,10 +263,8 @@ namespace SpaceBurst
 
         private void RegisterChapterThemes(ChapterProfile profile)
         {
-            RegisterTheme(CreateChapterTheme(profile, "approach", profile.ApproachChords, profile.NormalScale, profile.BaseTempo - 4, 0.28f, 0, 0.85f, 0.9f));
-            RegisterTheme(CreateChapterTheme(profile, "cruise", profile.CruiseChords, profile.NormalScale, profile.BaseTempo + 2, 0.56f, 3, 1f, 1.02f));
-            RegisterTheme(CreateChapterTheme(profile, "surge", profile.SurgeChords, profile.NormalScale, profile.BaseTempo + 8, 0.86f, 7, 1.12f, 1.18f));
-            RegisterTheme(CreateChapterTheme(profile, "boss", profile.BossChords, profile.BossScale, profile.BossTempo, 1f, 5, 1.26f, 1.34f, true));
+            RegisterTheme(CreateMainChapterTheme(profile));
+            RegisterTheme(CreateBossChapterTheme(profile));
         }
 
         private void RegisterTheme(MusicThemeDefinition definition)
@@ -315,13 +320,7 @@ namespace SpaceBurst
             if (state.HasBoss || state.TransitionToBoss || stageWithinChapter == 10)
                 return string.Concat("chapter", chapter.ToString(), "-boss");
 
-            if (stageWithinChapter <= 3)
-                return string.Concat("chapter", chapter.ToString(), "-approach");
-
-            if (stageWithinChapter <= 6)
-                return string.Concat("chapter", chapter.ToString(), "-cruise");
-
-            return string.Concat("chapter", chapter.ToString(), "-surge");
+            return string.Concat("chapter", chapter.ToString(), "-main");
         }
 
         private static float[] ResolveLayerVolumes(GameAudioState state)
@@ -503,44 +502,76 @@ namespace SpaceBurst
             };
         }
 
-        private static MusicThemeDefinition CreateChapterTheme(ChapterProfile profile, string suffix, int[] chords, int[] scale, int tempo, float intensity, int patternShift, float brightnessScale, float driveScale, bool boss = false)
+        private static MusicThemeDefinition CreateMainChapterTheme(ChapterProfile profile)
         {
             return new MusicThemeDefinition
             {
-                Id = string.Concat(profile.IdPrefix, "-", suffix),
-                Bars = 4,
-                ThemeSeed = profile.ThemeSeed + patternShift * 13 + (boss ? 97 : 0),
-                Tempo = tempo,
-                RootMidiNote = boss ? profile.RootMidiNote - 2 : profile.RootMidiNote,
-                ScaleOffsets = scale,
-                ChordDegrees = chords,
-                BassPattern = RotatePattern(TransposePattern(profile.BassMotif, boss ? 1 : 0), patternShift / 2),
-                PulsePattern = RotatePattern(TransposePattern(profile.PulseMotif, boss ? 1 : patternShift % 2), patternShift),
-                LeadPatternA = RotatePattern(TransposePattern(profile.LeadCall, boss ? 1 : 0), patternShift),
-                LeadPatternB = RotatePattern(TransposePattern(profile.LeadResponse, boss ? 2 : 0), patternShift + 2),
-                BossPattern = RotatePattern(TransposePattern(profile.BossMotif, boss ? 1 : 0), patternShift / 2),
-                PadChordSteps = boss ? new[] { 0, 2, 5 } : new[] { 0, 2, 4 },
-                Brightness = MathHelper.Clamp(profile.Brightness * brightnessScale, 0.35f, 0.92f),
-                PulseDrive = MathHelper.Clamp(profile.PulseDrive * driveScale, 0.18f, 1.1f),
-                PadSpread = MathHelper.Clamp(profile.PadSpread + intensity * (boss ? 0.02f : 0.04f), 0.32f, 0.84f),
+                Id = string.Concat(profile.IdPrefix, "-main"),
+                Bars = 8,
+                ThemeSeed = profile.ThemeSeed + 17,
+                Tempo = profile.BaseTempo,
+                RootMidiNote = profile.RootMidiNote,
+                ScaleOffsets = profile.NormalScale,
+                ChordDegrees = ChainPatterns(profile.ApproachChords, profile.CruiseChords),
+                BassPattern = ChainPatterns(profile.BassMotif, RotatePattern(profile.BassMotif, 2), RotatePattern(TransposePattern(profile.BassMotif, 1), 1), RotatePattern(profile.BassMotif, 5)),
+                PulsePattern = ChainPatterns(profile.PulseMotif, RotatePattern(profile.PulseMotif, 4), RotatePattern(TransposePattern(profile.PulseMotif, 1), 2), RotatePattern(profile.PulseMotif, 8)),
+                LeadPatternA = ChainPatterns(profile.LeadCall, RotatePattern(profile.LeadResponse, 2), RotatePattern(TransposePattern(profile.LeadCall, 1), 4), RotatePattern(profile.LeadResponse, 6)),
+                LeadPatternB = ChainPatterns(profile.LeadResponse, RotatePattern(profile.LeadCall, 2), RotatePattern(TransposePattern(profile.LeadResponse, 1), 4), RotatePattern(profile.LeadCall, 6)),
+                BossPattern = ChainPatterns(profile.BossMotif, RotatePattern(profile.BossMotif, 2), RotatePattern(TransposePattern(profile.BossMotif, 1), 1), RotatePattern(profile.BossMotif, 4)),
+                PadChordSteps = new[] { 0, 2, 4 },
+                Brightness = MathHelper.Clamp(profile.Brightness * 1.04f, 0.35f, 0.92f),
+                PulseDrive = MathHelper.Clamp(profile.PulseDrive * 1.08f, 0.18f, 1.1f),
+                PadSpread = MathHelper.Clamp(profile.PadSpread + 0.05f, 0.32f, 0.84f),
                 Swing = profile.Swing,
-                RhythmDensity = MathHelper.Clamp(0.34f + intensity * (boss ? 0.56f : 0.46f), 0.2f, 1f),
-                Syncopation = MathHelper.Clamp(profile.Syncopation + intensity * (boss ? 0.18f : 0.12f), 0.1f, 0.92f),
-                LeadDensity = MathHelper.Clamp(0.28f + intensity * (boss ? 0.62f : 0.42f), 0.12f, 1f),
-                DangerWeight = MathHelper.Clamp(0.12f + intensity * (boss ? 0.64f : 0.3f), 0.08f, 1f),
-                BossWeight = MathHelper.Clamp(boss ? 0.82f : 0.16f + intensity * 0.24f, 0.1f, 1f),
-                VariantIntensity = intensity,
-                BassOctave = boss ? -2 : -1,
-                LeadOctave = boss ? 1 : 2,
+                RhythmDensity = 0.58f,
+                Syncopation = MathHelper.Clamp(profile.Syncopation + 0.08f, 0.1f, 0.92f),
+                LeadDensity = 0.68f,
+                DangerWeight = 0.3f,
+                BossWeight = 0.22f,
+                VariantIntensity = 0.74f,
+                BassOctave = -1,
+                LeadOctave = 2,
             };
         }
 
-        private static MusicThemeDefinition CreateSpecialTheme(string id, int tempo, int root, int[] scale, int[] chords, int[] bass, int[] pulse, int[] leadA, int[] leadB, int[] boss, float brightness, float pulseDrive, float padSpread, float swing, float syncopation, float leadDensity, float dangerWeight)
+        private static MusicThemeDefinition CreateBossChapterTheme(ChapterProfile profile)
+        {
+            return new MusicThemeDefinition
+            {
+                Id = string.Concat(profile.IdPrefix, "-boss"),
+                Bars = 8,
+                ThemeSeed = profile.ThemeSeed + 97,
+                Tempo = profile.BossTempo,
+                RootMidiNote = profile.RootMidiNote - 2,
+                ScaleOffsets = profile.BossScale,
+                ChordDegrees = ChainPatterns(profile.BossChords, RotatePattern(profile.BossChords, 1)),
+                BassPattern = ChainPatterns(RotatePattern(TransposePattern(profile.BassMotif, 1), 1), RotatePattern(TransposePattern(profile.BassMotif, 2), 4), RotatePattern(TransposePattern(profile.BassMotif, 1), 2), RotatePattern(TransposePattern(profile.BassMotif, 3), 5)),
+                PulsePattern = ChainPatterns(RotatePattern(TransposePattern(profile.PulseMotif, 1), 3), RotatePattern(TransposePattern(profile.PulseMotif, 2), 5), RotatePattern(TransposePattern(profile.PulseMotif, 1), 7), RotatePattern(TransposePattern(profile.PulseMotif, 3), 9)),
+                LeadPatternA = ChainPatterns(RotatePattern(TransposePattern(profile.LeadCall, 1), 1), RotatePattern(TransposePattern(profile.LeadResponse, 2), 3), RotatePattern(TransposePattern(profile.LeadCall, 2), 5), RotatePattern(TransposePattern(profile.LeadResponse, 3), 7)),
+                LeadPatternB = ChainPatterns(RotatePattern(TransposePattern(profile.LeadResponse, 2), 1), RotatePattern(TransposePattern(profile.LeadCall, 1), 3), RotatePattern(TransposePattern(profile.LeadResponse, 3), 5), RotatePattern(TransposePattern(profile.LeadCall, 2), 7)),
+                BossPattern = ChainPatterns(profile.BossMotif, RotatePattern(profile.BossMotif, 2), RotatePattern(TransposePattern(profile.BossMotif, 1), 1), RotatePattern(TransposePattern(profile.BossMotif, 2), 3)),
+                PadChordSteps = new[] { 0, 2, 5 },
+                Brightness = MathHelper.Clamp(profile.Brightness * 1.18f, 0.35f, 0.96f),
+                PulseDrive = MathHelper.Clamp(profile.PulseDrive * 1.24f, 0.18f, 1.16f),
+                PadSpread = MathHelper.Clamp(profile.PadSpread + 0.02f, 0.32f, 0.82f),
+                Swing = profile.Swing * 0.5f,
+                RhythmDensity = 0.82f,
+                Syncopation = MathHelper.Clamp(profile.Syncopation + 0.18f, 0.1f, 0.96f),
+                LeadDensity = 0.82f,
+                DangerWeight = 0.76f,
+                BossWeight = 0.88f,
+                VariantIntensity = 1f,
+                BassOctave = -2,
+                LeadOctave = 1,
+            };
+        }
+
+        private static MusicThemeDefinition CreateSpecialTheme(string id, int tempo, int root, int[] scale, int[] chords, int[] bass, int[] pulse, int[] leadA, int[] leadB, int[] boss, float brightness, float pulseDrive, float padSpread, float swing, float syncopation, float leadDensity, float dangerWeight, int bars = 4)
         {
             return new MusicThemeDefinition
             {
                 Id = id,
-                Bars = 4,
+                Bars = bars,
                 ThemeSeed = Math.Abs(id.GetHashCode()),
                 Tempo = tempo,
                 RootMidiNote = root,
@@ -565,6 +596,30 @@ namespace SpaceBurst
                 BassOctave = -2,
                 LeadOctave = 1,
             };
+        }
+
+        private static int[] ChainPatterns(params int[][] segments)
+        {
+            int totalLength = 0;
+            for (int i = 0; i < segments.Length; i++)
+                totalLength += segments[i]?.Length ?? 0;
+
+            if (totalLength == 0)
+                return Array.Empty<int>();
+
+            int[] combined = new int[totalLength];
+            int offset = 0;
+            for (int i = 0; i < segments.Length; i++)
+            {
+                int[] segment = segments[i];
+                if (segment == null || segment.Length == 0)
+                    continue;
+
+                Array.Copy(segment, 0, combined, offset, segment.Length);
+                offset += segment.Length;
+            }
+
+            return combined;
         }
 
         private static int[] RotatePattern(int[] source, int shift)

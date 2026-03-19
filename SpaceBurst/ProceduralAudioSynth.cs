@@ -222,7 +222,12 @@ namespace SpaceBurst
             {
                 int note = GetScaleNote(theme, chordDegree + theme.PadChordSteps[i], 0);
                 float frequency = MidiToFrequency(note) * (1f + theme.PadSpread * 0.004f * i);
-                sample += SampleWaveform(i == 0 ? SynthWaveform.Triangle : SynthWaveform.Sine, frequency, time, 0.5f) * (0.32f - i * 0.04f);
+                float voice = SampleWaveform(i == 0 ? SynthWaveform.Triangle : SynthWaveform.Sine, frequency, time, 0.5f) * (0.28f - i * 0.03f);
+                voice += SampleWaveform(SynthWaveform.Sine, frequency * (1.002f + i * 0.0012f), time, 0.5f) * (0.12f - i * 0.015f);
+                if (i == theme.PadChordSteps.Length - 1)
+                    voice += SampleWaveform(SynthWaveform.Sine, frequency * 2f, time, 0.5f) * 0.06f;
+
+                sample += voice;
             }
 
             float swell = 0.16f + 0.08f * slowPulse + 0.02f * MathF.Sin(beatInBar * MathF.Tau * 0.5f);
@@ -241,6 +246,9 @@ namespace SpaceBurst
             float gate = sixteenthPhase < gateWidth ? 1f - sixteenthPhase / gateWidth : 0f;
             float waveform = SampleWaveform(SynthWaveform.Pulse, frequency, time, 0.22f + theme.Brightness * 0.12f);
             waveform += SampleWaveform(SynthWaveform.Sine, frequency * 2f, time, 0.5f) * 0.12f;
+            if ((barSixteenth & 3) == 2)
+                waveform += SampleWaveform(SynthWaveform.Pulse, frequency * 2f, time, 0.18f) * 0.08f;
+
             return ApplyDrive(waveform * gate, 1f + theme.PulseDrive) * (0.16f + theme.Brightness * 0.04f);
         }
 
@@ -264,7 +272,12 @@ namespace SpaceBurst
             float vibrato = MathF.Sin((time + swungBeat * 0.02f) * (5.8f + theme.Brightness * 3.4f) * MathF.Tau) * (0.003f + theme.Brightness * 0.004f);
             float saw = SampleWaveform(SynthWaveform.Saw, frequency * (1f + vibrato), time, 0.5f);
             float shimmer = SampleWaveform(SynthWaveform.Sine, frequency * 2f, time, 0.5f) * (0.18f + theme.Brightness * 0.08f);
-            return ApplyDrive((saw + shimmer) * envelope, 1.08f + theme.Brightness * 0.2f) * 0.22f;
+            float triangle = SampleWaveform(SynthWaveform.Triangle, frequency * 0.5f, time, 0.5f) * 0.12f;
+            float echo = 0f;
+            if (time > 0.085f)
+                echo = SampleWaveform(SynthWaveform.Sine, frequency * 0.998f, time - 0.085f, 0.5f) * 0.1f;
+
+            return ApplyDrive((saw + shimmer + triangle + echo) * envelope, 1.08f + theme.Brightness * 0.2f) * 0.22f;
         }
 
         private static float RenderDanger(MusicThemeDefinition theme, int chordDegree, int barIndex, int barSixteenth, float sixteenthPhase, float time)
