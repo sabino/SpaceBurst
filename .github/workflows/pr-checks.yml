@@ -1,0 +1,98 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  windows-build-and-tests:
+    name: Windows Build and Tests
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore solution
+        run: dotnet restore SpaceBurst.sln
+
+      - name: Build solution
+        run: dotnet build SpaceBurst.sln -c Release --no-restore -v minimal
+
+      - name: Run runtime tests
+        run: dotnet test SpaceBurst.Runtime.Tests/SpaceBurst.Runtime.Tests.csproj -c Release --no-build -v minimal
+
+  linux-publish-smoke:
+    name: Linux Publish Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish linux-x64 game
+        run: >
+          dotnet publish SpaceBurst/SpaceBurst.csproj
+          -c Release
+          -r linux-x64
+          -p:SelfContained=true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:DebugType=None
+          -p:DebugSymbols=false
+          -p:Version=1.0.${{ github.run_number }}
+          -p:InformationalVersion=${{ github.sha }}
+          -o artifacts/ci/linux-x64
+
+  android-smoke-build:
+    name: Android Smoke Build
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install .NET Android workload
+        run: dotnet workload install android
+
+      - name: Build Android APK
+        shell: pwsh
+        run: .\build-android.ps1 -Configuration Release -InstallDependencies
+
+  docs-build-smoke:
+    name: Docs Build Smoke
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build DocFX site
+        shell: pwsh
+        run: .\build-docs.ps1 -Configuration Release

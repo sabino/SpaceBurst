@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using SpaceBurst.RuntimeData;
 using System;
+using System.IO;
 
 namespace SpaceBurst
 {
@@ -34,6 +35,11 @@ namespace SpaceBurst
         private RenderTarget2D worldRenderTarget;
         private int virtualWidth = VirtualBaseWidth;
         private int virtualHeight = VirtualBaseHeight;
+        private readonly string capturePath;
+        private readonly string captureMode;
+        private bool capturePrepared;
+        private bool captureCompleted;
+        private float captureDelaySeconds = 1.2f;
 
 #if ANDROID
         private Texture2D touchControlTexture;
@@ -153,6 +159,8 @@ namespace SpaceBurst
         {
             Instance = this;
             startupOptions = PersistentStorage.LoadOptions();
+            capturePath = Environment.GetEnvironmentVariable("SPACEBURST_CAPTURE_PATH") ?? string.Empty;
+            captureMode = Environment.GetEnvironmentVariable("SPACEBURST_CAPTURE_MODE") ?? string.Empty;
             graphics = new GraphicsDeviceManager(this);
             Content.RootDirectory = "Content";
 
@@ -194,6 +202,8 @@ namespace SpaceBurst
             cameraRig = new CameraRig();
             audioDirector = new AudioDirector(AudioQualityPreset);
             feedbackDirector = new FeedbackDirector(cameraRig, audioDirector);
+
+            PrepareCaptureMode();
         }
 
         protected override void Update(GameTime gameTime)
@@ -216,6 +226,10 @@ namespace SpaceBurst
                 campaignDirector.CurrentSectionProgress);
             feedbackDirector.Update((float)gameTime.ElapsedGameTime.TotalSeconds, audioState, ScreenShakeStrength);
             audioDirector.Update(audioState, campaignDirector.MasterVolume, campaignDirector.MusicVolume, campaignDirector.SfxVolume, (float)gameTime.ElapsedGameTime.TotalSeconds);
+
+            if (!captureCompleted && !string.IsNullOrWhiteSpace(capturePath))
+                captureDelaySeconds -= (float)gameTime.ElapsedGameTime.TotalSeconds;
+
             base.Update(gameTime);
         }
 
@@ -262,6 +276,13 @@ namespace SpaceBurst
                 spriteBatch.End();
             }
 #endif
+
+            if (!captureCompleted && !string.IsNullOrWhiteSpace(capturePath) && captureDelaySeconds <= 0f)
+            {
+                CaptureFrameToPng(capturePath);
+                captureCompleted = true;
+                Exit();
+            }
         }
 
         public static Vector2 ScreenToWorld(Vector2 screenPosition)
@@ -380,6 +401,40 @@ namespace SpaceBurst
             audioDirector?.Dispose();
             audioDirector = new AudioDirector(qualityPreset);
             feedbackDirector = new FeedbackDirector(cameraRig, audioDirector);
+        }
+
+        private void PrepareCaptureMode()
+        {
+            if (capturePrepared || string.IsNullOrWhiteSpace(capturePath))
+                return;
+
+            capturePrepared = true;
+            string mode = captureMode.Trim().ToLowerInvariant();
+            if (mode.StartsWith("slot-", StringComparison.Ordinal))
+            {
+                captureDelaySeconds = 5.5f;
+                if (int.TryParse(mode.Substring(5), out int slotNumber) && slotNumber > 0)
+                    campaignDirector.LoadRunSlotForCapture(slotNumber);
+            }
+            else
+            {
+                captureDelaySeconds = 1.2f;
+            }
+        }
+
+        private void CaptureFrameToPng(string path)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
+
+            int width = GraphicsDevice.PresentationParameters.BackBufferWidth;
+            int height = GraphicsDevice.PresentationParameters.BackBufferHeight;
+            var data = new Color[width * height];
+            GraphicsDevice.GetBackBufferData(data);
+
+            using var texture = new Texture2D(GraphicsDevice, width, height, false, SurfaceFormat.Color);
+            texture.SetData(data);
+            using FileStream stream = File.Create(path);
+            texture.SaveAsPng(stream, width, height);
         }
 
         public void ApplyDisplayMode(DesktopDisplayMode mode)

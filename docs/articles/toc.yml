@@ -1,0 +1,12 @@
+- name: Gameplay
+  href: gameplay.md
+- name: Controls
+  href: controls.md
+- name: Save and Rewind
+  href: save-rewind.md
+- name: Build and Release
+  href: build-release.md
+- name: Architecture
+  href: architecture.md
+- name: License and Credits
+  href: license-credits.md

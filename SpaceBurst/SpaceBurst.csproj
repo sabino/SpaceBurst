@@ -5,6 +5,13 @@
     <RuntimeIdentifiers>win-x64;linux-x64</RuntimeIdentifiers>
     <RootNamespace>SpaceBurst</RootNamespace>
     <AssemblyName>SpaceBurst</AssemblyName>
+    <Company>Sabino Software</Company>
+    <Authors>Sabino Software</Authors>
+    <Product>SpaceBurst</Product>
+    <Description>Procedural side-scrolling shooter with deterministic rewind, weapon drafts, and cross-platform release builds.</Description>
+    <RepositoryUrl>https://github.com/sabino/SpaceBurst</RepositoryUrl>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
     <MonoGamePlatform>DesktopGL</MonoGamePlatform>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <ImplicitUsings>disable</ImplicitUsings>
@@ -36,6 +43,7 @@
 
   <ItemGroup>
     <None Include="..\Levels\**\*.json" Link="Levels\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

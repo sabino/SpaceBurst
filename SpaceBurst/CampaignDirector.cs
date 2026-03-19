@@ -15,6 +15,35 @@ namespace SpaceBurst
         private const float PlayerSafetyClearRadius = 220f;
         private const float RewindCapacitySeconds = 8f;
         private const float RewindSnapshotInterval = 1f / 30f;
+        private const int HelpPageCount = 7;
+        private const int AboutHelpPageIndex = 5;
+
+        private const string AboutHelpText =
+            "ABOUT SPACEBURST\n" +
+            "DEVELOPED BY SABINO SOFTWARE\n" +
+            "PROCEDURAL SIDE SCROLLING SHOOTER WITH DETERMINISTIC REWIND,\n" +
+            "UPGRADE DRAFTS, PROCEDURAL AUDIO, AND CROSS PLATFORM RELEASE BUILDS.\n" +
+            "SOURCE REPOSITORY  GITHUB.COM/SABINO/SPACEBURST\n" +
+            "LICENSE  THE UNLICENSE\n" +
+            "TURN TO THE NEXT PAGE TO READ THE FULL LICENSE.";
+
+        private const string UnlicenseText =
+            "THE UNLICENSE\n" +
+            "THIS IS FREE AND UNENCUMBERED SOFTWARE RELEASED INTO THE PUBLIC DOMAIN.\n\n" +
+            "ANYONE IS FREE TO COPY, MODIFY, PUBLISH, USE, COMPILE, SELL, OR DISTRIBUTE THIS SOFTWARE,\n" +
+            "EITHER IN SOURCE CODE FORM OR AS A COMPILED BINARY, FOR ANY PURPOSE, COMMERCIAL OR\n" +
+            "NON COMMERCIAL, AND BY ANY MEANS.\n\n" +
+            "IN JURISDICTIONS THAT RECOGNIZE COPYRIGHT LAWS, THE AUTHORS DEDICATE ANY AND ALL\n" +
+            "COPYRIGHT INTEREST IN THE SOFTWARE TO THE PUBLIC DOMAIN. WE MAKE THIS DEDICATION FOR THE\n" +
+            "BENEFIT OF THE PUBLIC AT LARGE AND TO THE DETRIMENT OF OUR HEIRS AND SUCCESSORS. WE INTEND\n" +
+            "THIS DEDICATION TO BE AN OVERT ACT OF RELINQUISHMENT IN PERPETUITY OF ALL PRESENT AND FUTURE\n" +
+            "RIGHTS TO THIS SOFTWARE UNDER COPYRIGHT LAW.\n\n" +
+            "THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,\n" +
+            "INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR\n" +
+            "PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM,\n" +
+            "DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\n" +
+            "FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n\n" +
+            "FOR MORE INFORMATION, PLEASE REFER TO UNLICENSE.ORG";
 
         private readonly CampaignRepository repository = new CampaignRepository();
         private readonly OptionsData options;
@@ -290,6 +319,18 @@ namespace SpaceBurst
             EnterTitle(false);
         }
 
+        public bool LoadRunSlotForCapture(int slotNumber)
+        {
+            RunSaveData save = PersistentStorage.LoadRunSlot(slotNumber);
+            if (save == null)
+                return false;
+
+            RestoreRunSaveData(save, false, false);
+            if (state == GameFlowState.Paused)
+                state = save.State == GameFlowState.Tutorial ? GameFlowState.Tutorial : GameFlowState.Playing;
+            return true;
+        }
+
         public void Update()
         {
             switch (state)
@@ -401,6 +442,7 @@ namespace SpaceBurst
             if (Input.WasHelpPressed())
             {
                 helpReturnState = GameFlowState.Title;
+                helpPageIndex = 0;
                 state = GameFlowState.Help;
                 return;
             }
@@ -427,6 +469,7 @@ namespace SpaceBurst
             if (Input.WasHelpPressed())
             {
                 helpReturnState = GameFlowState.Paused;
+                helpPageIndex = 0;
                 state = GameFlowState.Help;
                 return;
             }
@@ -585,9 +628,9 @@ namespace SpaceBurst
         private void UpdateHelp()
         {
             if (Input.WasNavigateLeftPressed())
-                helpPageIndex = (helpPageIndex + 4) % 5;
+                helpPageIndex = (helpPageIndex + HelpPageCount - 1) % HelpPageCount;
             else if (Input.WasNavigateRightPressed())
-                helpPageIndex = (helpPageIndex + 1) % 5;
+                helpPageIndex = (helpPageIndex + 1) % HelpPageCount;
 
             if ((Input.WasConfirmPressed() || Input.WasPrimaryActionPressed()) && helpPageIndex == 0)
             {
@@ -676,6 +719,7 @@ namespace SpaceBurst
             if (Input.WasHelpPressed())
             {
                 helpReturnState = GameFlowState.Tutorial;
+                helpPageIndex = 0;
                 state = GameFlowState.Help;
                 return;
             }
@@ -1633,9 +1677,15 @@ namespace SpaceBurst
                     break;
                 case 3:
                     helpReturnState = GameFlowState.Title;
+                    helpPageIndex = 0;
                     state = GameFlowState.Help;
                     break;
                 case 4:
+                    helpReturnState = GameFlowState.Title;
+                    helpPageIndex = AboutHelpPageIndex;
+                    state = GameFlowState.Help;
+                    break;
+                case 5:
                     Game1.Instance.Exit();
                     break;
                 default:
@@ -1672,11 +1722,12 @@ namespace SpaceBurst
         {
             return new List<UiButton>
             {
-                CreateButton("START CAMPAIGN", 0, 5),
-                CreateButton("LOAD GAME", 1, 5),
-                CreateButton("OPTIONS", 2, 5),
-                CreateButton("HELP", 3, 5),
-                CreateButton("QUIT", 4, 5),
+                CreateButton("START CAMPAIGN", 0, 6),
+                CreateButton("LOAD GAME", 1, 6),
+                CreateButton("OPTIONS", 2, 6),
+                CreateButton("HELP", 3, 6),
+                CreateButton("ABOUT / LEGAL", 4, 6),
+                CreateButton("QUIT", 5, 6),
             };
         }
 
@@ -1704,8 +1755,8 @@ namespace SpaceBurst
         {
             Vector2 center = Game1.ScreenSize / 2f;
             int width = 440;
-            int height = total > 6 ? 48 : 54;
-            int spacing = total > 6 ? 12 : 18;
+            int height = total >= 6 ? 48 : 54;
+            int spacing = total >= 6 ? 12 : 18;
             int x = (int)center.X - width / 2;
             int totalHeight = total * height + (total - 1) * spacing;
             int top = (Game1.VirtualHeight - totalHeight) / 2 + 34;
@@ -1796,6 +1847,7 @@ namespace SpaceBurst
             if (!options.TutorialCompleted)
                 DrawCenteredText(spriteBatch, pixel, "FIRST LAUNCH STARTS THE TUTORIAL PROLOGUE", Game1.ScreenSize.X / 2f, 230f, Color.Orange * 0.9f, 1.25f);
 
+            DrawCenteredText(spriteBatch, pixel, "DEVELOPED BY SABINO SOFTWARE  RELEASED UNDER THE UNLICENSE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 150f, Color.White * 0.66f, 1.08f);
             string medalText = medals.CampaignClear
                 ? (medals.PerfectCampaign ? "PERFECT CAMPAIGN MEDAL UNLOCKED" : "CAMPAIGN CLEAR MEDAL UNLOCKED")
                 : "NO CAMPAIGN MEDALS YET";
@@ -1872,13 +1924,13 @@ namespace SpaceBurst
         private void DrawHelp(SpriteBatch spriteBatch, Texture2D pixel)
         {
             if (helpReturnState == GameFlowState.Title)
-                DrawBackdrop(spriteBatch, pixel, 0.78f, "RUN THE TUTORIAL AGAIN FROM PAGE 1");
+                DrawBackdrop(spriteBatch, pixel, 0.78f, "RUN THE TUTORIAL AGAIN FROM PAGE 1 OR OPEN ABOUT / LEGAL");
             else
                 spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), Color.Black * 0.55f);
 
             spriteBatch.Draw(pixel, new Rectangle(90, 90, Game1.VirtualWidth - 180, Game1.VirtualHeight - 180), Color.Black * 0.75f);
             DrawCenteredText(spriteBatch, pixel, "HELP", Game1.ScreenSize.X / 2f, 112f, Color.White, 3f);
-            DrawCenteredText(spriteBatch, pixel, string.Concat("PAGE ", (helpPageIndex + 1).ToString(), " / 5"), Game1.ScreenSize.X / 2f, 152f, Color.White * 0.7f, 1.5f);
+            DrawCenteredText(spriteBatch, pixel, string.Concat("PAGE ", (helpPageIndex + 1).ToString(), " / ", HelpPageCount.ToString()), Game1.ScreenSize.X / 2f, 152f, Color.White * 0.7f, 1.5f);
 
             switch (helpPageIndex)
             {
@@ -1896,8 +1948,14 @@ namespace SpaceBurst
                 case 3:
                     DrawHelpPage(spriteBatch, pixel, "LIVES AND SHIPS\nSHIPS ARE YOUR IN PLACE RESPAWNS\nIF SHIPS HIT ZERO THE NEXT DEATH COSTS A LIFE\nLOSING A LIFE RESTARTS THE WHOLE STAGE\nDEATH ALSO WEAKENS YOUR CURRENT LOADOUT", 186f);
                     break;
-                default:
+                case 4:
                     DrawHelpPage(spriteBatch, pixel, "FX AND REWIND\nHOLD R TO REWIND 8 SECONDS OF GAMEPLAY\nREWIND STARTS SLOW AND ACCELERATES THE LONGER YOU HOLD\nLOADS AND REWINDS DISABLE MEDALS FOR THE RUN\nLOW STANDARD AND NEON VISUAL PRESETS ARE IN OPTIONS", 186f);
+                    break;
+                case AboutHelpPageIndex:
+                    DrawHelpPage(spriteBatch, pixel, AboutHelpText, 186f, 1.34f);
+                    break;
+                default:
+                    DrawHelpPage(spriteBatch, pixel, UnlicenseText, 182f, 0.84f);
                     break;
             }
 
@@ -1921,8 +1979,13 @@ namespace SpaceBurst
 
         private void DrawHelpPage(SpriteBatch spriteBatch, Texture2D pixel, string text, float y)
         {
-            Vector2 size = BitmapFontRenderer.Measure(text, 1.6f);
-            BitmapFontRenderer.Draw(spriteBatch, pixel, text, new Vector2(Game1.ScreenSize.X / 2f - size.X / 2f, y), Color.White, 1.6f);
+            DrawHelpPage(spriteBatch, pixel, text, y, 1.6f);
+        }
+
+        private void DrawHelpPage(SpriteBatch spriteBatch, Texture2D pixel, string text, float y, float scale)
+        {
+            Vector2 size = BitmapFontRenderer.Measure(text, scale);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, text, new Vector2(Game1.ScreenSize.X / 2f - size.X / 2f, y), Color.White, scale);
         }
 
         private void DrawHud(SpriteBatch spriteBatch, Texture2D pixel)

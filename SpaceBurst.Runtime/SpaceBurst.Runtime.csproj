@@ -1,6 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
+    <Company>Sabino Software</Company>
+    <Authors>Sabino Software</Authors>
+    <Product>SpaceBurst</Product>
+    <Description>Runtime contracts and validation for the SpaceBurst campaign, weapons, and stage data.</Description>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
   </PropertyGroup>

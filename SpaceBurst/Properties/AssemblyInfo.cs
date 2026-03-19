@@ -8,11 +8,11 @@ using Android.App;
 // Change them to the values specific to your project.
 
 [assembly: AssemblyTitle("SpaceBurst")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyDescription("Procedural side-scrolling shooter with deterministic rewind, weapon drafts, and cross-platform release builds.")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
+[assembly: AssemblyCompany("Sabino Software")]
 [assembly: AssemblyProduct("SpaceBurst")]
-[assembly: AssemblyCopyright("Copyright (c) SpaceBurst")]
+[assembly: AssemblyCopyright("Developed by Sabino Software. Released under the Unlicense.")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 

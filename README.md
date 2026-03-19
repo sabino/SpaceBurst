@@ -1,76 +1,103 @@
 # SpaceBurst
-A simple cross-platform shooter and is still a work in progress.
 
-![spaceburst](https://user-images.githubusercontent.com/982190/29991849-fddee9de-8f64-11e7-9b73-e6180c844c30.png)
+SpaceBurst is a procedural side-scrolling shooter built around deterministic rewind, authored campaign progression, style-specific weapon drafts, procedural visuals, and runtime-generated audio. The project targets Windows, Linux, and Android from a single repository.
 
+Developed by **Sabino Software**
+License: **The Unlicense**
 
-## What can you do?
-- Move (using WASD keys)
-- Aim (mouse cursor)
-- Shoot (using mouse click or arrow keys)
-- Kill enemies
-- Make points
+![Title screen](docs/media/title-screen.png)
 
-## Build And Run
+![Gameplay](docs/media/gameplay-combat.png)
+
+![Boss and FX](docs/media/boss-fx.png)
+
+## Features
+
+- 50-stage campaign with boss fights on stages 10, 20, 30, 40, and 50.
+- Deterministic rewind, save slots, and transition-time upgrade drafts.
+- Ten weapon styles with style-specific power cores and progression.
+- Procedural art, feedback effects, chapter-aware music, and runtime-generated audio.
+- Desktop, Linux, and Android packaging paths.
+- GitHub Actions for PR checks, prereleases, and Pages docs.
+
+## Controls
+
+### Desktop
+
+- `W A S D`: move
+- `Arrow Keys`: aim
+- `Space`: fire
+- `Q / E`: switch owned weapon styles
+- `R`: rewind
+- `Esc`: pause
+- `F1`: help
+
+### Android
+
+- Left touch pad: move
+- Right touch pad: aim and fire
+- `R` touch button: rewind
+
+## Saves, Rewind, and Progression
+
+- Three local save slots are available from the pause flow and title screen.
+- Rewind stores up to 8 seconds of deterministic gameplay state.
+- `Ships` give in-place respawns.
+- `Lives` restart the current stage once ships are exhausted.
+- Power cores feed between-stage upgrade drafts and long-run weapon growth.
+
+## Release Downloads
+
+- Releases: [github.com/sabino/SpaceBurst/releases](https://github.com/sabino/SpaceBurst/releases)
+- Documentation: [sabino.github.io/SpaceBurst](https://sabino.github.io/SpaceBurst/)
+
+## Local Build
 
 Prerequisite: install the .NET 8 SDK.
-
-From the repository root:
 
 ```powershell
 dotnet restore
 dotnet build SpaceBurst.sln
-dotnet run --project SpaceBurst\SpaceBurst.csproj
+dotnet test SpaceBurst.Runtime.Tests/SpaceBurst.Runtime.Tests.csproj
+.\build-all.ps1
 ```
 
-The repo now uses local MonoGame tooling, so you do not need a separate global MonoGame install just to build it.
+The local aggregate build writes deterministic outputs to:
 
-## Single-File Builds
+- `artifacts/release/latest/game-win-x64/SpaceBurst.exe`
+- `artifacts/release/latest/leveltool-win-x64/SpaceBurst.LevelTool.exe`
+- `artifacts/release/latest/android-apk/com.sabino.spaceburst-Signed.apk`
 
-To create the final self-contained single-file app for both Windows and Linux:
+## Android Build
 
 ```powershell
-./publish-single-file.ps1
+.\build-android.ps1 -InstallDependencies
 ```
 
-This writes the outputs to:
-
-- `artifacts/singlefile/win-x64/SpaceBurst.exe`
-- `artifacts/singlefile/linux-x64/SpaceBurst`
-
-You can also publish only one target:
+If a USB-debug-enabled device is connected:
 
 ```powershell
-./publish-single-file.ps1 -RuntimeIdentifier win-x64
-./publish-single-file.ps1 -RuntimeIdentifier linux-x64
+.\build-android.ps1 -InstallOnDevice
 ```
 
-On Linux, the publish output is a single executable file as well. If you build the Linux artifact on Linux, it should be directly runnable from the desktop or terminal. If you generate the Linux artifact on Windows and then copy it to Linux, you may still need to mark it executable once with `chmod +x SpaceBurst`.
+## Documentation
 
-## Android APK
-
-There is now an Android project at `SpaceBurst.Android/SpaceBurst.Android.csproj`.
-
-Touch controls:
-
-- Left side drag moves the ship
-- Right side touch aims and fires
-- The game keeps the original 800x600 playfield and scales it to the phone screen
-
-To build an installable debug APK on Windows:
+Build the local docs site with:
 
 ```powershell
-./build-android.ps1 -InstallDependencies
+.\build-docs.ps1
 ```
 
-The first run installs the Android SDK into `C:\Android\sdk`.
+The output site is written to `docs/_site`.
 
-The generated APK is written to:
+## GitHub Automation
 
-- `SpaceBurst.Android/bin/Debug/net8.0-android34.0/com.sabino.spaceburst-Signed.apk`
+The repository now includes:
 
-If your phone is connected with USB debugging enabled, you can also install it directly:
+- PR checks for Windows build/tests, Linux publish smoke, Android smoke build, and DocFX smoke.
+- Master prereleases with Windows, Linux, and Android game artifacts.
+- GitHub Pages documentation published from DocFX.
 
-```powershell
-./build-android.ps1 -InstallOnDevice
-```
+## Public Credit and License
+
+SpaceBurst is developed by **Sabino Software** and released under **The Unlicense**. The full license text is available in [`LICENSE`](LICENSE), in the packaged desktop builds, and in the in-game About/Legal screens.

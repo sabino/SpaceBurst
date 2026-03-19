@@ -2,6 +2,9 @@ using System.Collections.Generic;
 
 namespace SpaceBurst.RuntimeData
 {
+    /// <summary>
+    /// Identifies the campaign medals that can be unlocked during a run.
+    /// </summary>
     public enum MedalId
     {
         StageClear,
@@ -11,6 +14,9 @@ namespace SpaceBurst.RuntimeData
         PerfectCampaign,
     }
 
+    /// <summary>
+    /// Enumerates the authored enemy and boss movement patterns used by stage data.
+    /// </summary>
     public enum MovePattern
     {
         StraightFlyIn,
@@ -22,6 +28,9 @@ namespace SpaceBurst.RuntimeData
         BossCharge,
     }
 
+    /// <summary>
+    /// Enumerates the authored firing patterns used by enemies and bosses.
+    /// </summary>
     public enum FirePattern
     {
         None,
@@ -31,6 +40,9 @@ namespace SpaceBurst.RuntimeData
         BossFan,
     }
 
+    /// <summary>
+    /// Identifies the built-in boss archetypes for milestone stages.
+    /// </summary>
     public enum BossType
     {
         DestroyerBoss,
@@ -40,6 +52,9 @@ namespace SpaceBurst.RuntimeData
         FinalBoss,
     }
 
+    /// <summary>
+    /// Describes the crater shape applied to a destructible mask when a hit lands.
+    /// </summary>
     public enum ImpactKernelShape
     {
         Point,
@@ -49,6 +64,9 @@ namespace SpaceBurst.RuntimeData
         Blast5,
     }
 
+    /// <summary>
+    /// Lists the semi-authored random event families that can appear in stage sections.
+    /// </summary>
     public enum RandomEventType
     {
         None,
@@ -58,6 +76,9 @@ namespace SpaceBurst.RuntimeData
         SolarFlare,
     }
 
+    /// <summary>
+    /// Lists the player weapon styles that can be unlocked during a run.
+    /// </summary>
     public enum WeaponStyleId
     {
         Pulse,
@@ -72,6 +93,9 @@ namespace SpaceBurst.RuntimeData
         Fortress,
     }
 
+    /// <summary>
+    /// Describes the controller behavior used when a weapon style fires.
+    /// </summary>
     public enum FireMode
     {
         PulseBurst,
@@ -86,6 +110,9 @@ namespace SpaceBurst.RuntimeData
         FortressPulse,
     }
 
+    /// <summary>
+    /// Describes how spawned projectiles behave after they are emitted.
+    /// </summary>
     public enum ProjectileBehavior
     {
         Bolt,
@@ -99,6 +126,9 @@ namespace SpaceBurst.RuntimeData
         ShieldPulse,
     }
 
+    /// <summary>
+    /// Selects the muzzle-flash family to use for a weapon level.
+    /// </summary>
     public enum MuzzleFxStyle
     {
         None,
@@ -114,6 +144,9 @@ namespace SpaceBurst.RuntimeData
         Fortress,
     }
 
+    /// <summary>
+    /// Selects the trail-rendering family to use for a projectile or beam.
+    /// </summary>
     public enum TrailFxStyle
     {
         None,
@@ -126,6 +159,9 @@ namespace SpaceBurst.RuntimeData
         Shield,
     }
 
+    /// <summary>
+    /// Selects the impact effect family to use when a hit resolves.
+    /// </summary>
     public enum ImpactFxStyle
     {
         Standard,
@@ -141,11 +177,17 @@ namespace SpaceBurst.RuntimeData
         Fortress,
     }
 
+    /// <summary>
+    /// Root JSON object for the enemy archetype catalog.
+    /// </summary>
     public sealed class EnemyArchetypeCatalogDefinition
     {
         public List<EnemyArchetypeDefinition> Archetypes { get; set; } = new List<EnemyArchetypeDefinition>();
     }
 
+    /// <summary>
+    /// Defines a reusable enemy archetype referenced by stage spawn groups.
+    /// </summary>
     public sealed class EnemyArchetypeDefinition
     {
         public string Id { get; set; }
@@ -168,6 +210,9 @@ namespace SpaceBurst.RuntimeData
         public DamageMaskDefinition DamageMask { get; set; } = new DamageMaskDefinition();
     }
 
+    /// <summary>
+    /// Defines the procedural sprite rows and palette for a runtime-generated actor.
+    /// </summary>
     public sealed class ProceduralSpriteDefinition
     {
         public string Id { get; set; }
@@ -179,11 +224,17 @@ namespace SpaceBurst.RuntimeData
         public VitalCoreMaskDefinition VitalCore { get; set; } = new VitalCoreMaskDefinition();
     }
 
+    /// <summary>
+    /// Defines the vital core cells used by the destructible damage model.
+    /// </summary>
     public sealed class VitalCoreMaskDefinition
     {
         public List<string> Rows { get; set; } = new List<string>();
     }
 
+    /// <summary>
+    /// Defines how a hit removes cells and emits debris from a destructible mask.
+    /// </summary>
     public sealed class ImpactProfileDefinition
     {
         public string Name { get; set; } = "Standard";
@@ -196,6 +247,9 @@ namespace SpaceBurst.RuntimeData
         public float DebrisSpeed { get; set; } = 140f;
     }
 
+    /// <summary>
+    /// Defines projectile and contact damage behavior for a destructible actor.
+    /// </summary>
     public sealed class DamageMaskDefinition
     {
         public int ContactDamage { get; set; } = 1;
@@ -214,6 +268,9 @@ namespace SpaceBurst.RuntimeData
         };
     }
 
+    /// <summary>
+    /// Defines background palette and density parameters for a stage or section.
+    /// </summary>
     public sealed class BackgroundMoodDefinition
     {
         public string PrimaryColor { get; set; } = "#0C1122";
@@ -227,6 +284,9 @@ namespace SpaceBurst.RuntimeData
         public float Contrast { get; set; } = 0.8f;
     }
 
+    /// <summary>
+    /// Defines a weighted random event window inside a section timeline.
+    /// </summary>
     public sealed class RandomEventWindowDefinition
     {
         public RandomEventType EventType { get; set; } = RandomEventType.None;
@@ -236,6 +296,9 @@ namespace SpaceBurst.RuntimeData
         public float Intensity { get; set; } = 1f;
     }
 
+    /// <summary>
+    /// Defines one authored enemy spawn group inside a section timeline.
+    /// </summary>
     public sealed class SpawnGroupDefinition
     {
         public string ArchetypeId { get; set; }
@@ -253,6 +316,9 @@ namespace SpaceBurst.RuntimeData
         public float Frequency { get; set; } = 1f;
     }
 
+    /// <summary>
+    /// Defines a paced slice of a stage timeline, including mood, events, and groups.
+    /// </summary>
     public sealed class SectionDefinition
     {
         public string Label { get; set; }
@@ -267,6 +333,9 @@ namespace SpaceBurst.RuntimeData
         public List<SpawnGroupDefinition> Groups { get; set; } = new List<SpawnGroupDefinition>();
     }
 
+    /// <summary>
+    /// Defines the boss encounter for a milestone stage.
+    /// </summary>
     public sealed class BossDefinition
     {
         public BossType Type { get; set; }
@@ -284,6 +353,9 @@ namespace SpaceBurst.RuntimeData
         public FirePattern FirePattern { get; set; } = FirePattern.BossFan;
     }
 
+    /// <summary>
+    /// Defines one full stage in the campaign.
+    /// </summary>
     public sealed class StageDefinition
     {
         public int StageNumber { get; set; }
@@ -301,6 +373,9 @@ namespace SpaceBurst.RuntimeData
         public BossDefinition Boss { get; set; }
     }
 
+    /// <summary>
+    /// Defines one upgrade tier for a player weapon style.
+    /// </summary>
     public sealed class WeaponLevelDefinition
     {
         public float FireIntervalSeconds { get; set; } = 0.12f;
@@ -331,6 +406,9 @@ namespace SpaceBurst.RuntimeData
         public ImpactProfileDefinition Impact { get; set; } = new ImpactProfileDefinition();
     }
 
+    /// <summary>
+    /// Defines the icon, palette, and upgrade levels for a player weapon style.
+    /// </summary>
     public sealed class WeaponStyleDefinition
     {
         public WeaponStyleId Id { get; set; }
@@ -342,6 +420,9 @@ namespace SpaceBurst.RuntimeData
         public List<WeaponLevelDefinition> Levels { get; set; } = new List<WeaponLevelDefinition>();
     }
 
+    /// <summary>
+    /// Represents a validation problem discovered while loading runtime content.
+    /// </summary>
     public sealed class ValidationIssue
     {
         public string Path { get; set; }

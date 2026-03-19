@@ -1,5 +1,5 @@
 param(
-    [string]$AndroidSdkDirectory = "C:\Android\sdk",
+    [string]$AndroidSdkDirectory = "",
     [string]$WindowsRuntimeIdentifier = "win-x64",
     [string]$WindowsConfiguration = "Release",
     [string]$AndroidConfiguration = "Debug",
@@ -10,9 +10,43 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Resolve-AndroidSdkDirectory {
+    param([string]$PreferredPath)
+
+    $candidates = @()
+    if (-not [string]::IsNullOrWhiteSpace($PreferredPath)) {
+        $candidates += $PreferredPath
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:ANDROID_SDK_ROOT)) {
+        $candidates += $env:ANDROID_SDK_ROOT
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:ANDROID_HOME)) {
+        $candidates += $env:ANDROID_HOME
+    }
+    $candidates += "C:\Android\sdk"
+    if ($env:LOCALAPPDATA) {
+        $candidates += (Join-Path $env:LOCALAPPDATA "Android\Sdk")
+    }
+
+    foreach ($candidate in $candidates | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($PreferredPath)) {
+        return $PreferredPath
+    }
+
+    return "C:\Android\sdk"
+}
+
 $root = $PSScriptRoot
 $gameProject = Join-Path $root "SpaceBurst\SpaceBurst.csproj"
 $levelToolProject = Join-Path $root "SpaceBurst.LevelTool\SpaceBurst.LevelTool.csproj"
+$AndroidSdkDirectory = Resolve-AndroidSdkDirectory $AndroidSdkDirectory
+$env:ANDROID_SDK_ROOT = $AndroidSdkDirectory
+$env:ANDROID_HOME = $AndroidSdkDirectory
 $commit = (git -C $root rev-parse --short HEAD).Trim()
 if (-not $commit) {
     throw "Unable to determine git commit."
@@ -51,11 +85,11 @@ Invoke-Step "Restoring local tools" {
 
 Invoke-Step "Cleaning generated content outputs" {
     if (Test-Path $contentBin) {
-        cmd /c rmdir /s /q "$contentBin"
+        Remove-Item $contentBin -Recurse -Force
     }
 
     if (Test-Path $contentObj) {
-        cmd /c rmdir /s /q "$contentObj"
+        Remove-Item $contentObj -Recurse -Force
     }
 }
 
@@ -116,6 +150,7 @@ if (-not $SkipAndroid) {
                 -t:InstallAndroidDependencies `
                 -f $framework `
                 -p:AcceptAndroidSdkLicenses=True `
+                -p:AndroidSdkDirectory=$AndroidSdkDirectory `
                 -v minimal
 
             if ($LASTEXITCODE -ne 0) {
@@ -124,15 +159,15 @@ if (-not $SkipAndroid) {
         }
 
         if (Test-Path $contentObj) {
-            cmd /c rmdir /s /q "$contentObj"
+            Remove-Item $contentObj -Recurse -Force
         }
 
         if (Test-Path $androidObj) {
-            cmd /c rmdir /s /q "$androidObj"
+            Remove-Item $androidObj -Recurse -Force
         }
 
         if (Test-Path $androidBin) {
-            cmd /c rmdir /s /q "$androidBin"
+            Remove-Item $androidBin -Recurse -Force
         }
 
         dotnet mgcb `
@@ -150,6 +185,7 @@ if (-not $SkipAndroid) {
         dotnet build $androidProject `
             -f $framework `
             -c $AndroidConfiguration `
+            -p:AndroidSdkDirectory=$AndroidSdkDirectory `
             -v minimal
 
         if ($LASTEXITCODE -ne 0) {

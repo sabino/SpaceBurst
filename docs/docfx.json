@@ -1,0 +1,49 @@
+{
+  "metadata": [
+    {
+      "src": [
+        {
+          "src": "..",
+          "files": [
+            "SpaceBurst/SpaceBurst.csproj",
+            "SpaceBurst.Runtime/SpaceBurst.Runtime.csproj"
+          ]
+        }
+      ],
+      "dest": "api",
+      "disableGitFeatures": false
+    }
+  ],
+  "build": {
+    "content": [
+      {
+        "files": [
+          "index.md",
+          "toc.yml",
+          "api/index.md",
+          "api/**.yml",
+          "articles/**.md",
+          "articles/**/toc.yml"
+        ]
+      }
+    ],
+    "resource": [
+      {
+        "files": [
+          "media/**"
+        ]
+      }
+    ],
+    "output": "_site",
+    "template": [
+      "default",
+      "modern"
+    ],
+    "globalMetadata": {
+      "_appName": "SpaceBurst",
+      "_appTitle": "SpaceBurst Documentation",
+      "_enableSearch": true,
+      "_appFooter": "Developed by Sabino Software"
+    }
+  }
+}

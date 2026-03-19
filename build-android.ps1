@@ -1,11 +1,48 @@
 param(
-    [string]$AndroidSdkDirectory = "C:\Android\sdk",
+    [string]$AndroidSdkDirectory = "",
     [string]$Configuration = "Debug",
+    [int]$ApplicationVersion = 0,
+    [string]$ApplicationDisplayVersion = "",
+    [string]$SigningKeyStorePath = "",
+    [string]$SigningStorePass = "",
+    [string]$SigningKeyAlias = "",
+    [string]$SigningKeyPass = "",
     [switch]$InstallDependencies,
     [switch]$InstallOnDevice
 )
 
 $ErrorActionPreference = "Stop"
+
+function Resolve-AndroidSdkDirectory {
+    param([string]$PreferredPath)
+
+    $candidates = @()
+    if (-not [string]::IsNullOrWhiteSpace($PreferredPath)) {
+        $candidates += $PreferredPath
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:ANDROID_SDK_ROOT)) {
+        $candidates += $env:ANDROID_SDK_ROOT
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:ANDROID_HOME)) {
+        $candidates += $env:ANDROID_HOME
+    }
+    $candidates += "C:\Android\sdk"
+    if ($env:LOCALAPPDATA) {
+        $candidates += (Join-Path $env:LOCALAPPDATA "Android\Sdk")
+    }
+
+    foreach ($candidate in $candidates | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($PreferredPath)) {
+        return $PreferredPath
+    }
+
+    return "C:\Android\sdk"
+}
 
 $project = Join-Path $PSScriptRoot "SpaceBurst.Android\SpaceBurst.Android.csproj"
 $framework = "net8.0-android34.0"
@@ -15,9 +52,36 @@ $mgcb = Join-Path $PSScriptRoot "SpaceBurst\Content\Content.mgcb"
 $apkDirectory = Join-Path $PSScriptRoot "SpaceBurst.Android\bin\$Configuration\$framework"
 $androidObj = Join-Path $PSScriptRoot "SpaceBurst.Android\obj"
 $androidBin = Join-Path $PSScriptRoot "SpaceBurst.Android\bin\$Configuration"
+$AndroidSdkDirectory = Resolve-AndroidSdkDirectory $AndroidSdkDirectory
 $adb = Join-Path $AndroidSdkDirectory "platform-tools\adb.exe"
 $env:ANDROID_SDK_ROOT = $AndroidSdkDirectory
 $env:ANDROID_HOME = $AndroidSdkDirectory
+
+$buildProperties = @(
+    "-p:AndroidSdkDirectory=$AndroidSdkDirectory"
+)
+
+if ($ApplicationVersion -gt 0) {
+    $buildProperties += "-p:ApplicationVersion=$ApplicationVersion"
+}
+
+if (-not [string]::IsNullOrWhiteSpace($ApplicationDisplayVersion)) {
+    $buildProperties += "-p:ApplicationDisplayVersion=$ApplicationDisplayVersion"
+}
+
+if (-not [string]::IsNullOrWhiteSpace($SigningKeyStorePath)) {
+    if ([string]::IsNullOrWhiteSpace($SigningStorePass) -or
+        [string]::IsNullOrWhiteSpace($SigningKeyAlias) -or
+        [string]::IsNullOrWhiteSpace($SigningKeyPass)) {
+        throw "Android signing requires store password, key alias, and key password."
+    }
+
+    $buildProperties += "-p:AndroidKeyStore=True"
+    $buildProperties += "-p:AndroidSigningKeyStore=$SigningKeyStorePath"
+    $buildProperties += "-p:AndroidSigningStorePass=$SigningStorePass"
+    $buildProperties += "-p:AndroidSigningKeyAlias=$SigningKeyAlias"
+    $buildProperties += "-p:AndroidSigningKeyPass=$SigningKeyPass"
+}
 
 dotnet tool restore
 if ($LASTEXITCODE -ne 0) {
@@ -29,6 +93,7 @@ if ($InstallDependencies -or -not (Test-Path $adb)) {
         -t:InstallAndroidDependencies `
         -f $framework `
         -p:AcceptAndroidSdkLicenses=True `
+        @buildProperties `
         -v minimal
 
     if ($LASTEXITCODE -ne 0) {
@@ -37,15 +102,15 @@ if ($InstallDependencies -or -not (Test-Path $adb)) {
 }
 
 if (Test-Path $contentObj) {
-    cmd /c rmdir /s /q "$contentObj"
+    Remove-Item $contentObj -Recurse -Force
 }
 
 if (Test-Path $androidObj) {
-    cmd /c rmdir /s /q "$androidObj"
+    Remove-Item $androidObj -Recurse -Force
 }
 
 if (Test-Path $androidBin) {
-    cmd /c rmdir /s /q "$androidBin"
+    Remove-Item $androidBin -Recurse -Force
 }
 
 dotnet mgcb `
@@ -63,6 +128,7 @@ if ($LASTEXITCODE -ne 0) {
 dotnet build $project `
     -f $framework `
     -c $Configuration `
+    @buildProperties `
     -v minimal
 
 if ($LASTEXITCODE -ne 0) {

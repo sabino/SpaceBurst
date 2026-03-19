@@ -44,6 +44,8 @@ dlldata.c
 project.lock.json
 project.fragment.lock.json
 artifacts/
+docs/_site/
+docs/api/
 
 *_i.c
 *_p.c
