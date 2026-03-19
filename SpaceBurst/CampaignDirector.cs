@@ -204,6 +204,34 @@ namespace SpaceBurst
             get { return state; }
         }
 
+        public int CurrentStageNumber
+        {
+            get { return currentStage != null ? currentStageNumber : 0; }
+        }
+
+        public int TransitionTargetStageNumber
+        {
+            get { return transitionTargetStageNumber; }
+        }
+
+        public int CurrentSectionIndex
+        {
+            get { return Math.Max(0, currentSectionIndex); }
+        }
+
+        public float CurrentSectionProgress
+        {
+            get
+            {
+                SectionDefinition section = GetActiveSection();
+                if (section == null)
+                    return 0f;
+
+                float duration = Math.Max(0.01f, section.DurationSeconds);
+                return MathHelper.Clamp((stageElapsedSeconds - section.StartSeconds) / duration, 0f, 1f);
+            }
+        }
+
         public bool HasActiveBoss
         {
             get { return activeBoss != null && !activeBoss.IsExpired; }

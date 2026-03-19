@@ -6,7 +6,7 @@ namespace SpaceBurst
 {
     readonly struct GameAudioState
     {
-        public GameAudioState(GameFlowState flowState, bool hasBoss, bool transitionToBoss, float dangerFactor, float transitionWarpStrength, float rewindStrength, float scrollSpeed)
+        public GameAudioState(GameFlowState flowState, bool hasBoss, bool transitionToBoss, float dangerFactor, float transitionWarpStrength, float rewindStrength, float scrollSpeed, int currentStageNumber, int transitionTargetStageNumber, int currentSectionIndex, float currentSectionProgress)
         {
             FlowState = flowState;
             HasBoss = hasBoss;
@@ -15,6 +15,10 @@ namespace SpaceBurst
             TransitionWarpStrength = transitionWarpStrength;
             RewindStrength = rewindStrength;
             ScrollSpeed = scrollSpeed;
+            CurrentStageNumber = currentStageNumber;
+            TransitionTargetStageNumber = transitionTargetStageNumber;
+            CurrentSectionIndex = currentSectionIndex;
+            CurrentSectionProgress = currentSectionProgress;
         }
 
         public GameFlowState FlowState { get; }
@@ -24,6 +28,10 @@ namespace SpaceBurst
         public float TransitionWarpStrength { get; }
         public float RewindStrength { get; }
         public float ScrollSpeed { get; }
+        public int CurrentStageNumber { get; }
+        public int TransitionTargetStageNumber { get; }
+        public int CurrentSectionIndex { get; }
+        public float CurrentSectionProgress { get; }
     }
 
     sealed class AudioDirector : System.IDisposable

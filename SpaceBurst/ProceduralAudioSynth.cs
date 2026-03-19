@@ -156,93 +156,147 @@ namespace SpaceBurst
 
         private static float RenderStemSample(MusicThemeDefinition theme, MusicStemKind kind, float time, float durationSeconds)
         {
-            float beatLength = 60f / theme.Tempo;
-            float loopSeconds = 8f * beatLength;
+            float beatLength = 60f / Math.Max(40f, theme.Tempo);
+            float loopSeconds = Math.Max(durationSeconds, theme.Bars * 4f * beatLength);
             float wrapped = loopSeconds <= 0f ? time : time % loopSeconds;
             float beat = wrapped / beatLength;
-            int stepIndex = ((int)MathF.Floor(beat * 2f)) % 16;
-            float stepPhase = beat * 2f - MathF.Floor(beat * 2f);
-            float subBeat = beat - MathF.Floor(beat);
+            int barIndex = Math.Min(theme.Bars - 1, (int)MathF.Floor(beat / 4f));
+            float beatInBar = beat - barIndex * 4f;
+            int barSixteenth = (int)MathF.Floor(beatInBar * 4f) % 16;
+            int barEighth = (int)MathF.Floor(beatInBar * 2f) % 8;
+            float sixteenthPhase = beatInBar * 4f - MathF.Floor(beatInBar * 4f);
+            float eighthPhase = beatInBar * 2f - MathF.Floor(beatInBar * 2f);
+            float swungBeat = ApplySwing(beatInBar, theme.Swing);
+            int chordDegree = theme.ChordDegrees[barIndex % theme.ChordDegrees.Length];
 
             return kind switch
             {
-                MusicStemKind.Drums => RenderDrums(stepIndex, stepPhase, subBeat),
-                MusicStemKind.Bass => RenderBass(theme, beat, stepIndex, stepPhase),
-                MusicStemKind.Pad => RenderPad(theme, time),
-                MusicStemKind.Pulse => RenderPulse(theme, stepIndex, stepPhase, time),
-                MusicStemKind.Lead => RenderLead(theme, beat, stepIndex, stepPhase),
-                MusicStemKind.Danger => RenderDanger(theme, stepIndex, stepPhase, time),
-                _ => RenderBoss(theme, stepIndex, stepPhase, time),
+                MusicStemKind.Drums => RenderDrums(theme, barIndex, barSixteenth, sixteenthPhase, time),
+                MusicStemKind.Bass => RenderBass(theme, chordDegree, barIndex, barEighth, eighthPhase, time),
+                MusicStemKind.Pad => RenderPad(theme, chordDegree, time, beatInBar),
+                MusicStemKind.Pulse => RenderPulse(theme, chordDegree, barIndex, barSixteenth, sixteenthPhase, time),
+                MusicStemKind.Lead => RenderLead(theme, chordDegree, barIndex, barEighth, eighthPhase, swungBeat, time),
+                MusicStemKind.Danger => RenderDanger(theme, chordDegree, barIndex, barSixteenth, sixteenthPhase, time),
+                _ => RenderBoss(theme, chordDegree, barIndex, barEighth, eighthPhase, time),
             };
         }
 
-        private static float RenderDrums(int stepIndex, float stepPhase, float subBeat)
+        private static float RenderDrums(MusicThemeDefinition theme, int barIndex, int barSixteenth, float sixteenthPhase, float time)
         {
-            float kick = (stepIndex == 0 || stepIndex == 8 || stepIndex == 12) ? DrumKick(stepPhase) : 0f;
-            float snare = (stepIndex == 4 || stepIndex == 12) ? DrumSnare(stepPhase) : 0f;
-            float hat = (stepIndex % 2 == 1) ? DrumHat(subBeat) : 0f;
-            return Math.Clamp(kick + snare + hat, -1f, 1f) * 0.75f;
+            bool kickHit = barSixteenth == 0
+                || (barSixteenth == 8 && theme.RhythmDensity > 0.34f)
+                || (barSixteenth == 4 && theme.Syncopation > 0.38f && PatternChance(theme.ThemeSeed, barIndex, 4) > 0.35f)
+                || (barSixteenth == 12 && theme.RhythmDensity > 0.7f && PatternChance(theme.ThemeSeed, barIndex, 12) > 0.42f);
+            bool snareHit = barSixteenth == 4 || barSixteenth == 12;
+            bool ghostHit = (barSixteenth == 10 || barSixteenth == 14) && theme.Syncopation > 0.48f && PatternChance(theme.ThemeSeed + 13, barIndex, barSixteenth) > 0.55f;
+            bool hatHit = (barSixteenth % 2 == 0 && theme.RhythmDensity > 0.2f)
+                || (barSixteenth % 2 == 1 && theme.RhythmDensity > 0.58f && PatternChance(theme.ThemeSeed + 29, barIndex, barSixteenth) > 0.32f);
+
+            float kick = kickHit ? DrumKick(sixteenthPhase) : 0f;
+            float snare = snareHit ? DrumSnare(sixteenthPhase) : 0f;
+            float ghost = ghostHit ? DrumSnare(sixteenthPhase) * 0.26f : 0f;
+            float hat = hatHit ? DrumHat(sixteenthPhase, theme.RhythmDensity) : 0f;
+            return Math.Clamp(kick + snare + ghost + hat, -1f, 1f) * 0.8f;
         }
 
-        private static float RenderBass(MusicThemeDefinition theme, float beat, int stepIndex, float stepPhase)
+        private static float RenderBass(MusicThemeDefinition theme, int chordDegree, int barIndex, int barEighth, float eighthPhase, float time)
         {
-            int note = theme.RootMidiNote + theme.ScaleOffsets[(stepIndex / 4) % theme.ScaleOffsets.Length] - 12;
+            int patternValue = theme.BassPattern[(barIndex * 8 + barEighth) % theme.BassPattern.Length];
+            if (patternValue <= -99)
+                return 0f;
+
+            int note = GetScaleNote(theme, chordDegree + patternValue, theme.BassOctave);
             float frequency = MidiToFrequency(note);
-            float envelope = 1f - MathHelper.Clamp(stepPhase * 1.1f, 0f, 1f);
-            float body = SampleWaveform(SynthWaveform.Square, frequency, beat * (60f / theme.Tempo), 0.42f) * 0.65f;
-            float sub = SampleWaveform(SynthWaveform.Sine, frequency * 0.5f, beat * (60f / theme.Tempo), 0.5f) * 0.35f;
-            return ApplyDrive((body + sub) * envelope, 1.08f) * 0.42f;
+            float envelope = GetStepEnvelope(eighthPhase, 0.88f);
+            float body = SampleWaveform(SynthWaveform.Square, frequency, time, 0.42f) * 0.58f;
+            float sub = SampleWaveform(SynthWaveform.Sine, frequency * 0.5f, time, 0.5f) * 0.4f;
+            float grit = SampleWaveform(SynthWaveform.Saw, frequency * 1.01f, time, 0.5f) * theme.Brightness * 0.16f;
+            return ApplyDrive((body + sub + grit) * envelope, 1.04f + theme.VariantIntensity * 0.18f) * 0.48f;
         }
 
-        private static float RenderPad(MusicThemeDefinition theme, float time)
+        private static float RenderPad(MusicThemeDefinition theme, int chordDegree, float time, float beatInBar)
         {
-            int root = theme.RootMidiNote + theme.ScaleOffsets[0];
-            float n1 = MidiToFrequency(root);
-            float n2 = MidiToFrequency(root + theme.ScaleOffsets[Math.Min(2, theme.ScaleOffsets.Length - 1)]);
-            float n3 = MidiToFrequency(root + theme.ScaleOffsets[Math.Min(4, theme.ScaleOffsets.Length - 1)]);
-            float lfo = 0.9f + MathF.Sin(time * 0.6f) * 0.1f;
-            float sample = SampleWaveform(SynthWaveform.Triangle, n1, time, 0.5f) * 0.38f;
-            sample += SampleWaveform(SynthWaveform.Sine, n2, time, 0.5f) * 0.31f;
-            sample += SampleWaveform(SynthWaveform.Sine, n3 * (1f + theme.PadSpread * 0.01f), time, 0.5f) * 0.23f;
-            return sample * (0.18f + 0.06f * lfo);
+            float slowPulse = 0.88f + MathF.Sin(time * 0.42f + theme.ThemeSeed * 0.1f) * 0.12f;
+            float sample = 0f;
+            for (int i = 0; i < theme.PadChordSteps.Length; i++)
+            {
+                int note = GetScaleNote(theme, chordDegree + theme.PadChordSteps[i], 0);
+                float frequency = MidiToFrequency(note) * (1f + theme.PadSpread * 0.004f * i);
+                sample += SampleWaveform(i == 0 ? SynthWaveform.Triangle : SynthWaveform.Sine, frequency, time, 0.5f) * (0.32f - i * 0.04f);
+            }
+
+            float swell = 0.16f + 0.08f * slowPulse + 0.02f * MathF.Sin(beatInBar * MathF.Tau * 0.5f);
+            return sample * swell;
         }
 
-        private static float RenderPulse(MusicThemeDefinition theme, int stepIndex, float stepPhase, float time)
+        private static float RenderPulse(MusicThemeDefinition theme, int chordDegree, int barIndex, int barSixteenth, float sixteenthPhase, float time)
         {
-            int note = theme.RootMidiNote + theme.ScaleOffsets[(stepIndex + 1) % theme.ScaleOffsets.Length] + 12;
+            int patternValue = theme.PulsePattern[(barIndex * 16 + barSixteenth) % theme.PulsePattern.Length];
+            if (patternValue <= -99)
+                return 0f;
+
+            int note = GetScaleNote(theme, chordDegree + patternValue, 1);
             float frequency = MidiToFrequency(note);
-            float gate = stepPhase < 0.32f ? 1f - stepPhase / 0.32f : 0f;
-            return ApplyDrive(SampleWaveform(SynthWaveform.Pulse, frequency, time, 0.24f) * gate, 1f + theme.PulseDrive) * 0.2f;
+            float gateWidth = 0.22f + theme.RhythmDensity * 0.18f;
+            float gate = sixteenthPhase < gateWidth ? 1f - sixteenthPhase / gateWidth : 0f;
+            float waveform = SampleWaveform(SynthWaveform.Pulse, frequency, time, 0.22f + theme.Brightness * 0.12f);
+            waveform += SampleWaveform(SynthWaveform.Sine, frequency * 2f, time, 0.5f) * 0.12f;
+            return ApplyDrive(waveform * gate, 1f + theme.PulseDrive) * (0.16f + theme.Brightness * 0.04f);
         }
 
-        private static float RenderLead(MusicThemeDefinition theme, float beat, int stepIndex, float stepPhase)
+        private static float RenderLead(MusicThemeDefinition theme, int chordDegree, int barIndex, int barEighth, float eighthPhase, float swungBeat, float time)
         {
-            int[] pattern = { 0, 2, 4, 2, 1, 2, 3, 2 };
-            int note = theme.RootMidiNote + 12 + theme.ScaleOffsets[pattern[(stepIndex / 2) % pattern.Length] % theme.ScaleOffsets.Length];
+            int[] phrase = (barIndex % 2 == 0) ? theme.LeadPatternA : theme.LeadPatternB;
+            int patternValue = phrase[(barIndex * 8 + barEighth) % phrase.Length];
+            if (patternValue <= -99)
+                return 0f;
+
+            float gateChance = PatternChance(theme.ThemeSeed + 41, barIndex, barEighth);
+            if (gateChance > theme.LeadDensity)
+                return 0f;
+
+            int note = GetScaleNote(theme, chordDegree + patternValue, theme.LeadOctave);
+            if (barIndex == theme.Bars - 1 && barEighth >= 6 && theme.VariantIntensity > 0.72f)
+                note += 12;
+
             float frequency = MidiToFrequency(note);
-            float envelope = stepPhase < 0.8f ? 1f - stepPhase * 0.7f : 0.1f;
-            float time = beat * (60f / theme.Tempo);
-            float sample = SampleWaveform(SynthWaveform.Saw, frequency, time, 0.5f);
-            sample += SampleWaveform(SynthWaveform.Sine, frequency * 2f, time, 0.5f) * 0.22f;
-            return ApplyDrive(sample * envelope, 1.1f) * 0.18f;
+            float envelope = eighthPhase < 0.86f ? 1f - eighthPhase * 0.62f : 0.1f;
+            float vibrato = MathF.Sin((time + swungBeat * 0.02f) * (5.8f + theme.Brightness * 3.4f) * MathF.Tau) * (0.003f + theme.Brightness * 0.004f);
+            float saw = SampleWaveform(SynthWaveform.Saw, frequency * (1f + vibrato), time, 0.5f);
+            float shimmer = SampleWaveform(SynthWaveform.Sine, frequency * 2f, time, 0.5f) * (0.18f + theme.Brightness * 0.08f);
+            return ApplyDrive((saw + shimmer) * envelope, 1.08f + theme.Brightness * 0.2f) * 0.22f;
         }
 
-        private static float RenderDanger(MusicThemeDefinition theme, int stepIndex, float stepPhase, float time)
+        private static float RenderDanger(MusicThemeDefinition theme, int chordDegree, int barIndex, int barSixteenth, float sixteenthPhase, float time)
         {
-            float gate = stepIndex % 4 == 0 ? 1f - MathHelper.Clamp(stepPhase * 1.2f, 0f, 1f) : 0f;
-            float sample = SampleWaveform(SynthWaveform.Noise, 40f, time, 0.5f) * 0.4f;
-            sample += SampleWaveform(SynthWaveform.Saw, MidiToFrequency(theme.RootMidiNote - 5), time, 0.5f) * 0.16f;
-            return sample * gate * 0.24f;
-        }
+            bool trigger = barSixteenth == 0
+                || (barSixteenth == 8 && theme.DangerWeight > 0.4f)
+                || (barSixteenth == 12 && theme.DangerWeight > 0.7f && PatternChance(theme.ThemeSeed + 71, barIndex, 12) > 0.45f);
+            if (!trigger)
+                return 0f;
 
-        private static float RenderBoss(MusicThemeDefinition theme, int stepIndex, float stepPhase, float time)
-        {
-            int note = theme.RootMidiNote - 12 + theme.ScaleOffsets[(stepIndex / 4) % theme.ScaleOffsets.Length];
+            int note = GetScaleNote(theme, chordDegree - 2, -2);
             float frequency = MidiToFrequency(note);
-            float gate = stepPhase < 0.75f ? 1f - stepPhase * 0.55f : 0.12f;
-            float sample = SampleWaveform(SynthWaveform.Saw, frequency, time, 0.5f) * 0.52f;
-            sample += SampleWaveform(SynthWaveform.Pulse, frequency * 2f, time, 0.28f) * 0.22f;
-            return ApplyDrive(sample * gate, 1.24f) * 0.2f;
+            float gate = GetStepEnvelope(sixteenthPhase, 0.92f);
+            float low = SampleWaveform(SynthWaveform.Saw, frequency, time, 0.5f) * 0.28f;
+            float growl = SampleWaveform(SynthWaveform.Pulse, frequency * 0.5f, time, 0.3f) * 0.16f;
+            float noise = (HashNoise(time * 3200f) * 2f - 1f) * 0.14f * theme.DangerWeight;
+            return ApplyDrive((low + growl + noise) * gate, 1.12f + theme.DangerWeight * 0.28f) * 0.24f;
+        }
+
+        private static float RenderBoss(MusicThemeDefinition theme, int chordDegree, int barIndex, int barEighth, float eighthPhase, float time)
+        {
+            int patternValue = theme.BossPattern[(barIndex * 8 + barEighth) % theme.BossPattern.Length];
+            if (patternValue <= -99)
+                return 0f;
+
+            int note = GetScaleNote(theme, chordDegree + patternValue, -1);
+            float frequency = MidiToFrequency(note);
+            float gate = GetStepEnvelope(eighthPhase, 0.84f);
+            float body = SampleWaveform(SynthWaveform.Saw, frequency, time, 0.5f) * 0.46f;
+            float edge = SampleWaveform(SynthWaveform.Pulse, frequency * 2f, time, 0.3f) * 0.18f;
+            float sub = SampleWaveform(SynthWaveform.Sine, frequency * 0.5f, time, 0.5f) * 0.16f;
+            return ApplyDrive((body + edge + sub) * gate, 1.18f + theme.BossWeight * 0.2f) * 0.24f;
         }
 
         private static float DrumKick(float phase)
@@ -259,9 +313,52 @@ namespace SpaceBurst
             return (tone + noise) * envelope * 0.44f;
         }
 
-        private static float DrumHat(float phase)
+        private static float DrumHat(float phase, float density)
         {
-            return (HashNoise(phase * 18000f) * 2f - 1f) * MathF.Exp(-phase * 26f) * 0.08f;
+            float color = 0.06f + density * 0.05f;
+            return (HashNoise(phase * 18000f) * 2f - 1f) * MathF.Exp(-phase * (22f + density * 12f)) * color;
+        }
+
+        private static float ApplySwing(float beatInBar, float swingAmount)
+        {
+            float step = beatInBar * 2f;
+            int baseStep = (int)MathF.Floor(step);
+            float phase = step - baseStep;
+            if ((baseStep & 1) == 1)
+                phase = MathHelper.Clamp(phase + swingAmount * 0.18f, 0f, 1f);
+
+            return (baseStep + phase) / 2f;
+        }
+
+        private static float GetStepEnvelope(float phase, float sustainPoint)
+        {
+            if (phase <= 0f)
+                return 1f;
+
+            float clampedSustain = MathHelper.Clamp(sustainPoint, 0.1f, 0.98f);
+            if (phase < clampedSustain)
+                return MathHelper.Lerp(1f, 0.68f, phase / clampedSustain);
+
+            return 0.68f * (1f - MathHelper.Clamp((phase - clampedSustain) / Math.Max(0.02f, 1f - clampedSustain), 0f, 1f));
+        }
+
+        private static int GetScaleNote(MusicThemeDefinition theme, int scaleDegree, int octaveOffset)
+        {
+            int scaleLength = Math.Max(1, theme.ScaleOffsets.Length);
+            int octaveDelta = (int)MathF.Floor(scaleDegree / (float)scaleLength);
+            int normalizedDegree = scaleDegree % scaleLength;
+            if (normalizedDegree < 0)
+            {
+                normalizedDegree += scaleLength;
+                octaveDelta--;
+            }
+
+            return theme.RootMidiNote + theme.ScaleOffsets[normalizedDegree] + (octaveOffset + octaveDelta) * 12;
+        }
+
+        private static float PatternChance(int seed, int a, int b)
+        {
+            return HashNoise(seed * 0.137f + a * 1.913f + b * 0.719f);
         }
 
         private static float GetPatchFrequency(string patchName, float time)

@@ -52,6 +52,19 @@ namespace SpaceBurst
                 AddLoop(stems.Boss);
             }
 
+            public void TakeOver(ThemePlayer source)
+            {
+                Dispose();
+                ThemeId = source.ThemeId;
+                IsActive = source.IsActive;
+                Blend = source.Blend;
+                instances.AddRange(source.instances);
+                source.instances.Clear();
+                source.ThemeId = null;
+                source.IsActive = false;
+                source.Blend = 0f;
+            }
+
             public void ApplyVolumes(float[] layerVolumes, float masterVolume, float musicVolume)
             {
                 int count = Math.Min(instances.Count, layerVolumes.Length);
@@ -96,11 +109,35 @@ namespace SpaceBurst
             }
         }
 
+        private sealed class ChapterProfile
+        {
+            public string IdPrefix;
+            public int RootMidiNote;
+            public int BaseTempo;
+            public int BossTempo;
+            public int ThemeSeed;
+            public int[] NormalScale;
+            public int[] BossScale;
+            public int[] ApproachChords;
+            public int[] CruiseChords;
+            public int[] SurgeChords;
+            public int[] BossChords;
+            public int[] BassMotif;
+            public int[] PulseMotif;
+            public int[] LeadCall;
+            public int[] LeadResponse;
+            public int[] BossMotif;
+            public float Brightness;
+            public float PulseDrive;
+            public float PadSpread;
+            public float Swing;
+            public float Syncopation;
+        }
+
         private readonly Dictionary<string, ThemeStemSet> themes = new Dictionary<string, ThemeStemSet>(StringComparer.OrdinalIgnoreCase);
         private readonly ThemePlayer current = new ThemePlayer();
         private readonly ThemePlayer previous = new ThemePlayer();
         private readonly int sampleRate;
-        private readonly float stemDurationSeconds;
 
         public MusicStemMixer(AudioQualityPreset qualityPreset)
         {
@@ -110,7 +147,6 @@ namespace SpaceBurst
                 AudioQualityPreset.High => 44100,
                 _ => 32000,
             };
-            stemDurationSeconds = qualityPreset == AudioQualityPreset.Reduced ? 4f : 6f;
             RegisterThemes();
         }
 
@@ -121,13 +157,15 @@ namespace SpaceBurst
                 SwitchTheme(nextTheme);
 
             float[] targetLayers = ResolveLayerVolumes(state);
-            current.Blend = MathHelper.Clamp(current.Blend + deltaSeconds * 1.35f, 0f, 1f);
-            previous.Blend = MathHelper.Clamp(previous.Blend - deltaSeconds * 1.6f, 0f, 1f);
+            float fadeInRate = 0.9f + state.TransitionWarpStrength * 0.8f + (state.HasBoss ? 0.18f : 0f);
+            float fadeOutRate = 1.2f + state.TransitionWarpStrength * 0.6f;
+            current.Blend = MathHelper.Clamp(current.Blend + deltaSeconds * fadeInRate, 0f, 1f);
+            previous.Blend = MathHelper.Clamp(previous.Blend - deltaSeconds * fadeOutRate, 0f, 1f);
 
             current.ApplyVolumes(targetLayers, masterVolume, musicVolume);
             if (previous.IsActive)
             {
-                previous.ApplyVolumes(targetLayers, masterVolume, musicVolume * 0.6f);
+                previous.ApplyVolumes(targetLayers, masterVolume, musicVolume * 0.76f);
                 if (previous.Blend <= 0.01f)
                     previous.Stop();
             }
@@ -154,52 +192,88 @@ namespace SpaceBurst
 
         private void RegisterThemes()
         {
-            RegisterTheme(new MusicThemeDefinition
-            {
-                Id = "title",
-                Tempo = 108,
-                RootMidiNote = 45,
-                ScaleOffsets = new[] { 0, 3, 7, 10 },
-                Brightness = 0.56f,
-                PulseDrive = 0.34f,
-                PadSpread = 0.74f,
-            });
-            RegisterTheme(new MusicThemeDefinition
-            {
-                Id = "combat",
-                Tempo = 132,
-                RootMidiNote = 48,
-                ScaleOffsets = new[] { 0, 2, 3, 7, 10 },
-                Brightness = 0.68f,
-                PulseDrive = 0.62f,
-                PadSpread = 0.52f,
-            });
-            RegisterTheme(new MusicThemeDefinition
-            {
-                Id = "boss",
-                Tempo = 140,
-                RootMidiNote = 41,
-                ScaleOffsets = new[] { 0, 1, 5, 7, 8 },
-                Brightness = 0.78f,
-                PulseDrive = 0.84f,
-                PadSpread = 0.48f,
-            });
+            RegisterTheme(CreateSpecialTheme(
+                "title",
+                108,
+                45,
+                new[] { 0, 3, 7, 10, 12 },
+                new[] { 0, 3, 4, 2 },
+                new[] { 0, -99, 0, 1, 0, -99, 2, 1 },
+                new[] { 0, 2, 4, 2, 1, 2, 4, 5, 0, 2, 4, 2, 1, 3, 4, 5 },
+                new[] { -99, 0, 2, 4, -99, 2, 1, 0, -99, 1, 2, 4, -99, 3, 5, 4 },
+                new[] { 4, -99, 2, 1, 0, -99, 2, 3, 4, -99, 5, 4, 2, -99, 1, 0 },
+                new[] { 0, 0, 2, 0, 3, 0, 2, 0 },
+                0.52f,
+                0.34f,
+                0.76f,
+                0.08f,
+                0.28f,
+                0.36f,
+                0.18f));
+            RegisterTheme(CreateSpecialTheme(
+                "tutorial",
+                102,
+                47,
+                new[] { 0, 2, 5, 7, 9, 10 },
+                new[] { 0, 2, 3, 1 },
+                new[] { 0, -99, 0, 1, 0, -99, 2, 1 },
+                new[] { 0, 2, 4, 2, 1, 2, 4, 2, 0, 2, 5, 2, 1, 3, 4, 2 },
+                new[] { -99, 0, 2, 3, -99, 2, 1, 0, -99, 1, 2, 4, -99, 2, 3, 2 },
+                new[] { 3, -99, 2, 1, 0, -99, 2, 1, 3, -99, 4, 3, 2, -99, 1, 0 },
+                new[] { 0, 0, 1, 0, 2, 0, 1, 0 },
+                0.5f,
+                0.3f,
+                0.72f,
+                0.06f,
+                0.22f,
+                0.28f,
+                0.15f));
+            RegisterTheme(CreateSpecialTheme(
+                "results",
+                96,
+                50,
+                new[] { 0, 2, 4, 7, 9, 11 },
+                new[] { 0, 3, 4, 2 },
+                new[] { 0, -99, 0, 2, 0, -99, 1, 2 },
+                new[] { 0, 2, 4, 5, 2, 4, 5, 7, 0, 2, 4, 5, 3, 4, 5, 7 },
+                new[] { -99, 0, 2, 4, -99, 4, 5, 7, -99, 7, 5, 4, -99, 2, 4, 5 },
+                new[] { 7, -99, 5, 4, 2, -99, 4, 5, 7, -99, 9, 7, 5, -99, 4, 2 },
+                new[] { 0, 0, 2, 0, 4, 0, 3, 0 },
+                0.7f,
+                0.42f,
+                0.82f,
+                0.05f,
+                0.18f,
+                0.3f,
+                0.1f));
+
+            foreach (ChapterProfile profile in BuildChapterProfiles())
+                RegisterChapterThemes(profile);
 
             SwitchTheme("title");
             current.Blend = 1f;
         }
 
+        private void RegisterChapterThemes(ChapterProfile profile)
+        {
+            RegisterTheme(CreateChapterTheme(profile, "approach", profile.ApproachChords, profile.NormalScale, profile.BaseTempo - 4, 0.28f, 0, 0.85f, 0.9f));
+            RegisterTheme(CreateChapterTheme(profile, "cruise", profile.CruiseChords, profile.NormalScale, profile.BaseTempo + 2, 0.56f, 3, 1f, 1.02f));
+            RegisterTheme(CreateChapterTheme(profile, "surge", profile.SurgeChords, profile.NormalScale, profile.BaseTempo + 8, 0.86f, 7, 1.12f, 1.18f));
+            RegisterTheme(CreateChapterTheme(profile, "boss", profile.BossChords, profile.BossScale, profile.BossTempo, 1f, 5, 1.26f, 1.34f, true));
+        }
+
         private void RegisterTheme(MusicThemeDefinition definition)
         {
+            float durationSeconds = definition.Bars * 4f * 60f / Math.Max(60f, definition.Tempo);
             themes[definition.Id] = new ThemeStemSet
             {
-                Drums = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, stemDurationSeconds, MusicStemKind.Drums),
-                Bass = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, stemDurationSeconds, MusicStemKind.Bass),
-                Pad = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, stemDurationSeconds, MusicStemKind.Pad),
-                Pulse = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, stemDurationSeconds, MusicStemKind.Pulse),
-                Lead = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, stemDurationSeconds, MusicStemKind.Lead),
-                Danger = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, stemDurationSeconds, MusicStemKind.Danger),
-                Boss = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, stemDurationSeconds, MusicStemKind.Boss),
+                Drums = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, durationSeconds, MusicStemKind.Drums),
+                Bass = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, durationSeconds, MusicStemKind.Bass),
+                Pad = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, durationSeconds, MusicStemKind.Pad),
+                Pulse = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, durationSeconds, MusicStemKind.Pulse),
+                Lead = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, durationSeconds, MusicStemKind.Lead),
+                Danger = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, durationSeconds, MusicStemKind.Danger),
+                Boss = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, durationSeconds, MusicStemKind.Boss),
             };
         }
 
@@ -211,11 +285,9 @@ namespace SpaceBurst
             if (current.IsActive && !string.IsNullOrWhiteSpace(current.ThemeId))
             {
                 previous.Stop();
-                previous.Play(themes[current.ThemeId], current.ThemeId);
-                previous.Blend = current.Blend;
+                previous.TakeOver(current);
             }
 
-            current.Stop();
             current.Play(stems, themeId);
         }
 
@@ -224,51 +296,305 @@ namespace SpaceBurst
             if (state.FlowState == GameFlowState.Title)
                 return "title";
 
-            if (state.HasBoss || state.FlowState == GameFlowState.StageTransition && state.TransitionToBoss)
-                return "boss";
+            if (state.FlowState == GameFlowState.Tutorial)
+                return "tutorial";
 
-            return "combat";
+            if (state.FlowState == GameFlowState.GameOver || state.FlowState == GameFlowState.CampaignComplete)
+                return "results";
+
+            int stageNumber = state.CurrentStageNumber;
+            if (state.FlowState == GameFlowState.StageTransition && state.TransitionTargetStageNumber > 0)
+                stageNumber = state.TransitionTargetStageNumber;
+
+            if (stageNumber <= 0)
+                return "title";
+
+            int chapter = Math.Clamp((stageNumber - 1) / 10 + 1, 1, 5);
+            int stageWithinChapter = ((stageNumber - 1) % 10) + 1;
+
+            if (state.HasBoss || state.TransitionToBoss || stageWithinChapter == 10)
+                return string.Concat("chapter", chapter.ToString(), "-boss");
+
+            if (stageWithinChapter <= 3)
+                return string.Concat("chapter", chapter.ToString(), "-approach");
+
+            if (stageWithinChapter <= 6)
+                return string.Concat("chapter", chapter.ToString(), "-cruise");
+
+            return string.Concat("chapter", chapter.ToString(), "-surge");
         }
 
         private static float[] ResolveLayerVolumes(GameAudioState state)
         {
-            float danger = MathHelper.Clamp(state.DangerFactor, 0f, 1f);
-            float transition = MathHelper.Clamp(state.TransitionWarpStrength, 0f, 1f);
+            float pause = state.FlowState == GameFlowState.Paused || state.FlowState == GameFlowState.Help || state.FlowState == GameFlowState.Options || state.FlowState == GameFlowState.SaveSlots || state.FlowState == GameFlowState.LoadSlots ? 0.22f : 1f;
             float rewind = MathHelper.Clamp(state.RewindStrength, 0f, 1f);
-            float pause = state.FlowState == GameFlowState.Paused || state.FlowState == GameFlowState.Help || state.FlowState == GameFlowState.Options ? 0.24f : 1f;
+            float rewindDuck = 1f - rewind * 0.72f;
+            float transition = MathHelper.Clamp(state.TransitionWarpStrength, 0f, 1f);
+            float danger = MathHelper.Clamp(state.DangerFactor, 0f, 1f);
 
             if (state.FlowState == GameFlowState.Title)
-                return new[] { 0f, 0.12f * pause, 0.24f * pause, 0.08f * pause, 0.18f * pause, 0f, 0f };
+                return new[] { 0.06f * pause, 0.14f * pause, 0.22f * pause, 0.1f * pause, 0.12f * pause, 0f, 0f };
+
+            if (state.FlowState == GameFlowState.Tutorial)
+                return new[] { 0.08f * pause, 0.16f * pause, 0.18f * pause, 0.1f * pause, 0.08f * pause, 0.04f * pause, 0f };
 
             if (state.FlowState == GameFlowState.GameOver || state.FlowState == GameFlowState.CampaignComplete)
-                return new[] { 0f, 0.08f, 0.18f, 0.02f, 0.06f, 0f, 0f };
+                return new[] { 0.04f, 0.08f, 0.16f, 0.05f, 0.1f, 0f, 0f };
 
-            if (state.HasBoss)
+            int stageNumber = state.CurrentStageNumber > 0 ? state.CurrentStageNumber : Math.Max(1, state.TransitionTargetStageNumber);
+            int stageWithinChapter = ((stageNumber - 1) % 10) + 1;
+            float chapterArc = MathHelper.Clamp((stageWithinChapter - 1) / 9f, 0f, 1f);
+            float sectionArc = MathHelper.Clamp(state.CurrentSectionIndex * 0.12f + state.CurrentSectionProgress * 0.24f, 0f, 1f);
+            float escalation = MathHelper.Clamp(chapterArc * 0.68f + sectionArc * 0.32f, 0f, 1f);
+            float warpBoost = transition * 0.18f;
+
+            if (state.HasBoss || state.TransitionToBoss || stageWithinChapter == 10)
             {
+                float bossLayer = MathHelper.Clamp(0.24f + transition * 0.18f + danger * 0.14f, 0f, 0.52f);
                 return new[]
                 {
-                    (0.24f + danger * 0.08f) * pause,
-                    (0.24f + danger * 0.06f) * pause,
-                    0.12f * pause,
-                    0.18f * pause,
-                    0.16f * pause,
-                    0.08f * pause,
-                    (0.22f + transition * 0.08f) * pause,
+                    (0.16f + escalation * 0.12f + danger * 0.06f) * pause * rewindDuck,
+                    (0.18f + escalation * 0.1f) * pause * rewindDuck,
+                    (0.12f + warpBoost) * pause * (1f - rewind * 0.25f),
+                    (0.12f + escalation * 0.09f + transition * 0.06f) * pause,
+                    (0.1f + escalation * 0.1f + danger * 0.06f) * pause * rewindDuck,
+                    (0.1f + danger * 0.16f + transition * 0.04f) * pause,
+                    bossLayer * pause,
                 };
             }
 
-            float transitionBoost = transition * 0.18f;
-            float rewindDuck = 1f - rewind * 0.7f;
             return new[]
             {
-                (0.18f + danger * 0.12f) * pause * rewindDuck,
-                (0.18f + danger * 0.08f) * pause * rewindDuck,
-                (0.16f + transitionBoost) * pause * (1f - rewind * 0.35f),
-                (0.12f + danger * 0.08f + transitionBoost) * pause,
-                (0.08f + danger * 0.06f) * pause * rewindDuck,
-                (danger * 0.1f + transition * 0.08f) * pause,
-                transition * 0.08f * pause,
+                (0.08f + escalation * 0.16f + danger * 0.05f) * pause * rewindDuck,
+                (0.12f + escalation * 0.14f + danger * 0.04f) * pause * rewindDuck,
+                (0.16f + warpBoost) * pause * (1f - rewind * 0.2f),
+                (0.08f + escalation * 0.12f + transition * 0.05f) * pause,
+                (0.06f + escalation * 0.14f + danger * 0.08f) * pause * rewindDuck,
+                (0.02f + escalation * 0.04f + danger * 0.14f + transition * 0.04f) * pause,
+                transition * 0.04f * pause,
             };
+        }
+
+        private static IEnumerable<ChapterProfile> BuildChapterProfiles()
+        {
+            yield return new ChapterProfile
+            {
+                IdPrefix = "chapter1",
+                RootMidiNote = 46,
+                BaseTempo = 116,
+                BossTempo = 132,
+                ThemeSeed = 11,
+                NormalScale = new[] { 0, 2, 3, 5, 7, 9, 10 },
+                BossScale = new[] { 0, 1, 3, 5, 7, 8, 10 },
+                ApproachChords = new[] { 0, 3, 4, 2 },
+                CruiseChords = new[] { 0, 4, 5, 3 },
+                SurgeChords = new[] { 0, 5, 4, 6 },
+                BossChords = new[] { 0, 1, 4, 3 },
+                BassMotif = new[] { 0, -99, 0, 2, 1, -99, 0, 3 },
+                PulseMotif = new[] { 0, 2, 4, 2, 1, 2, 4, 5, 0, 2, 4, 2, 1, 3, 5, 4 },
+                LeadCall = new[] { -99, 0, 2, 4, -99, 2, 1, 0, -99, 1, 2, 4, -99, 2, 5, 4 },
+                LeadResponse = new[] { 4, -99, 2, 1, 0, -99, 2, 3, 4, -99, 5, 4, 2, -99, 1, 0 },
+                BossMotif = new[] { 0, 0, 2, 0, 3, 0, 4, 0 },
+                Brightness = 0.62f,
+                PulseDrive = 0.56f,
+                PadSpread = 0.68f,
+                Swing = 0.08f,
+                Syncopation = 0.28f,
+            };
+
+            yield return new ChapterProfile
+            {
+                IdPrefix = "chapter2",
+                RootMidiNote = 43,
+                BaseTempo = 122,
+                BossTempo = 138,
+                ThemeSeed = 23,
+                NormalScale = new[] { 0, 1, 3, 5, 7, 8, 10 },
+                BossScale = new[] { 0, 1, 3, 5, 6, 8, 10 },
+                ApproachChords = new[] { 0, 2, 5, 3 },
+                CruiseChords = new[] { 0, 4, 2, 5 },
+                SurgeChords = new[] { 0, 5, 3, 6 },
+                BossChords = new[] { 0, 1, 5, 4 },
+                BassMotif = new[] { 0, -99, 1, 2, 0, -99, 3, 2 },
+                PulseMotif = new[] { 0, 2, 3, 5, 1, 3, 5, 6, 0, 2, 3, 5, 1, 4, 6, 5 },
+                LeadCall = new[] { -99, 0, 1, 3, -99, 3, 2, 1, -99, 2, 3, 5, -99, 4, 5, 3 },
+                LeadResponse = new[] { 5, -99, 3, 2, 1, -99, 3, 4, 5, -99, 6, 5, 3, -99, 2, 1 },
+                BossMotif = new[] { 0, 0, 1, 0, 4, 0, 5, 0 },
+                Brightness = 0.58f,
+                PulseDrive = 0.6f,
+                PadSpread = 0.56f,
+                Swing = 0.05f,
+                Syncopation = 0.34f,
+            };
+
+            yield return new ChapterProfile
+            {
+                IdPrefix = "chapter3",
+                RootMidiNote = 48,
+                BaseTempo = 126,
+                BossTempo = 144,
+                ThemeSeed = 37,
+                NormalScale = new[] { 0, 2, 4, 7, 9, 11 },
+                BossScale = new[] { 0, 2, 3, 6, 7, 9, 11 },
+                ApproachChords = new[] { 0, 2, 4, 3 },
+                CruiseChords = new[] { 0, 4, 5, 2 },
+                SurgeChords = new[] { 0, 5, 4, 6 },
+                BossChords = new[] { 0, 3, 4, 1 },
+                BassMotif = new[] { 0, -99, 0, 2, 4, -99, 2, 1 },
+                PulseMotif = new[] { 0, 2, 4, 6, 2, 4, 6, 4, 0, 2, 4, 6, 3, 4, 6, 7 },
+                LeadCall = new[] { -99, 0, 2, 4, -99, 4, 6, 4, -99, 2, 4, 6, -99, 6, 7, 6 },
+                LeadResponse = new[] { 6, -99, 4, 2, 4, -99, 6, 7, 6, -99, 4, 2, 4, -99, 2, 0 },
+                BossMotif = new[] { 0, 0, 2, 0, 4, 0, 6, 0 },
+                Brightness = 0.72f,
+                PulseDrive = 0.68f,
+                PadSpread = 0.5f,
+                Swing = 0.03f,
+                Syncopation = 0.42f,
+            };
+
+            yield return new ChapterProfile
+            {
+                IdPrefix = "chapter4",
+                RootMidiNote = 42,
+                BaseTempo = 132,
+                BossTempo = 150,
+                ThemeSeed = 53,
+                NormalScale = new[] { 0, 2, 3, 5, 6, 8, 10 },
+                BossScale = new[] { 0, 1, 3, 5, 6, 8, 9 },
+                ApproachChords = new[] { 0, 3, 1, 4 },
+                CruiseChords = new[] { 0, 4, 3, 5 },
+                SurgeChords = new[] { 0, 5, 2, 6 },
+                BossChords = new[] { 0, 1, 3, 6 },
+                BassMotif = new[] { 0, -99, 1, 0, 3, -99, 2, 4 },
+                PulseMotif = new[] { 0, 1, 3, 5, 1, 3, 5, 6, 0, 1, 3, 5, 2, 3, 5, 6 },
+                LeadCall = new[] { -99, 0, 1, 3, -99, 3, 5, 3, -99, 1, 3, 5, -99, 5, 6, 5 },
+                LeadResponse = new[] { 5, -99, 3, 1, 3, -99, 5, 6, 5, -99, 3, 1, 2, -99, 1, 0 },
+                BossMotif = new[] { 0, 0, 1, 0, 3, 0, 6, 0 },
+                Brightness = 0.56f,
+                PulseDrive = 0.74f,
+                PadSpread = 0.44f,
+                Swing = 0.02f,
+                Syncopation = 0.48f,
+            };
+
+            yield return new ChapterProfile
+            {
+                IdPrefix = "chapter5",
+                RootMidiNote = 40,
+                BaseTempo = 138,
+                BossTempo = 156,
+                ThemeSeed = 71,
+                NormalScale = new[] { 0, 1, 3, 6, 7, 10 },
+                BossScale = new[] { 0, 1, 3, 5, 6, 8, 10 },
+                ApproachChords = new[] { 0, 2, 4, 1 },
+                CruiseChords = new[] { 0, 4, 2, 5 },
+                SurgeChords = new[] { 0, 5, 3, 6 },
+                BossChords = new[] { 0, 1, 5, 2 },
+                BassMotif = new[] { 0, -99, 0, 3, 1, -99, 4, 2 },
+                PulseMotif = new[] { 0, 1, 3, 6, 1, 3, 6, 4, 0, 1, 3, 6, 2, 3, 5, 6 },
+                LeadCall = new[] { -99, 0, 1, 3, -99, 3, 6, 4, -99, 1, 3, 6, -99, 5, 6, 4 },
+                LeadResponse = new[] { 6, -99, 4, 3, 1, -99, 3, 5, 6, -99, 4, 3, 2, -99, 1, 0 },
+                BossMotif = new[] { 0, 0, 1, 0, 5, 0, 3, 0 },
+                Brightness = 0.64f,
+                PulseDrive = 0.8f,
+                PadSpread = 0.4f,
+                Swing = 0.01f,
+                Syncopation = 0.54f,
+            };
+        }
+
+        private static MusicThemeDefinition CreateChapterTheme(ChapterProfile profile, string suffix, int[] chords, int[] scale, int tempo, float intensity, int patternShift, float brightnessScale, float driveScale, bool boss = false)
+        {
+            return new MusicThemeDefinition
+            {
+                Id = string.Concat(profile.IdPrefix, "-", suffix),
+                Bars = 4,
+                ThemeSeed = profile.ThemeSeed + patternShift * 13 + (boss ? 97 : 0),
+                Tempo = tempo,
+                RootMidiNote = boss ? profile.RootMidiNote - 2 : profile.RootMidiNote,
+                ScaleOffsets = scale,
+                ChordDegrees = chords,
+                BassPattern = RotatePattern(TransposePattern(profile.BassMotif, boss ? 1 : 0), patternShift / 2),
+                PulsePattern = RotatePattern(TransposePattern(profile.PulseMotif, boss ? 1 : patternShift % 2), patternShift),
+                LeadPatternA = RotatePattern(TransposePattern(profile.LeadCall, boss ? 1 : 0), patternShift),
+                LeadPatternB = RotatePattern(TransposePattern(profile.LeadResponse, boss ? 2 : 0), patternShift + 2),
+                BossPattern = RotatePattern(TransposePattern(profile.BossMotif, boss ? 1 : 0), patternShift / 2),
+                PadChordSteps = boss ? new[] { 0, 2, 5 } : new[] { 0, 2, 4 },
+                Brightness = MathHelper.Clamp(profile.Brightness * brightnessScale, 0.35f, 0.92f),
+                PulseDrive = MathHelper.Clamp(profile.PulseDrive * driveScale, 0.18f, 1.1f),
+                PadSpread = MathHelper.Clamp(profile.PadSpread + intensity * (boss ? 0.02f : 0.04f), 0.32f, 0.84f),
+                Swing = profile.Swing,
+                RhythmDensity = MathHelper.Clamp(0.34f + intensity * (boss ? 0.56f : 0.46f), 0.2f, 1f),
+                Syncopation = MathHelper.Clamp(profile.Syncopation + intensity * (boss ? 0.18f : 0.12f), 0.1f, 0.92f),
+                LeadDensity = MathHelper.Clamp(0.28f + intensity * (boss ? 0.62f : 0.42f), 0.12f, 1f),
+                DangerWeight = MathHelper.Clamp(0.12f + intensity * (boss ? 0.64f : 0.3f), 0.08f, 1f),
+                BossWeight = MathHelper.Clamp(boss ? 0.82f : 0.16f + intensity * 0.24f, 0.1f, 1f),
+                VariantIntensity = intensity,
+                BassOctave = boss ? -2 : -1,
+                LeadOctave = boss ? 1 : 2,
+            };
+        }
+
+        private static MusicThemeDefinition CreateSpecialTheme(string id, int tempo, int root, int[] scale, int[] chords, int[] bass, int[] pulse, int[] leadA, int[] leadB, int[] boss, float brightness, float pulseDrive, float padSpread, float swing, float syncopation, float leadDensity, float dangerWeight)
+        {
+            return new MusicThemeDefinition
+            {
+                Id = id,
+                Bars = 4,
+                ThemeSeed = Math.Abs(id.GetHashCode()),
+                Tempo = tempo,
+                RootMidiNote = root,
+                ScaleOffsets = scale,
+                ChordDegrees = chords,
+                BassPattern = bass,
+                PulsePattern = pulse,
+                LeadPatternA = leadA,
+                LeadPatternB = leadB,
+                BossPattern = boss,
+                PadChordSteps = new[] { 0, 2, 4 },
+                Brightness = brightness,
+                PulseDrive = pulseDrive,
+                PadSpread = padSpread,
+                Swing = swing,
+                RhythmDensity = 0.42f,
+                Syncopation = syncopation,
+                LeadDensity = leadDensity,
+                DangerWeight = dangerWeight,
+                BossWeight = 0.18f,
+                VariantIntensity = 0.4f,
+                BassOctave = -2,
+                LeadOctave = 1,
+            };
+        }
+
+        private static int[] RotatePattern(int[] source, int shift)
+        {
+            if (source == null || source.Length == 0)
+                return Array.Empty<int>();
+
+            int[] rotated = new int[source.Length];
+            for (int i = 0; i < source.Length; i++)
+            {
+                int index = (i + shift) % source.Length;
+                if (index < 0)
+                    index += source.Length;
+
+                rotated[i] = source[index];
+            }
+
+            return rotated;
+        }
+
+        private static int[] TransposePattern(int[] source, int semitoneStep)
+        {
+            if (source == null || source.Length == 0 || semitoneStep == 0)
+                return source ?? Array.Empty<int>();
+
+            int[] shifted = new int[source.Length];
+            for (int i = 0; i < source.Length; i++)
+                shifted[i] = source[i] <= -99 ? source[i] : source[i] + semitoneStep;
+
+            return shifted;
         }
     }
 }

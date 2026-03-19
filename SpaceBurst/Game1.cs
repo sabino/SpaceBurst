@@ -209,7 +209,11 @@ namespace SpaceBurst
                 campaignDirector.CurrentDifficultyFactor,
                 campaignDirector.TransitionWarpStrength,
                 campaignDirector.RewindVisualStrength,
-                campaignDirector.CurrentScrollSpeed);
+                campaignDirector.CurrentScrollSpeed,
+                campaignDirector.CurrentStageNumber,
+                campaignDirector.TransitionTargetStageNumber,
+                campaignDirector.CurrentSectionIndex,
+                campaignDirector.CurrentSectionProgress);
             feedbackDirector.Update((float)gameTime.ElapsedGameTime.TotalSeconds, audioState, ScreenShakeStrength);
             audioDirector.Update(audioState, campaignDirector.MasterVolume, campaignDirector.MusicVolume, campaignDirector.SfxVolume, (float)gameTime.ElapsedGameTime.TotalSeconds);
             base.Update(gameTime);
