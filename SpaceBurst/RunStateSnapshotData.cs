@@ -50,11 +50,15 @@ namespace SpaceBurst
 
     sealed class PlayerSnapshotData
     {
+        public long EntityId { get; set; }
         public Vector2Data Position { get; set; } = new Vector2Data();
         public Vector2Data Velocity { get; set; } = new Vector2Data();
+        public Vector3Data CombatPosition { get; set; } = new Vector3Data();
+        public Vector3Data CombatVelocity { get; set; } = new Vector3Data();
         public Vector2Data CannonDirection { get; set; } = new Vector2Data(1f, 0f);
         public Vector2Data KnockbackVelocity { get; set; } = new Vector2Data();
         public Vector2Data PendingRespawnPosition { get; set; } = new Vector2Data();
+        public Vector2Data ChaseReticle { get; set; } = new Vector2Data();
         public float RespawnTimer { get; set; }
         public float InvulnerabilityTimer { get; set; }
         public float FireCooldown { get; set; }
@@ -65,15 +69,21 @@ namespace SpaceBurst
 
     sealed class EnemySnapshotData
     {
+        public long EntityId { get; set; }
         public string ArchetypeId { get; set; }
         public Vector2Data Position { get; set; } = new Vector2Data();
         public Vector2Data Velocity { get; set; } = new Vector2Data();
+        public Vector3Data CombatPosition { get; set; } = new Vector3Data();
+        public Vector3Data CombatVelocity { get; set; } = new Vector3Data();
         public float TargetY { get; set; }
         public MovePattern MovePattern { get; set; }
         public FirePattern FirePattern { get; set; }
         public float SpeedMultiplier { get; set; } = 1f;
         public float MovementAmplitude { get; set; }
         public float MovementFrequency { get; set; } = 1f;
+        public float DepthAnchor { get; set; }
+        public float DepthAmplitude { get; set; }
+        public float DepthFrequency { get; set; } = 1f;
         public float AgeSeconds { get; set; }
         public float FlashTimer { get; set; }
         public float FireCooldown { get; set; }
@@ -110,9 +120,13 @@ namespace SpaceBurst
 
     sealed class BulletSnapshotData
     {
+        public long EntityId { get; set; }
         public Vector2Data Position { get; set; } = new Vector2Data();
         public Vector2Data PreviousPosition { get; set; } = new Vector2Data();
         public Vector2Data Velocity { get; set; } = new Vector2Data();
+        public Vector3Data CombatPosition { get; set; } = new Vector3Data();
+        public Vector3Data PreviousCombatPosition { get; set; } = new Vector3Data();
+        public Vector3Data CombatVelocity { get; set; } = new Vector3Data();
         public bool Friendly { get; set; }
         public int Damage { get; set; }
         public int RemainingPierceHits { get; set; }
@@ -131,8 +145,11 @@ namespace SpaceBurst
 
     sealed class BeamSnapshotData
     {
+        public long EntityId { get; set; }
         public Vector2Data Origin { get; set; } = new Vector2Data();
         public Vector2Data Direction { get; set; } = new Vector2Data(1f, 0f);
+        public Vector3Data CombatOrigin { get; set; } = new Vector3Data();
+        public Vector3Data CombatDirection { get; set; } = new Vector3Data(1f, 0f, 0f);
         public float Length { get; set; } = 100f;
         public float Thickness { get; set; } = 8f;
         public float RemainingLifetime { get; set; } = 0.08f;
@@ -146,8 +163,11 @@ namespace SpaceBurst
 
     sealed class PowerupSnapshotData
     {
+        public long EntityId { get; set; }
         public Vector2Data Position { get; set; } = new Vector2Data();
         public Vector2Data Velocity { get; set; } = new Vector2Data();
+        public Vector3Data CombatPosition { get; set; } = new Vector3Data();
+        public Vector3Data CombatVelocity { get; set; } = new Vector3Data();
         public float AgeSeconds { get; set; }
         public WeaponStyleId StyleId { get; set; } = WeaponStyleId.Pulse;
     }
@@ -157,11 +177,15 @@ namespace SpaceBurst
         public float SpawnAtSeconds { get; set; }
         public SpawnGroupDefinition Group { get; set; } = new SpawnGroupDefinition();
         public Vector2Data SpawnPoint { get; set; } = new Vector2Data();
+        public Vector3Data CombatSpawnPoint { get; set; } = new Vector3Data();
         public float TargetY { get; set; }
         public MovePattern MovePattern { get; set; }
         public FirePattern FirePattern { get; set; }
         public float Amplitude { get; set; }
         public float Frequency { get; set; }
+        public float DepthAnchor { get; set; }
+        public float DepthAmplitude { get; set; }
+        public float DepthFrequency { get; set; } = 1f;
         public float SpeedMultiplier { get; set; } = 1f;
     }
 
@@ -175,10 +199,14 @@ namespace SpaceBurst
     {
         public float TriggerAtSeconds { get; set; }
         public Vector2Data SpawnPoint { get; set; } = new Vector2Data();
+        public Vector3Data CombatSpawnPoint { get; set; } = new Vector3Data();
         public float TargetY { get; set; }
         public float SpeedMultiplier { get; set; } = 1f;
         public float Amplitude { get; set; }
         public float Frequency { get; set; } = 1f;
+        public float DepthAnchor { get; set; }
+        public float DepthAmplitude { get; set; }
+        public float DepthFrequency { get; set; } = 1f;
         public EnemySnapshotData Enemy { get; set; } = new EnemySnapshotData();
     }
 
@@ -258,6 +286,24 @@ namespace SpaceBurst
         {
             X = x;
             Y = y;
+        }
+    }
+
+    sealed class Vector3Data
+    {
+        public float X { get; set; }
+        public float Y { get; set; }
+        public float Z { get; set; }
+
+        public Vector3Data()
+        {
+        }
+
+        public Vector3Data(float x, float y, float z)
+        {
+            X = x;
+            Y = y;
+            Z = z;
         }
     }
 }

@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 using SpaceBurst.RuntimeData;
 using System.Collections.Generic;
 using System.Linq;
+using System;
 
 namespace SpaceBurst
 {
@@ -228,7 +229,7 @@ namespace SpaceBurst
                 if (enemy.IsExpired || !MayOverlap(Player1.Instance, enemy))
                     continue;
 
-                if (!Player1.Instance.Overlaps(enemy))
+                if (!Player1.Instance.OverlapsCombat(enemy))
                     continue;
 
                 Vector2 delta = Player1.Instance.Position - enemy.Position;
@@ -271,9 +272,10 @@ namespace SpaceBurst
                 if (enemy.IsExpired || !MayOverlap(enemy, bullet))
                     continue;
 
-                if (!bullet.TryGetImpactPoint(enemy, out Vector2 impactPoint))
+                if (!bullet.TryGetCombatImpactPoint(enemy, out Vector3 combatImpactPoint))
                     continue;
 
+                Vector2 impactPoint = new Vector2(combatImpactPoint.X, combatImpactPoint.Y);
                 enemy.ApplyBulletHit(bullet, impactPoint);
                 ApplyExplosionSplash(bullet, impactPoint, enemy);
                 ApplyChainHits(bullet, impactPoint, enemy);
@@ -287,8 +289,9 @@ namespace SpaceBurst
             if (Player1.Instance.IsDead || Player1.Instance.IsInvulnerable || !MayOverlap(Player1.Instance, bullet))
                 return;
 
-            if (bullet.TryGetImpactPoint(Player1.Instance, out Vector2 impactPoint))
+            if (bullet.TryGetCombatImpactPoint(Player1.Instance, out Vector3 combatImpactPoint))
             {
+                Vector2 impactPoint = new Vector2(combatImpactPoint.X, combatImpactPoint.Y);
                 bool destroyed = Player1.Instance.ApplyDamage(impactPoint, bullet.Damage);
                 if (destroyed)
                     queuedPlayerHullDestruction = true;
@@ -357,7 +360,10 @@ namespace SpaceBurst
                 if (enemy.IsExpired || ReferenceEquals(enemy, primaryTarget))
                     continue;
 
-                if (Vector2.DistanceSquared(enemy.Position, impactPoint) > radiusSquared)
+                Vector3 delta = enemy.CombatPosition - bullet.CombatPosition;
+                delta.X = enemy.Position.X - impactPoint.X;
+                delta.Y = enemy.Position.Y - impactPoint.Y;
+                if (delta.LengthSquared() > radiusSquared)
                     continue;
 
                 enemy.ApplyDirectHit(enemy.Position, splashDamage, bullet.ImpactProfile, bullet.Velocity * 0.6f, bullet.ImpactFxStyle);
@@ -371,7 +377,11 @@ namespace SpaceBurst
 
             Enemy[] chainTargets = enemies
                 .Where(enemy => !enemy.IsExpired && !ReferenceEquals(enemy, primaryTarget))
-                .OrderBy(enemy => Vector2.DistanceSquared(enemy.Position, impactPoint))
+                .OrderBy(enemy =>
+                {
+                    Vector3 delta = enemy.CombatPosition - new Vector3(impactPoint, primaryTarget?.LateralDepth ?? 0f);
+                    return delta.LengthSquared();
+                })
                 .Take(bullet.ChainCount)
                 .ToArray();
 
@@ -399,7 +409,12 @@ namespace SpaceBurst
                 return false;
 
             float radius = first.ApproximateRadius + second.ApproximateRadius + 6f;
-            return Vector2.DistanceSquared(first.Position, second.Position) <= radius * radius;
+            float depthRadius = first.ApproximateDepthRadius + second.ApproximateDepthRadius + 10f;
+            Vector3 delta = first.CombatPosition - second.CombatPosition;
+            if (MathF.Abs(delta.Z) > depthRadius)
+                return false;
+
+            return delta.X * delta.X + delta.Y * delta.Y <= radius * radius;
         }
     }
 }

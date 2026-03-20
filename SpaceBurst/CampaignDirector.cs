@@ -2194,18 +2194,24 @@ namespace SpaceBurst
 
             for (int index = 0; index < scheduledCount; index++)
             {
+                float spawnX = Game1.ScreenSize.X + Math.Max(40f, group.SpawnLeadDistance + index * spacingX);
+                float depthAnchor = gameplayRandom.NextFloat(-CombatSpaceMath.MaxDepth * 0.78f, CombatSpaceMath.MaxDepth * 0.78f);
+                float depthAmplitude = 18f + gameplayRandom.NextFloat(0f, 34f);
+                float depthFrequency = 0.48f + gameplayRandom.NextFloat(0f, 0.55f);
                 scheduledSpawns.Add(new ScheduledSpawn
                 {
                     SpawnAtSeconds = stageStartSeconds + groupStartSeconds + spawnIntervalSeconds * index,
                     Group = group,
-                    SpawnPoint = new Vector2(
-                        Game1.ScreenSize.X + Math.Max(40f, group.SpawnLeadDistance + index * spacingX),
-                        targetY),
+                    SpawnPoint = new Vector2(spawnX, targetY),
+                    CombatSpawnPoint = new Vector3(spawnX, targetY, depthAnchor),
                     TargetY = targetY,
                     MovePattern = group.MovePatternOverride ?? archetype.MovePattern,
                     FirePattern = group.FirePatternOverride ?? archetype.FirePattern,
                     Amplitude = group.Amplitude > 0f ? group.Amplitude : archetype.MovementAmplitude,
                     Frequency = group.Frequency > 0f ? group.Frequency : archetype.MovementFrequency,
+                    DepthAnchor = depthAnchor,
+                    DepthAmplitude = depthAmplitude,
+                    DepthFrequency = depthFrequency,
                     SpeedMultiplier = group.SpeedMultiplier * sectionSpeedMultiplier * runPressureMultiplier,
                 });
             }
@@ -2229,7 +2235,11 @@ namespace SpaceBurst
                     scheduledSpawn.FirePattern,
                     scheduledSpawn.SpeedMultiplier,
                     scheduledSpawn.Amplitude,
-                    scheduledSpawn.Frequency));
+                    scheduledSpawn.Frequency,
+                    scheduledSpawn.CombatSpawnPoint,
+                    scheduledSpawn.DepthAnchor,
+                    scheduledSpawn.DepthAmplitude,
+                    scheduledSpawn.DepthFrequency));
             }
         }
 
@@ -2257,14 +2267,20 @@ namespace SpaceBurst
                 section.StartSeconds + gameplayRandom.NextFloat(0.4f, Math.Max(1.2f, section.DurationSeconds * 0.6f)));
 
             float targetY = ResolveReentryTargetY(enemy.Position.Y);
+            float depthAnchor = ResolveReentryDepth(enemy.LateralDepth);
+            Vector2 spawnPoint = new Vector2(Game1.ScreenSize.X + gameplayRandom.NextFloat(240f, 420f), targetY);
             reentryTickets.Add(new ReentryTicket
             {
                 TriggerAtSeconds = spawnAt,
-                SpawnPoint = new Vector2(Game1.ScreenSize.X + gameplayRandom.NextFloat(240f, 420f), targetY),
+                SpawnPoint = spawnPoint,
+                CombatSpawnPoint = new Vector3(spawnPoint.X, spawnPoint.Y, depthAnchor),
                 TargetY = targetY,
                 SpeedMultiplier = Math.Max(0.75f, snapshot.SpeedMultiplier),
                 Amplitude = snapshot.MovementAmplitude,
                 Frequency = snapshot.MovementFrequency,
+                DepthAnchor = depthAnchor,
+                DepthAmplitude = Math.Max(16f, snapshot.DepthAmplitude),
+                DepthFrequency = snapshot.DepthFrequency <= 0f ? 1f : snapshot.DepthFrequency,
                 Enemy = snapshot,
             });
             reentryTickets.Sort((left, right) => left.TriggerAtSeconds.CompareTo(right.TriggerAtSeconds));
@@ -2285,6 +2301,7 @@ namespace SpaceBurst
                     archetype,
                     ticket.Enemy,
                     ticket.SpawnPoint,
+                    ticket.CombatSpawnPoint,
                     ticket.TargetY,
                     ticket.SpeedMultiplier);
                 if (enemy != null)
@@ -2321,6 +2338,18 @@ namespace SpaceBurst
             }
 
             return MathHelper.Clamp(Game1.ScreenSize.Y - previousY, margin, Game1.ScreenSize.Y - margin);
+        }
+
+        private float ResolveReentryDepth(float previousDepth)
+        {
+            for (int attempt = 0; attempt < 6; attempt++)
+            {
+                float depth = gameplayRandom.NextFloat(-CombatSpaceMath.MaxDepth * 0.82f, CombatSpaceMath.MaxDepth * 0.82f);
+                if (Math.Abs(depth - previousDepth) >= 28f)
+                    return depth;
+            }
+
+            return MathHelper.Clamp(-previousDepth, -CombatSpaceMath.MaxDepth, CombatSpaceMath.MaxDepth);
         }
 
         private void SpawnDueEvents()
@@ -2417,7 +2446,7 @@ namespace SpaceBurst
 
             EnemyArchetypeDefinition archetype = repository.ArchetypesById[bossDefinition.ArchetypeId];
             Vector2 spawnPoint = new Vector2(Game1.ScreenSize.X + archetype.SpawnLeadDistance, bossDefinition.TargetY * Game1.ScreenSize.Y);
-            activeBoss = new BossEnemy(archetype, bossDefinition, spawnPoint);
+            activeBoss = new BossEnemy(archetype, bossDefinition, spawnPoint, new Vector3(spawnPoint.X, spawnPoint.Y, 0f));
             EntityManager.Add(activeBoss);
         }
 
@@ -4160,11 +4189,17 @@ namespace SpaceBurst
                         SpawnAtSeconds = snapshot.SpawnAtSeconds,
                         Group = snapshot.Group,
                         SpawnPoint = new Vector2(snapshot.SpawnPoint.X, snapshot.SpawnPoint.Y),
+                        CombatSpawnPoint = snapshot.CombatSpawnPoint == null
+                            ? new Vector3(snapshot.SpawnPoint.X, snapshot.SpawnPoint.Y, snapshot.DepthAnchor)
+                            : new Vector3(snapshot.CombatSpawnPoint.X, snapshot.CombatSpawnPoint.Y, snapshot.CombatSpawnPoint.Z),
                         TargetY = snapshot.TargetY,
                         MovePattern = snapshot.MovePattern,
                         FirePattern = snapshot.FirePattern,
                         Amplitude = snapshot.Amplitude,
                         Frequency = snapshot.Frequency,
+                        DepthAnchor = snapshot.DepthAnchor,
+                        DepthAmplitude = snapshot.DepthAmplitude,
+                        DepthFrequency = snapshot.DepthFrequency <= 0f ? 1f : snapshot.DepthFrequency,
                         SpeedMultiplier = snapshot.SpeedMultiplier > 0f ? snapshot.SpeedMultiplier : snapshot.Group?.SpeedMultiplier ?? 1f,
                     });
                 }
@@ -4197,10 +4232,16 @@ namespace SpaceBurst
                     {
                         TriggerAtSeconds = snapshot.TriggerAtSeconds,
                         SpawnPoint = new Vector2(snapshot.SpawnPoint.X, snapshot.SpawnPoint.Y),
+                        CombatSpawnPoint = snapshot.CombatSpawnPoint == null
+                            ? new Vector3(snapshot.SpawnPoint.X, snapshot.SpawnPoint.Y, snapshot.DepthAnchor)
+                            : new Vector3(snapshot.CombatSpawnPoint.X, snapshot.CombatSpawnPoint.Y, snapshot.CombatSpawnPoint.Z),
                         TargetY = snapshot.TargetY,
                         SpeedMultiplier = snapshot.SpeedMultiplier,
                         Amplitude = snapshot.Amplitude,
                         Frequency = snapshot.Frequency,
+                        DepthAnchor = snapshot.DepthAnchor,
+                        DepthAmplitude = snapshot.DepthAmplitude,
+                        DepthFrequency = snapshot.DepthFrequency <= 0f ? 1f : snapshot.DepthFrequency,
                         Enemy = snapshot.Enemy,
                     });
                 }
@@ -4243,11 +4284,15 @@ namespace SpaceBurst
                     SpawnAtSeconds = spawn.SpawnAtSeconds,
                     Group = spawn.Group,
                     SpawnPoint = new Vector2Data(spawn.SpawnPoint.X, spawn.SpawnPoint.Y),
+                    CombatSpawnPoint = new Vector3Data(spawn.CombatSpawnPoint.X, spawn.CombatSpawnPoint.Y, spawn.CombatSpawnPoint.Z),
                     TargetY = spawn.TargetY,
                     MovePattern = spawn.MovePattern,
                     FirePattern = spawn.FirePattern,
                     Amplitude = spawn.Amplitude,
                     Frequency = spawn.Frequency,
+                    DepthAnchor = spawn.DepthAnchor,
+                    DepthAmplitude = spawn.DepthAmplitude,
+                    DepthFrequency = spawn.DepthFrequency,
                     SpeedMultiplier = spawn.SpeedMultiplier,
                 });
             }
@@ -4281,10 +4326,14 @@ namespace SpaceBurst
                 {
                     TriggerAtSeconds = ticket.TriggerAtSeconds,
                     SpawnPoint = new Vector2Data(ticket.SpawnPoint.X, ticket.SpawnPoint.Y),
+                    CombatSpawnPoint = new Vector3Data(ticket.CombatSpawnPoint.X, ticket.CombatSpawnPoint.Y, ticket.CombatSpawnPoint.Z),
                     TargetY = ticket.TargetY,
                     SpeedMultiplier = ticket.SpeedMultiplier,
                     Amplitude = ticket.Amplitude,
                     Frequency = ticket.Frequency,
+                    DepthAnchor = ticket.DepthAnchor,
+                    DepthAmplitude = ticket.DepthAmplitude,
+                    DepthFrequency = ticket.DepthFrequency,
                     Enemy = ticket.Enemy,
                 });
             }
@@ -4508,11 +4557,15 @@ namespace SpaceBurst
             public float SpawnAtSeconds { get; set; }
             public SpawnGroupDefinition Group { get; set; }
             public Vector2 SpawnPoint { get; set; }
+            public Vector3 CombatSpawnPoint { get; set; }
             public float TargetY { get; set; }
             public MovePattern MovePattern { get; set; }
             public FirePattern FirePattern { get; set; }
             public float Amplitude { get; set; }
             public float Frequency { get; set; }
+            public float DepthAnchor { get; set; }
+            public float DepthAmplitude { get; set; }
+            public float DepthFrequency { get; set; } = 1f;
             public float SpeedMultiplier { get; set; } = 1f;
         }
 
@@ -4526,10 +4579,14 @@ namespace SpaceBurst
         {
             public float TriggerAtSeconds { get; set; }
             public Vector2 SpawnPoint { get; set; }
+            public Vector3 CombatSpawnPoint { get; set; }
             public float TargetY { get; set; }
             public float SpeedMultiplier { get; set; } = 1f;
             public float Amplitude { get; set; }
             public float Frequency { get; set; } = 1f;
+            public float DepthAnchor { get; set; }
+            public float DepthAmplitude { get; set; }
+            public float DepthFrequency { get; set; } = 1f;
             public EnemySnapshotData Enemy { get; set; }
         }
 

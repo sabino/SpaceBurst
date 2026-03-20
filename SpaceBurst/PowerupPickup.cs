@@ -28,10 +28,10 @@ namespace SpaceBurst
 
         public WeaponStyleId StyleId { get; }
 
-        public PowerupPickup(Vector2 position, WeaponStyleId styleId)
+        public PowerupPickup(Vector2 position, WeaponStyleId styleId, Vector3? combatPosition = null)
         {
-            Position = position;
-            Velocity = new Vector2(-40f, 0f);
+            CombatPosition = combatPosition ?? new Vector3(position.X, position.Y, 0f);
+            CombatVelocity = new Vector3(-40f, 0f, 0f);
             bobSeed = position.X * 0.013f + position.Y * 0.009f;
             StyleId = styleId;
 
@@ -40,18 +40,27 @@ namespace SpaceBurst
             secondaryColor = ColorUtil.ParseHex(style.SecondaryColor, new Color(255, 179, 71));
             accentColor = ColorUtil.ParseHex(style.AccentColor, new Color(255, 122, 89));
             iconRows = style.IconRows;
+            sprite = new ProceduralSpriteInstance(Game1.Instance.GraphicsDevice, new ProceduralSpriteDefinition
+            {
+                Id = string.Concat("Powerup_", styleId.ToString()),
+                PixelScale = 4,
+                PrimaryColor = style.PrimaryColor,
+                SecondaryColor = style.SecondaryColor,
+                AccentColor = style.AccentColor,
+                Rows = new List<string>(glyphRows),
+            });
         }
 
         public override void Update()
         {
             float deltaSeconds = (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
             ageSeconds += deltaSeconds;
-            Vector2 drift = new Vector2(Velocity.X - Game1.Instance.CurrentScrollSpeed * 0.18f, MathF.Sin(ageSeconds * 3.4f + bobSeed) * 18f);
+            Vector3 drift = new Vector3(TravelVelocity - Game1.Instance.CurrentScrollSpeed * 0.18f, MathF.Sin(ageSeconds * 3.4f + bobSeed) * 18f, 0f);
 
             if (Game1.Instance.PowerupMagnetStrength > 0f && !Player1.Instance.IsDead)
             {
-                Vector2 delta = Player1.Instance.Position - Position;
-                if (delta != Vector2.Zero)
+                Vector3 delta = Player1.Instance.CombatPosition - CombatPosition;
+                if (delta != Vector3.Zero)
                 {
                     float distance = delta.Length();
                     delta /= distance;
@@ -59,9 +68,10 @@ namespace SpaceBurst
                 }
             }
 
-            Position += drift * deltaSeconds;
+            CombatVelocity = drift;
+            CombatPosition += CombatVelocity * deltaSeconds;
 
-            if (ageSeconds > 12f || Position.X < -40f)
+            if (ageSeconds > 12f || Position.X < -40f || MathF.Abs(LateralDepth) > CombatSpaceMath.MaxDepth + 60f)
                 IsExpired = true;
         }
 
@@ -74,15 +84,19 @@ namespace SpaceBurst
 
         public bool OverlapsPlayer()
         {
-            return Vector2.DistanceSquared(Position, Player1.Instance.Position) <= 42f * 42f;
+            float radius = 42f + ApproximateDepthRadius + Player1.Instance.ApproximateDepthRadius;
+            return Vector3.DistanceSquared(CombatPosition, Player1.Instance.CombatPosition) <= radius * radius;
         }
 
         public PowerupSnapshotData CaptureSnapshot()
         {
             return new PowerupSnapshotData
             {
+                EntityId = EntityId,
                 Position = new Vector2Data(Position.X, Position.Y),
                 Velocity = new Vector2Data(Velocity.X, Velocity.Y),
+                CombatPosition = new Vector3Data(CombatPosition.X, CombatPosition.Y, CombatPosition.Z),
+                CombatVelocity = new Vector3Data(CombatVelocity.X, CombatVelocity.Y, CombatVelocity.Z),
                 AgeSeconds = ageSeconds,
                 StyleId = StyleId,
             };
@@ -93,9 +107,18 @@ namespace SpaceBurst
             if (snapshot == null)
                 return null;
 
-            var pickup = new PowerupPickup(new Vector2(snapshot.Position.X, snapshot.Position.Y), snapshot.StyleId);
-            pickup.Velocity = new Vector2(snapshot.Velocity.X, snapshot.Velocity.Y);
+            var pickup = new PowerupPickup(
+                new Vector2(snapshot.Position.X, snapshot.Position.Y),
+                snapshot.StyleId,
+                snapshot.CombatPosition == null ? null : new Vector3(snapshot.CombatPosition.X, snapshot.CombatPosition.Y, snapshot.CombatPosition.Z));
+            if (snapshot.CombatPosition != null)
+                pickup.CombatPosition = new Vector3(snapshot.CombatPosition.X, snapshot.CombatPosition.Y, snapshot.CombatPosition.Z);
+            if (snapshot.CombatVelocity != null)
+                pickup.CombatVelocity = new Vector3(snapshot.CombatVelocity.X, snapshot.CombatVelocity.Y, snapshot.CombatVelocity.Z);
+            else
+                pickup.CombatVelocity = new Vector3(snapshot.Velocity.X, snapshot.Velocity.Y, 0f);
             pickup.ageSeconds = snapshot.AgeSeconds;
+            pickup.RestoreEntityId(snapshot.EntityId);
             return pickup;
         }
     }

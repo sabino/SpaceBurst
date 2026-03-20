@@ -12,6 +12,7 @@ namespace SpaceBurst
         private readonly float homingStrength;
 
         public Vector2 PreviousPosition { get; private set; }
+        public Vector3 PreviousCombatPosition { get; private set; }
 
         public override bool IsFriendly
         {
@@ -60,7 +61,9 @@ namespace SpaceBurst
             ImpactFxStyle impactFxStyle = ImpactFxStyle.Standard,
             float explosionRadius = 0f,
             int chainCount = 0,
-            float homingDelaySeconds = 0f)
+            float homingDelaySeconds = 0f,
+            Vector3? combatPosition = null,
+            Vector3? combatVelocity = null)
         {
             Friendly = friendly;
             Damage = damage;
@@ -74,9 +77,10 @@ namespace SpaceBurst
             ImpactFxStyle = impactFxStyle;
             ExplosionRadius = explosionRadius;
             ChainCount = chainCount;
-            Position = position;
-            Velocity = velocity;
+            CombatPosition = combatPosition ?? new Vector3(position.X, position.Y, 0f);
+            CombatVelocity = combatVelocity ?? new Vector3(velocity.X, velocity.Y, 0f);
             PreviousPosition = position;
+            PreviousCombatPosition = CombatPosition;
             Orientation = velocity == Vector2.Zero ? 0f : velocity.ToAngle();
             RenderScale = renderScale;
             sprite = new ProceduralSpriteInstance(
@@ -95,8 +99,9 @@ namespace SpaceBurst
             }
 
             PreviousPosition = Position;
+            PreviousCombatPosition = CombatPosition;
             UpdateBehavior(deltaSeconds);
-            Position += Velocity * deltaSeconds;
+            CombatPosition += CombatVelocity * deltaSeconds;
             EmitTrail(deltaSeconds);
 
             if (Velocity != Vector2.Zero)
@@ -104,7 +109,7 @@ namespace SpaceBurst
 
             Rectangle bounds = Bounds;
             Rectangle screenBounds = new Rectangle(-240, -240, Game1.VirtualWidth + 480, Game1.VirtualHeight + 480);
-            if (!screenBounds.Intersects(bounds))
+            if (!screenBounds.Intersects(bounds) && MathF.Abs(LateralDepth) > ApproximateDepthRadius + 420f)
                 IsExpired = true;
         }
 
@@ -128,14 +133,35 @@ namespace SpaceBurst
             return false;
         }
 
+        public bool TryGetCombatImpactPoint(Entity target, out Vector3 impactPoint)
+        {
+            Vector3 delta = CombatPosition - PreviousCombatPosition;
+            int steps = delta == Vector3.Zero ? 1 : System.Math.Max(1, (int)(delta.Length() / 8f));
+
+            for (int step = 0; step <= steps; step++)
+            {
+                float t = steps == 0 ? 1f : step / (float)steps;
+                Vector3 sample = Vector3.Lerp(PreviousCombatPosition, CombatPosition, t);
+                if (target.ContainsCombatPoint(sample))
+                {
+                    impactPoint = sample;
+                    return true;
+                }
+            }
+
+            impactPoint = CombatPosition;
+            return false;
+        }
+
         public void RegisterImpact()
         {
             if (RemainingPierceHits > 0)
             {
                 RemainingPierceHits--;
                 PreviousPosition = Position;
-                if (Velocity != Vector2.Zero)
-                    Position += Vector2.Normalize(Velocity) * 10f;
+                PreviousCombatPosition = CombatPosition;
+                if (CombatVelocity != Vector3.Zero)
+                    CombatPosition += Vector3.Normalize(CombatVelocity) * 10f;
                 return;
             }
 
@@ -146,9 +172,13 @@ namespace SpaceBurst
         {
             return new BulletSnapshotData
             {
+                EntityId = EntityId,
                 Position = new Vector2Data(Position.X, Position.Y),
                 PreviousPosition = new Vector2Data(PreviousPosition.X, PreviousPosition.Y),
                 Velocity = new Vector2Data(Velocity.X, Velocity.Y),
+                CombatPosition = new Vector3Data(CombatPosition.X, CombatPosition.Y, CombatPosition.Z),
+                PreviousCombatPosition = new Vector3Data(PreviousCombatPosition.X, PreviousCombatPosition.Y, PreviousCombatPosition.Z),
+                CombatVelocity = new Vector3Data(CombatVelocity.X, CombatVelocity.Y, CombatVelocity.Z),
                 Friendly = Friendly,
                 Damage = Damage,
                 RemainingPierceHits = RemainingPierceHits,
@@ -187,8 +217,14 @@ namespace SpaceBurst
                 snapshot.ImpactFxStyle,
                 snapshot.ExplosionRadius,
                 snapshot.ChainCount,
-                snapshot.HomingDelayRemaining);
+                snapshot.HomingDelayRemaining,
+                snapshot.CombatPosition == null ? null : new Vector3(snapshot.CombatPosition.X, snapshot.CombatPosition.Y, snapshot.CombatPosition.Z),
+                snapshot.CombatVelocity == null ? null : new Vector3(snapshot.CombatVelocity.X, snapshot.CombatVelocity.Y, snapshot.CombatVelocity.Z));
             bullet.PreviousPosition = new Vector2(snapshot.PreviousPosition.X, snapshot.PreviousPosition.Y);
+            bullet.PreviousCombatPosition = snapshot.PreviousCombatPosition == null
+                ? bullet.CombatPosition
+                : new Vector3(snapshot.PreviousCombatPosition.X, snapshot.PreviousCombatPosition.Y, snapshot.PreviousCombatPosition.Z);
+            bullet.RestoreEntityId(snapshot.EntityId);
             return bullet;
         }
 
@@ -231,45 +267,45 @@ namespace SpaceBurst
             if (homingStrength <= 0f || HomingDelayRemaining > 0f)
                 return;
 
-            Vector2? desiredDirection = Friendly
+            Vector3? desiredDirection = Friendly
                 ? GetEnemySeekDirection()
                 : GetPlayerSeekDirection();
 
             if (!desiredDirection.HasValue)
                 return;
 
-            float speed = Velocity.Length();
+            float speed = CombatVelocity.Length();
             if (speed <= 0f)
                 return;
 
-            Vector2 desiredVelocity = desiredDirection.Value * speed;
-            Velocity = Vector2.Lerp(Velocity, desiredVelocity, System.Math.Min(1f, homingStrength * responsiveness * deltaSeconds));
+            Vector3 desiredVelocity = desiredDirection.Value * speed;
+            CombatVelocity = Vector3.Lerp(CombatVelocity, desiredVelocity, System.Math.Min(1f, homingStrength * responsiveness * deltaSeconds));
         }
 
-        private Vector2? GetEnemySeekDirection()
+        private Vector3? GetEnemySeekDirection()
         {
             Enemy target = EntityManager.Enemies
                 .Where(enemy => !enemy.IsExpired)
-                .OrderBy(enemy => Vector2.DistanceSquared(enemy.Position, Position))
+                .OrderBy(enemy => Vector3.DistanceSquared(enemy.CombatPosition, CombatPosition))
                 .FirstOrDefault();
             if (target == null)
                 return null;
 
-            Vector2 desired = target.Position - Position;
-            if (desired == Vector2.Zero)
+            Vector3 desired = target.CombatPosition - CombatPosition;
+            if (desired == Vector3.Zero)
                 return null;
 
             desired.Normalize();
             return desired;
         }
 
-        private Vector2? GetPlayerSeekDirection()
+        private Vector3? GetPlayerSeekDirection()
         {
             if (Player1.Instance == null || Player1.Instance.IsDead)
                 return null;
 
-            Vector2 desired = Player1.Instance.Position - Position;
-            if (desired == Vector2.Zero)
+            Vector3 desired = Player1.Instance.CombatPosition - CombatPosition;
+            if (desired == Vector3.Zero)
                 return null;
 
             desired.Normalize();

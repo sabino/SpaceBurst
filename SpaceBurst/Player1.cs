@@ -28,8 +28,10 @@ namespace SpaceBurst
         private ProceduralSpriteInstance cannonSprite;
         private DamageMaskDefinition damageMask;
         private Vector2 cannonDirection = Vector2.UnitX;
+        private Vector3 combatAimDirection = Vector3.UnitX;
         private Vector2 knockbackVelocity;
         private Vector2 pendingRespawnPosition;
+        private Vector2 chaseReticle;
         private float respawnTimer;
         private float invulnerabilityTimer;
         private float fireCooldown;
@@ -69,6 +71,26 @@ namespace SpaceBurst
         public int ActiveWeaponRank
         {
             get { return PlayerStatus.RunProgress.Weapons.ActiveRank; }
+        }
+
+        internal ProceduralSpriteInstance CannonSpriteInstance
+        {
+            get { return cannonSprite; }
+        }
+
+        internal Vector2 ChaseReticle
+        {
+            get { return chaseReticle; }
+        }
+
+        internal Vector2 CannonDirection
+        {
+            get { return cannonDirection; }
+        }
+
+        internal Vector3 CombatAimDirection
+        {
+            get { return combatAimDirection; }
         }
 
         public float HullRatio
@@ -114,26 +136,62 @@ namespace SpaceBurst
             else if (Input.WasNextStylePressed())
                 CycleStyle(1);
 
-            Vector2 moveDirection = Input.GetMovementDirection();
-            Vector2 aimDirection = Input.GetAimDirection();
+            ViewMode currentViewMode = Game1.Instance?.CurrentViewMode ?? ViewMode.SideScroller;
+            PlayerCommandFrame command = Input.GetPlayerCommandFrame(currentViewMode);
+            Vector2 moveDirection = command.PlanarMovement;
+            Vector2 aimDirection;
+            if (currentViewMode == ViewMode.Chase3D)
+            {
+                chaseReticle += command.ReticleDelta * (deltaSeconds * 1.85f);
+                chaseReticle = Vector2.Clamp(chaseReticle, new Vector2(-0.92f, -0.7f), new Vector2(0.92f, 0.84f));
+                combatAimDirection = Late3DRenderer.ResolveCombatAimDirection(CombatPosition, chaseReticle);
+                aimDirection = new Vector2(combatAimDirection.X, combatAimDirection.Y);
+            }
+            else
+            {
+                chaseReticle = Vector2.Lerp(chaseReticle, Vector2.Zero, MathHelper.Clamp(deltaSeconds * 6f, 0f, 1f));
+                aimDirection = Input.GetAimDirection();
+                combatAimDirection = new Vector3(aimDirection.X, aimDirection.Y, 0f);
+            }
+
             if (aimDirection == Vector2.Zero)
                 aimDirection = Vector2.UnitX;
             else
                 aimDirection.Normalize();
 
             cannonDirection = aimDirection;
+            if (combatAimDirection == Vector3.Zero)
+                combatAimDirection = Vector3.UnitX;
+            else
+                combatAimDirection.Normalize();
             Orientation = 0f;
 
             Vector2 movementVelocity = moveDirection * (MoveSpeed * PlayerStatus.RunProgress.MoveSpeedMultiplier);
             knockbackVelocity = Vector2.Lerp(knockbackVelocity, Vector2.Zero, MathHelper.Clamp(6f * deltaSeconds, 0f, 1f));
-            Velocity = movementVelocity + knockbackVelocity;
-            Position += Velocity * deltaSeconds;
+            if (currentViewMode == ViewMode.Chase3D && CombatSpaceMath.IsDepthAwareViewActive)
+            {
+                float targetAltitude = MathHelper.Clamp(Game1.ScreenSize.Y * 0.5f + chaseReticle.Y * Game1.ScreenSize.Y * 0.34f, 40f, Game1.ScreenSize.Y - 40f);
+                float altitudeVelocity = (targetAltitude - Altitude) * 4.2f;
+                CombatVelocity = new Vector3(
+                    movementVelocity.X + knockbackVelocity.X,
+                    altitudeVelocity + knockbackVelocity.Y,
+                    movementVelocity.Y);
+            }
+            else
+            {
+                CombatVelocity = new Vector3(
+                    movementVelocity.X + knockbackVelocity.X,
+                    movementVelocity.Y + knockbackVelocity.Y,
+                    0f);
+            }
+
+            CombatPosition += CombatVelocity * deltaSeconds;
             ClampToArena();
 
             if (ActiveStyle == WeaponStyleId.Drone)
                 UpdateDrones();
 
-            if (Input.IsFireHeld())
+            if (command.FireHeld)
                 TryFire();
         }
 
@@ -152,9 +210,9 @@ namespace SpaceBurst
         public void ResetForStage()
         {
             RefreshLoadoutVisuals();
-            Position = GetSpawnPosition();
+            CombatPosition = new Vector3(GetSpawnPosition(), 0f);
             pendingRespawnPosition = Position;
-            Velocity = Vector2.Zero;
+            CombatVelocity = Vector3.Zero;
             knockbackVelocity = Vector2.Zero;
             fireCooldown = 0f;
             droneSupportTimer = 0f;
@@ -162,17 +220,21 @@ namespace SpaceBurst
             invulnerabilityTimer = InvulnerabilitySeconds;
             hullDestroyedQueued = false;
             cannonDirection = Vector2.UnitX;
+            combatAimDirection = Vector3.UnitX;
+            chaseReticle = Vector2.Zero;
             color = Color.White;
+            LateralDepth = 0f;
         }
 
         public void StartRespawn(float delaySeconds)
         {
             pendingRespawnPosition = Position;
             respawnTimer = delaySeconds <= 0f ? RespawnSeconds : delaySeconds;
-            Velocity = Vector2.Zero;
+            CombatVelocity = Vector3.Zero;
             knockbackVelocity = Vector2.Zero;
             fireCooldown = 0f;
             droneSupportTimer = 0f;
+            DepthVelocity = 0f;
         }
 
         public void MakeInvulnerable(float durationSeconds)
@@ -256,11 +318,15 @@ namespace SpaceBurst
         {
             return new PlayerSnapshotData
             {
+                EntityId = EntityId,
                 Position = new Vector2Data(Position.X, Position.Y),
                 Velocity = new Vector2Data(Velocity.X, Velocity.Y),
+                CombatPosition = new Vector3Data(CombatPosition.X, CombatPosition.Y, CombatPosition.Z),
+                CombatVelocity = new Vector3Data(CombatVelocity.X, CombatVelocity.Y, CombatVelocity.Z),
                 CannonDirection = new Vector2Data(cannonDirection.X, cannonDirection.Y),
                 KnockbackVelocity = new Vector2Data(knockbackVelocity.X, knockbackVelocity.Y),
                 PendingRespawnPosition = new Vector2Data(pendingRespawnPosition.X, pendingRespawnPosition.Y),
+                ChaseReticle = new Vector2Data(chaseReticle.X, chaseReticle.Y),
                 RespawnTimer = respawnTimer,
                 InvulnerabilityTimer = invulnerabilityTimer,
                 FireCooldown = fireCooldown,
@@ -276,17 +342,26 @@ namespace SpaceBurst
                 return;
 
             RefreshLoadoutVisuals();
-            Position = new Vector2(snapshot.Position.X, snapshot.Position.Y);
-            Velocity = new Vector2(snapshot.Velocity.X, snapshot.Velocity.Y);
+            if (snapshot.CombatPosition != null)
+                CombatPosition = new Vector3(snapshot.CombatPosition.X, snapshot.CombatPosition.Y, snapshot.CombatPosition.Z);
+            else
+                CombatPosition = new Vector3(snapshot.Position.X, snapshot.Position.Y, 0f);
+            if (snapshot.CombatVelocity != null)
+                CombatVelocity = new Vector3(snapshot.CombatVelocity.X, snapshot.CombatVelocity.Y, snapshot.CombatVelocity.Z);
+            else
+                CombatVelocity = new Vector3(snapshot.Velocity.X, snapshot.Velocity.Y, 0f);
             cannonDirection = new Vector2(snapshot.CannonDirection.X, snapshot.CannonDirection.Y);
+            combatAimDirection = new Vector3(cannonDirection.X, cannonDirection.Y, 0f);
             knockbackVelocity = new Vector2(snapshot.KnockbackVelocity.X, snapshot.KnockbackVelocity.Y);
             pendingRespawnPosition = new Vector2(snapshot.PendingRespawnPosition.X, snapshot.PendingRespawnPosition.Y);
+            chaseReticle = snapshot.ChaseReticle == null ? Vector2.Zero : new Vector2(snapshot.ChaseReticle.X, snapshot.ChaseReticle.Y);
             respawnTimer = snapshot.RespawnTimer;
             invulnerabilityTimer = snapshot.InvulnerabilityTimer;
             fireCooldown = snapshot.FireCooldown;
             droneSupportTimer = snapshot.DroneSupportTimer;
             hullDestroyedQueued = snapshot.HullDestroyedQueued;
             sprite?.RestoreMaskSnapshot(snapshot.HullMask);
+            RestoreEntityId(snapshot.EntityId);
             ClampToArena();
         }
 
@@ -375,6 +450,8 @@ namespace SpaceBurst
             {
                 float lateralOffset = count <= 1 ? 0f : (i - centerOffset) * spacing;
                 Vector2 origin = Position + direction * 26f + perpendicular * lateralOffset;
+                Vector3 combatDirection = ResolveShotDirection3(direction);
+                Vector3 combatOrigin = CombatPosition + combatDirection * 26f + new Vector3(perpendicular.X, perpendicular.Y, 0f) * lateralOffset;
                 EntityManager.Add(new BeamShot(
                     origin,
                     direction,
@@ -385,7 +462,9 @@ namespace SpaceBurst
                     true,
                     level.Impact,
                     WeaponCatalog.GetStyle(ActiveStyle).PrimaryColor,
-                    WeaponCatalog.GetStyle(ActiveStyle).AccentColor));
+                    WeaponCatalog.GetStyle(ActiveStyle).AccentColor,
+                    combatOrigin,
+                    combatDirection));
             }
 
             SpawnMuzzleFx(level, Position + cannonDirection * 30f);
@@ -453,6 +532,8 @@ namespace SpaceBurst
 
             Vector2 perpendicular = new Vector2(-direction.Y, direction.X);
             Vector2 spawnPoint = Position + direction * (30f + forwardOffset) + perpendicular * lateralOffset;
+            Vector3 shotDirection = ResolveShotDirection3(direction);
+            Vector3 combatSpawnPoint = CombatPosition + shotDirection * (30f + forwardOffset) + new Vector3(perpendicular.X, perpendicular.Y, 0f) * lateralOffset;
             ProceduralSpriteDefinition projectile = WeaponCatalog.CreateProjectileDefinition(ActiveStyle, ActiveWeaponLevel, true);
             EntityManager.Add(new Bullet(
                 spawnPoint,
@@ -470,7 +551,36 @@ namespace SpaceBurst
                 level.ImpactFxStyle,
                 level.ExplosionRadius,
                 level.ChainCount,
-                level.HomingDelaySeconds));
+                level.HomingDelaySeconds,
+                combatSpawnPoint,
+                shotDirection * level.ProjectileSpeed));
+        }
+
+        private Vector3 ResolveShotDirection3(Vector2 planarDirection)
+        {
+            if (Game1.Instance != null && Game1.Instance.CurrentViewMode == ViewMode.Chase3D && CombatSpaceMath.IsDepthAwareViewActive)
+            {
+                Vector3 direction = combatAimDirection;
+                if (direction == Vector3.Zero)
+                    direction = new Vector3(planarDirection.X, planarDirection.Y, 0f);
+
+                if (direction == Vector3.Zero)
+                    direction = Vector3.UnitX;
+
+                direction.Normalize();
+                return direction;
+            }
+
+            AutoAcquire2DResolver.Result autoAcquire = AutoAcquire2DResolver.Resolve(CombatPosition, planarDirection, EntityManager.Enemies);
+            Vector3 acquired = autoAcquire.Direction;
+            if (acquired == Vector3.Zero)
+                acquired = new Vector3(planarDirection.X, planarDirection.Y, 0f);
+
+            if (acquired == Vector3.Zero)
+                acquired = Vector3.UnitX;
+
+            acquired.Normalize();
+            return acquired;
         }
 
         private void UpdateDrones()
@@ -485,13 +595,17 @@ namespace SpaceBurst
                 float side = i % 2 == 0 ? -1f : 1f;
                 float vertical = (i / 2) * 12f + 18f;
                 Vector2 offset = new Vector2(-20f, side * vertical);
-                Vector2 spawn = Position + offset;
-                Enemy nearest = EntityManager.Enemies.OrderBy(enemy => Vector2.DistanceSquared(enemy.Position, spawn)).FirstOrDefault();
+                Vector3 combatSpawn = CombatPosition + new Vector3(offset.X, offset.Y, side * 16f);
+                Vector2 spawn = new Vector2(combatSpawn.X, combatSpawn.Y);
+                Enemy nearest = EntityManager.Enemies.OrderBy(enemy => Vector3.DistanceSquared(enemy.CombatPosition, combatSpawn)).FirstOrDefault();
                 Vector2 direction = nearest == null ? Vector2.UnitX : nearest.Position - spawn;
                 if (direction == Vector2.Zero)
                     direction = Vector2.UnitX;
                 else
                     direction.Normalize();
+                Vector3 combatDirection = nearest == null
+                    ? new Vector3(direction.X, direction.Y, 0f)
+                    : Vector3.Normalize(nearest.CombatPosition - combatSpawn);
 
                 EntityManager.Add(new Bullet(
                     spawn,
@@ -509,7 +623,9 @@ namespace SpaceBurst
                     ImpactFxStyle.Drone,
                     0f,
                     0,
-                    0.08f));
+                    0.08f,
+                    combatSpawn,
+                    combatDirection * (level.ProjectileSpeed + 70f)));
             }
         }
 
@@ -566,15 +682,7 @@ namespace SpaceBurst
 
         private void ClampToArena()
         {
-            Vector2 size = Size * 0.5f;
-            float left = Game1.ScreenSize.X * 0.06f + size.X;
-            float right = Game1.ScreenSize.X * 0.94f - size.X;
-            float top = Game1.ScreenSize.Y * 0.06f + size.Y;
-            float bottom = Game1.ScreenSize.Y * 0.94f - size.Y;
-
-            Position = new Vector2(
-                MathHelper.Clamp(Position.X, left, right),
-                MathHelper.Clamp(Position.Y, top, bottom));
+            CombatPosition = CombatSpaceMath.ClampToArena(CombatPosition, Size * 0.5f);
         }
 
         private static Vector2 GetSpawnPosition()
@@ -674,13 +782,15 @@ namespace SpaceBurst
         private void RestoreAfterRespawn()
         {
             RefreshLoadoutVisuals();
-            Position = pendingRespawnPosition;
+            CombatPosition = new Vector3(pendingRespawnPosition, 0f);
             ClampToArena();
-            Velocity = Vector2.Zero;
+            CombatVelocity = Vector3.Zero;
             knockbackVelocity = Vector2.Zero;
             respawnTimer = 0f;
             invulnerabilityTimer = InvulnerabilitySeconds;
             cannonDirection = Vector2.UnitX;
+            combatAimDirection = Vector3.UnitX;
+            chaseReticle = Vector2.Zero;
             color = Color.White;
         }
 
