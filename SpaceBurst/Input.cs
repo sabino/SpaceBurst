@@ -260,7 +260,7 @@ namespace SpaceBurst
 #endif
 
             Vector2 direction = viewMode == ViewMode.Chase3D
-                ? new Vector2(gamepadState.ThumbSticks.Left.X, gamepadState.ThumbSticks.Left.Y)
+                ? new Vector2(gamepadState.ThumbSticks.Left.X, -gamepadState.ThumbSticks.Left.Y)
                 : new Vector2(gamepadState.ThumbSticks.Left.X, -gamepadState.ThumbSticks.Left.Y);
 
             if (viewMode == ViewMode.Chase3D)
@@ -270,9 +270,14 @@ namespace SpaceBurst
                 if (keyboardState.IsKeyDown(Keys.D))
                     direction.X += 1f;
                 if (keyboardState.IsKeyDown(Keys.W))
-                    direction.Y += 1f;
-                if (keyboardState.IsKeyDown(Keys.S))
                     direction.Y -= 1f;
+                if (keyboardState.IsKeyDown(Keys.S))
+                    direction.Y += 1f;
+
+                if (Game1.Instance?.Invert3DHorizontal == true)
+                    direction.X *= -1f;
+                if (Game1.Instance?.Invert3DVertical == true)
+                    direction.Y *= -1f;
             }
             else
             {
@@ -299,35 +304,32 @@ namespace SpaceBurst
                 return touchAimDirection;
 #endif
 
-            Vector2 direction = gamepadState.ThumbSticks.Right;
-            direction.Y *= -1f;
-
-#if !ANDROID
-            if (Player1.Instance != null)
-            {
-                Vector2 mouseAim = pointerPosition - Player1.Instance.Position;
-                if (mouseAim.LengthSquared() > 16f)
-                {
-                    mouseAim.Normalize();
-                    direction += mouseAim;
-                }
-            }
-#endif
-
+            Vector2 keyboardAim = Vector2.Zero;
             if (keyboardState.IsKeyDown(Keys.Left))
-                direction.X -= 1f;
+                keyboardAim.X -= 1f;
             if (keyboardState.IsKeyDown(Keys.Right))
-                direction.X += 1f;
+                keyboardAim.X += 1f;
             if (keyboardState.IsKeyDown(Keys.Up))
-                direction.Y -= 1f;
+                keyboardAim.Y -= 1f;
             if (keyboardState.IsKeyDown(Keys.Down))
-                direction.Y += 1f;
+                keyboardAim.Y += 1f;
 
-            if (direction == Vector2.Zero)
-                return Vector2.Zero;
+            if (keyboardAim != Vector2.Zero)
+            {
+                keyboardAim.Normalize();
+                return keyboardAim;
+            }
 
-            direction.Normalize();
-            return direction;
+            Vector2 gamepadAim = gamepadState.ThumbSticks.Right;
+            gamepadAim.Y *= -1f;
+            if (gamepadAim.LengthSquared() > 0.01f)
+            {
+                if (gamepadAim.LengthSquared() > 1f)
+                    gamepadAim.Normalize();
+                return gamepadAim;
+            }
+
+            return Vector2.Zero;
         }
 
         public static bool IsBoostHeld()
@@ -384,14 +386,6 @@ namespace SpaceBurst
             return Vector2.Zero;
 #else
             Vector2 delta = gamepadState.ThumbSticks.Right;
-
-            if (mouseState != default(MouseState) && lastMouseState != default(MouseState))
-            {
-                Vector2 mouseDelta = new Vector2(
-                    mouseState.X - lastMouseState.X,
-                    lastMouseState.Y - mouseState.Y);
-                delta += mouseDelta * 0.035f;
-            }
 
             if (keyboardState.IsKeyDown(Keys.Left))
                 delta.X -= 1f;

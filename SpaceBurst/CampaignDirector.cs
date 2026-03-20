@@ -112,6 +112,7 @@ namespace SpaceBurst
         private TutorialStep tutorialStep;
         private float tutorialProgressSeconds;
         private int optionsSliderDragIndex = -1;
+        private OptionMenuSection optionsSection;
         private ViewMode viewMode = ViewMode.SideScroller;
         private PresentationTier presentationTier = PresentationTier.Pixel2D;
         private string selectedBossVariantId = string.Empty;
@@ -172,6 +173,12 @@ namespace SpaceBurst
             public Color Primary { get; }
             public Color Secondary { get; }
             public Color Prompt { get; }
+        }
+
+        private enum OptionMenuSection
+        {
+            General,
+            ThreeDGameplay,
         }
 
         private enum PauseMenuAction
@@ -325,6 +332,21 @@ namespace SpaceBurst
         public int TouchControlsOpacity
         {
             get { return options.TouchControlsOpacity; }
+        }
+
+        public bool Invert3DHorizontal
+        {
+            get { return options.Invert3DHorizontal; }
+        }
+
+        public bool Invert3DVertical
+        {
+            get { return options.Invert3DVertical; }
+        }
+
+        public bool Enable3DAimAssist
+        {
+            get { return options.Enable3DAimAssist; }
         }
 
         public FontTheme FontTheme
@@ -776,6 +798,13 @@ namespace SpaceBurst
 #if ANDROID
                 DiscardOptionsAndClose();
 #else
+                if (optionsSection == OptionMenuSection.ThreeDGameplay)
+                {
+                    optionsSection = OptionMenuSection.General;
+                    optionsSelection = GetOptionRows().Length - 1;
+                    optionsScrollOffset = 0f;
+                    return;
+                }
                 ConfirmOptionsAndClose();
 #endif
                 return;
@@ -1603,6 +1632,11 @@ namespace SpaceBurst
                 return;
 
             viewMode = viewMode == ViewMode.SideScroller ? ViewMode.Chase3D : ViewMode.SideScroller;
+            if (viewMode == ViewMode.Chase3D)
+            {
+                Player1.Instance?.BeginChaseEntryRecenter();
+                Late3DRenderer.BeginChaseEntry(Player1.Instance?.CombatPosition ?? Vector3.Zero);
+            }
             Game1.Instance.Feedback?.Handle(new FeedbackEvent(FeedbackEventType.StageTransition, Player1.Instance.Position, 0.35f));
         }
 
@@ -1671,6 +1705,8 @@ namespace SpaceBurst
                 return false;
 
             viewMode = ViewMode.Chase3D;
+            Player1.Instance?.BeginChaseEntryRecenter();
+            Late3DRenderer.BeginChaseEntry(Player1.Instance?.CombatPosition ?? Vector3.Zero);
             return true;
 #endif
         }
@@ -2261,7 +2297,7 @@ namespace SpaceBurst
 
             for (int index = 0; index < scheduledCount; index++)
             {
-                float spawnX = Game1.ScreenSize.X + Math.Max(40f, group.SpawnLeadDistance + index * spacingX);
+                float spawnX = Game1.ScreenSize.X + Math.Max(40f, group.SpawnLeadDistance + 120f + index * spacingX);
                 float depthAnchor = gameplayRandom.NextFloat(-CombatSpaceMath.MaxDepth * 0.78f, CombatSpaceMath.MaxDepth * 0.78f);
                 float depthAmplitude = 18f + gameplayRandom.NextFloat(0f, 34f);
                 float depthFrequency = 0.48f + gameplayRandom.NextFloat(0f, 0.55f);
@@ -2335,7 +2371,7 @@ namespace SpaceBurst
 
             float targetY = ResolveReentryTargetY(enemy.Position.Y);
             float depthAnchor = ResolveReentryDepth(enemy.LateralDepth);
-            Vector2 spawnPoint = new Vector2(Game1.ScreenSize.X + gameplayRandom.NextFloat(240f, 420f), targetY);
+            Vector2 spawnPoint = new Vector2(Game1.ScreenSize.X + gameplayRandom.NextFloat(360f, 620f), targetY);
             reentryTickets.Add(new ReentryTicket
             {
                 TriggerAtSeconds = spawnAt,
@@ -2469,16 +2505,21 @@ namespace SpaceBurst
         {
             Vector2 position;
             Vector2 velocity;
+            Vector3 combatPosition;
+            Vector3 combatVelocity;
             ProceduralSpriteDefinition sprite;
             ImpactProfileDefinition impact;
             int damage;
             float scale;
+            float depth = gameplayRandom.NextFloat(-CombatSpaceMath.MaxDepth * 0.82f, CombatSpaceMath.MaxDepth * 0.82f);
+            float depthVelocity;
 
             switch (eventType)
             {
                 case RandomEventType.MeteorShower:
                     position = new Vector2(Game1.ScreenSize.X + 40f + gameplayRandom.NextInt(0, 160), gameplayRandom.NextInt(0, Game1.VirtualHeight / 2));
                     velocity = new Vector2(-320f - 60f * intensity, 180f + gameplayRandom.NextInt(-40, 80));
+                    depthVelocity = gameplayRandom.NextFloat(-36f, 36f);
                     sprite = CreateEventProjectileDefinition("#B56A46", "#EABF8F", "#FFF1C9", new[] { ".#.", "###", ".#." });
                     impact = new ImpactProfileDefinition { Name = "Meteor", Kernel = ImpactKernelShape.Blast5, BaseCellsRemoved = 5, BonusCellsPerDamage = 1, SplashRadius = 1, SplashPercent = 35, DebrisBurstCount = 10, DebrisSpeed = 150f };
                     damage = 2;
@@ -2487,6 +2528,7 @@ namespace SpaceBurst
                 case RandomEventType.CometSwarm:
                     position = new Vector2(Game1.ScreenSize.X + 40f + gameplayRandom.NextInt(0, 180), gameplayRandom.NextInt(40, Game1.VirtualHeight - 40));
                     velocity = new Vector2(-420f - 100f * intensity, gameplayRandom.NextInt(-80, 81));
+                    depthVelocity = gameplayRandom.NextFloat(-28f, 28f);
                     sprite = CreateEventProjectileDefinition("#DFF4FF", "#8FD3FF", "#FFF0AF", new[] { "##", "##" });
                     impact = new ImpactProfileDefinition { Name = "Comet", Kernel = ImpactKernelShape.Diamond3, BaseCellsRemoved = 4, BonusCellsPerDamage = 1, SplashRadius = 0, SplashPercent = 0, DebrisBurstCount = 8, DebrisSpeed = 180f };
                     damage = 2;
@@ -2495,6 +2537,7 @@ namespace SpaceBurst
                 default:
                     position = new Vector2(Game1.ScreenSize.X + 30f + gameplayRandom.NextInt(0, 120), gameplayRandom.NextInt(0, Game1.VirtualHeight));
                     velocity = new Vector2(-210f - 40f * intensity, gameplayRandom.NextInt(-30, 31));
+                    depthVelocity = gameplayRandom.NextFloat(-20f, 20f);
                     sprite = CreateEventProjectileDefinition("#B7C6D8", "#6D859A", "#EAF6FF", new[] { "##.", ".##" });
                     impact = new ImpactProfileDefinition { Name = "Debris", Kernel = ImpactKernelShape.Cross3, BaseCellsRemoved = 3, BonusCellsPerDamage = 1, SplashRadius = 0, SplashPercent = 0, DebrisBurstCount = 6, DebrisSpeed = 110f };
                     damage = 1;
@@ -2502,7 +2545,9 @@ namespace SpaceBurst
                     break;
             }
 
-            EntityManager.Add(new Bullet(position, velocity, false, damage, impact, sprite, 0, 3.8f, 0f, scale));
+            combatPosition = new Vector3(position.X, position.Y, depth);
+            combatVelocity = new Vector3(velocity.X, velocity.Y, depthVelocity);
+            EntityManager.Add(new Bullet(position, velocity, false, damage, impact, sprite, 0, 3.8f, 0f, scale, ProjectileBehavior.Bolt, TrailFxStyle.None, ImpactFxStyle.Standard, 0f, 0, 0f, combatPosition, combatVelocity));
         }
 
         private void SpawnBoss()
@@ -2702,6 +2747,9 @@ namespace SpaceBurst
                 DisplayMode = source.DisplayMode,
                 UiScalePercent = source.UiScalePercent,
                 TouchControlsOpacity = source.TouchControlsOpacity,
+                Invert3DHorizontal = source.Invert3DHorizontal,
+                Invert3DVertical = source.Invert3DVertical,
+                Enable3DAimAssist = source.Enable3DAimAssist,
                 FontTheme = source.FontTheme,
                 VisualPreset = source.VisualPreset,
                 EnableBloom = source.EnableBloom,
@@ -2724,6 +2772,9 @@ namespace SpaceBurst
             target.DisplayMode = source.DisplayMode;
             target.UiScalePercent = source.UiScalePercent;
             target.TouchControlsOpacity = source.TouchControlsOpacity;
+            target.Invert3DHorizontal = source.Invert3DHorizontal;
+            target.Invert3DVertical = source.Invert3DVertical;
+            target.Enable3DAimAssist = source.Enable3DAimAssist;
             target.FontTheme = source.FontTheme;
             target.VisualPreset = source.VisualPreset;
             target.EnableBloom = source.EnableBloom;
@@ -2752,6 +2803,7 @@ namespace SpaceBurst
             optionsSelection = 0;
             optionsSliderDragIndex = -1;
             optionsScrollOffset = 0f;
+            optionsSection = OptionMenuSection.General;
             optionsSnapshot = CloneOptions(options);
             pendingAudioQualityPreset = options.AudioQualityPreset;
             audioQualityDialogOpen = false;
@@ -3002,6 +3054,17 @@ namespace SpaceBurst
                 string.Concat("HELP HINTS  ", options.ShowHelpHints ? "ON" : "OFF"),
             };
 #else
+            if (optionsSection == OptionMenuSection.ThreeDGameplay)
+            {
+                return new[]
+                {
+                    string.Concat("INVERT 3D HORIZONTAL  ", options.Invert3DHorizontal ? "ON" : "OFF"),
+                    string.Concat("INVERT 3D VERTICAL  ", options.Invert3DVertical ? "ON" : "OFF"),
+                    string.Concat("3D AUTO LOCK  ", options.Enable3DAimAssist ? "ON" : "OFF"),
+                    "BACK TO GENERAL",
+                };
+            }
+
             return new[]
             {
                 string.Concat("DISPLAY MODE  ", options.DisplayMode == DesktopDisplayMode.BorderlessFullscreen ? "BORDERLESS FULLSCREEN" : "WINDOWED"),
@@ -3018,6 +3081,7 @@ namespace SpaceBurst
                 string.Concat("SFX VOLUME  ", (int)(options.SfxVolume * 100f), "%"),
                 string.Concat("AUTO DRAFT  ", options.AutoUpgradeDraft ? "ON" : "OFF"),
                 string.Concat("HELP HINTS  ", options.ShowHelpHints ? "ON" : "OFF"),
+                "3D GAMEPLAY",
             };
 #endif
         }
@@ -3037,6 +3101,8 @@ namespace SpaceBurst
 #if ANDROID
             return index == 0 || index == 8 || index == 9 || index == 10 || index == 11;
 #else
+            if (optionsSection == OptionMenuSection.ThreeDGameplay)
+                return false;
             return index == 1 || index == 9 || index == 10 || index == 11;
 #endif
         }
@@ -3052,6 +3118,7 @@ namespace SpaceBurst
                 10 => options.SfxVolume,
                 11 => (options.TouchControlsOpacity - 20f) / 80f,
 #else
+                _ when optionsSection == OptionMenuSection.ThreeDGameplay => 0f,
                 9 => options.MasterVolume,
                 10 => options.MusicVolume,
                 11 => options.SfxVolume,
@@ -3100,6 +3167,30 @@ namespace SpaceBurst
 
         private void AdjustOptionByStep(int index, int delta)
         {
+#if !ANDROID
+            if (optionsSection == OptionMenuSection.ThreeDGameplay)
+            {
+                switch (index)
+                {
+                    case 0:
+                        options.Invert3DHorizontal = !options.Invert3DHorizontal;
+                        break;
+                    case 1:
+                        options.Invert3DVertical = !options.Invert3DVertical;
+                        break;
+                    case 2:
+                        options.Enable3DAimAssist = !options.Enable3DAimAssist;
+                        break;
+                    case 3:
+                        optionsSection = OptionMenuSection.General;
+                        optionsSelection = GetOptionRows().Length - 1;
+                        optionsScrollOffset = 0f;
+                        break;
+                }
+
+                return;
+            }
+#endif
             switch (index)
             {
 #if ANDROID
@@ -3192,6 +3283,11 @@ namespace SpaceBurst
                     break;
                 case 13:
                     options.ShowHelpHints = !options.ShowHelpHints;
+                    break;
+                case 14:
+                    optionsSection = OptionMenuSection.ThreeDGameplay;
+                    optionsSelection = 0;
+                    optionsScrollOffset = 0f;
                     break;
 #endif
             }
@@ -3435,7 +3531,8 @@ namespace SpaceBurst
                 spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), Color.Black * 0.55f);
 
             spriteBatch.Draw(pixel, frameBounds, Color.Black * 0.78f);
-            DrawCenteredText(spriteBatch, pixel, "OPTIONS", frameBounds.Center.X, frameBounds.Y + UiPx(22), Color.White, 3f);
+            string headerText = optionsSection == OptionMenuSection.ThreeDGameplay ? "OPTIONS / 3D GAMEPLAY" : "OPTIONS";
+            DrawCenteredText(spriteBatch, pixel, headerText, frameBounds.Center.X, frameBounds.Y + UiPx(22), Color.White, optionsSection == OptionMenuSection.ThreeDGameplay ? 2.35f : 3f);
             string[] rows = GetOptionRows();
             Rectangle[] rowBounds = GetOptionRowBounds(viewport, rows.Length);
             for (int i = 0; i < rows.Length; i++)
@@ -3493,7 +3590,10 @@ namespace SpaceBurst
             else if (audioQualityApplyPending)
                 DrawAudioRebuildOverlay(spriteBatch, pixel);
 #else
-            DrawCenteredText(spriteBatch, pixel, "LEFT RIGHT OR ENTER TO CHANGE  ESC TO CLOSE", frameBounds.Center.X, frameBounds.Bottom - UiPx(32), Color.White * 0.75f, 1.1f);
+            string footerText = optionsSection == OptionMenuSection.ThreeDGameplay
+                ? "LEFT RIGHT OR ENTER TO CHANGE  ESC RETURNS TO GENERAL"
+                : "LEFT RIGHT OR ENTER TO CHANGE  ESC TO CLOSE";
+            DrawCenteredText(spriteBatch, pixel, footerText, frameBounds.Center.X, frameBounds.Bottom - UiPx(32), Color.White * 0.75f, 1.1f);
             if (audioQualityDialogOpen)
                 DrawAudioQualityDialog(spriteBatch, pixel);
             else if (audioQualityApplyPending)

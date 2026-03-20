@@ -216,6 +216,21 @@ namespace SpaceBurst
             get { return campaignDirector != null ? campaignDirector.AudioQualityPreset : startupOptions.AudioQualityPreset; }
         }
 
+        internal bool Invert3DHorizontal
+        {
+            get { return campaignDirector != null ? campaignDirector.Invert3DHorizontal : startupOptions.Invert3DHorizontal; }
+        }
+
+        internal bool Invert3DVertical
+        {
+            get { return campaignDirector != null ? campaignDirector.Invert3DVertical : startupOptions.Invert3DVertical; }
+        }
+
+        internal bool Enable3DAimAssist
+        {
+            get { return campaignDirector != null ? campaignDirector.Enable3DAimAssist : startupOptions.Enable3DAimAssist; }
+        }
+
         internal FeedbackDirector Feedback
         {
             get { return feedbackDirector; }
@@ -372,10 +387,6 @@ namespace SpaceBurst
                     spriteBatch.End();
 
                     Late3DRenderer.Draw(GraphicsDevice, EntityManager.AllEntities, CurrentBackgroundMood, VisualPreset);
-
-                    spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
-                    Late3DRenderer.DrawOverlayEntities(spriteBatch, EntityManager.AllEntities);
-                    spriteBatch.End();
 
                     GraphicsDevice.SetRenderTarget(null);
                     DrawWorldComposite();

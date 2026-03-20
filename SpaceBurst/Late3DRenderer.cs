@@ -65,11 +65,14 @@ namespace SpaceBurst
         private const float DepthWorldScale = 0.22f;
         private const float AltitudeWorldScale = 0.16f;
         private const float CameraBaseHeight = 26f;
-        private const float CameraBaseDistance = 78f;
-        private const float CameraLookAhead = 168f;
-        private const float CameraLookHeight = 7f;
-        private const float ReticleHorizontalRange = 0.26f;
-        private const float ReticleVerticalRange = 0.2f;
+        private const float CameraBaseDistance = 118f;
+        private const float CameraLookAhead = 244f;
+        private const float CameraLookHeight = 10f;
+        private const float CameraSideAnchor = -22f;
+        private const float CameraTargetSideAnchor = -8f;
+        private const float ChaseEntryDurationSeconds = 0.7f;
+        private const float ReticleMarginX = 24f;
+        private const float ReticleMarginY = 28f;
 
         private static readonly Dictionary<string, MeshVolumeCache> cacheByKey = new Dictionary<string, MeshVolumeCache>(StringComparer.Ordinal);
         private static readonly RasterizerState cullNoneState = new RasterizerState
@@ -86,6 +89,7 @@ namespace SpaceBurst
         private static Vector3 smoothedCameraTarget;
         private static float smoothedCameraBank;
         private static ChaseReticleState activeReticle;
+        private static float chaseEntryTimer;
 
         public static void ResetTransientState()
         {
@@ -94,15 +98,28 @@ namespace SpaceBurst
             smoothedCameraTarget = Vector3.Forward;
             smoothedCameraBank = 0f;
             activeReticle = new ChaseReticleState(Vector2.Zero, GetReticleScreenPosition(Vector2.Zero));
+            chaseEntryTimer = 0f;
+        }
+
+        public static void BeginChaseEntry(Vector3 playerCombatPosition)
+        {
+            chaseEntryTimer = ChaseEntryDurationSeconds;
+            activeReticle = new ChaseReticleState(Vector2.Zero, GetReticleScreenPosition(Vector2.Zero));
+        }
+
+        public static Vector2 ClampReticle(Vector2 normalized)
+        {
+            return Vector2.Clamp(normalized, new Vector2(-1f, -1f), new Vector2(1f, 1f));
         }
 
         public static Vector3 ResolveCombatAimDirection(Vector3 playerCombatPosition, Vector2 reticle)
         {
-            ChaseCameraState camera = BuildDesiredCamera(playerCombatPosition, Player1.Instance?.CombatVelocity ?? Vector3.Zero, reticle);
+            ChaseCameraState camera = ResolveAimCamera(playerCombatPosition, reticle);
             Matrix view = Matrix.CreateLookAt(camera.Position, camera.Target, camera.Up);
             Matrix projection = CreateProjection();
             Vector2 screen = GetReticleScreenPosition(reticle);
             var viewport = new Viewport(0, 0, Game1.VirtualWidth, Game1.VirtualHeight);
+            Vector3 playerWorld = MapCombatPoint(playerCombatPosition, 0f);
 
             Vector3 nearPoint = viewport.Unproject(new Vector3(screen, 0f), projection, view, Matrix.Identity);
             Vector3 farPoint = viewport.Unproject(new Vector3(screen, 1f), projection, view, Matrix.Identity);
@@ -111,15 +128,45 @@ namespace SpaceBurst
                 return Vector3.UnitX;
 
             worldDirection.Normalize();
-            Vector3 combatDirection = new Vector3(
-                worldDirection.Z / ForwardWorldScale,
-                worldDirection.Y / AltitudeWorldScale,
-                worldDirection.X / DepthWorldScale);
+            float planeForward = playerWorld.Z + CameraLookAhead + 540f;
+            float rayT = Math.Abs(worldDirection.Z) < 0.0001f
+                ? 1200f
+                : (planeForward - nearPoint.Z) / worldDirection.Z;
+            if (rayT < 96f)
+                rayT = 1200f;
+
+            Vector3 aimWorldPoint = nearPoint + worldDirection * rayT;
+            Vector3 aimCombatPoint = MapWorldPointToCombat(aimWorldPoint);
+            Vector3 combatDirection = aimCombatPoint - playerCombatPosition;
             if (combatDirection == Vector3.Zero)
                 return Vector3.UnitX;
 
             combatDirection.Normalize();
             return combatDirection;
+        }
+
+        public static bool TryProjectEntityToReticle(Entity entity, Vector3 playerCombatPosition, Vector2 currentReticle, out Vector2 normalized)
+        {
+            normalized = Vector2.Zero;
+            if (entity == null)
+                return false;
+
+            ChaseCameraState camera = ResolveAimCamera(playerCombatPosition, currentReticle);
+            Matrix view = Matrix.CreateLookAt(camera.Position, camera.Target, camera.Up);
+            Matrix projection = CreateProjection();
+            var viewport = new Viewport(0, 0, Game1.VirtualWidth, Game1.VirtualHeight);
+            Vector3 projected = viewport.Project(
+                MapCombatPoint(entity.CombatPosition, ResolveEntityElevation(entity)),
+                projection,
+                view,
+                Matrix.Identity);
+            if (projected.Z <= 0f || projected.Z >= 1f)
+                return false;
+            if (projected.X < -64f || projected.X > Game1.VirtualWidth + 64f || projected.Y < -64f || projected.Y > Game1.VirtualHeight + 64f)
+                return false;
+
+            normalized = ClampReticle(ScreenToNormalizedReticle(new Vector2(projected.X, projected.Y)));
+            return true;
         }
 
         public static void Draw(GraphicsDevice graphicsDevice, IEnumerable<Entity> entities, BackgroundMoodDefinition mood, VisualPreset preset)
@@ -133,6 +180,8 @@ namespace SpaceBurst
             Vector3 playerCombatVelocity = Player1.Instance.CombatVelocity;
             Vector2 reticleNormalized = Player1.Instance.ChaseReticle;
             activeReticle = new ChaseReticleState(reticleNormalized, GetReticleScreenPosition(reticleNormalized));
+            if (chaseEntryTimer > 0f)
+                chaseEntryTimer = Math.Max(0f, chaseEntryTimer - (Game1.GameTime == null ? 1f / 60f : (float)Game1.GameTime.ElapsedGameTime.TotalSeconds));
 
             ChaseCameraState desiredCamera = BuildDesiredCamera(playerCombatPosition, playerCombatVelocity, reticleNormalized);
             float deltaSeconds = Game1.GameTime == null ? 1f / 60f : (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
@@ -200,25 +249,7 @@ namespace SpaceBurst
             DrawBackdropDust(spriteBatch, pixel, accentColor, glowColor, time, preset);
         }
 
-        public static void DrawOverlayEntities(SpriteBatch spriteBatch, IEnumerable<Entity> entities)
-        {
-            if (spriteBatch == null || entities == null)
-                return;
-
-            foreach (Entity entity in entities)
-            {
-                if (entity == null || entity.IsExpired)
-                    continue;
-
-                if (entity is ImpactParticle)
-                    continue;
-
-                if (entity.SpriteInstance != null || entity is BeamShot)
-                    continue;
-
-                entity.Draw(spriteBatch);
-            }
-        }
+        public static void DrawOverlayEntities(SpriteBatch spriteBatch, IEnumerable<Entity> entities) { }
 
         public static void DrawReticle(SpriteBatch spriteBatch, Texture2D pixel, Texture2D radialTexture, float intensity)
         {
@@ -288,7 +319,7 @@ namespace SpaceBurst
                 float relativeDepth = entity.LateralDepth - Player1.Instance.LateralDepth;
                 float t = MathHelper.Clamp((relativeTravel + 140f) / forwardRange, 0f, 1f);
                 float x = content.X + 6f + t * (content.Width - 12f);
-                float y = content.Center.Y - relativeAltitude * altitudeScale;
+                float y = content.Center.Y + relativeAltitude * altitudeScale;
                 y = MathHelper.Clamp(y, content.Y + 4f, content.Bottom - 4f);
 
                 Color tint = ResolveInsetColor(entity, relativeDepth);
@@ -357,6 +388,9 @@ namespace SpaceBurst
                     graphicsDevice.BlendState = BlendState.AlphaBlend;
                     graphicsDevice.DepthStencilState = DepthStencilState.Default;
                 }
+
+                if (entity is Player1 player && player.CannonSpriteInstance != null)
+                    DrawPlayerCannon(player, mesh.World, mesh.Cache);
             }
         }
 
@@ -446,15 +480,15 @@ namespace SpaceBurst
 
             if (entity is Player1 player)
             {
-                Vector3 worldAim = MapCombatDirection(player.CombatAimDirection);
-                if (worldAim == Vector3.Zero)
-                    worldAim = Vector3.Forward;
-                else
-                    worldAim.Normalize();
-
-                yaw = MathHelper.Clamp(MathF.Atan2(worldAim.X, worldAim.Z) * 0.72f, -0.48f, 0.48f);
-                pitch = MathHelper.Clamp(-MathF.Asin(MathHelper.Clamp(worldAim.Y, -1f, 1f)) * 0.42f + player.TravelVelocity * 0.0007f, -0.26f, 0.3f);
-                roll = MathHelper.Clamp(-player.DepthVelocity * 0.0038f, -0.55f, 0.55f);
+                Matrix hullRotation = CreatePlayerHullRotation(player);
+                float playerScale = ResolveWorldScale(entity);
+                Matrix playerWorld = hullRotation * Matrix.CreateScale(playerScale) * Matrix.CreateTranslation(worldPosition);
+                return new ProceduralMeshInstance
+                {
+                    Cache = cache,
+                    World = playerWorld,
+                    GlowStrength = 0.72f,
+                };
             }
             else
             {
@@ -478,9 +512,6 @@ namespace SpaceBurst
             Matrix world = rotation * Matrix.CreateScale(scale) * Matrix.CreateTranslation(worldPosition);
             float glowStrength = entity is BossEnemy ? 0.95f : entity is Bullet ? 0.45f : 0.68f;
 
-            if (entity is Player1 && Player1.Instance.CannonSpriteInstance != null)
-                DrawPlayerCannon(worldPosition);
-
             return new ProceduralMeshInstance
             {
                 Cache = cache,
@@ -489,17 +520,25 @@ namespace SpaceBurst
             };
         }
 
-        private static void DrawPlayerCannon(Vector3 playerWorldPosition)
+        private static Matrix CreatePlayerHullRotation(Player1 player)
         {
-            ProceduralSpriteInstance cannon = Player1.Instance.CannonSpriteInstance;
-            if (cannon == null || opaqueEffect == null)
+            float yaw = MathHelper.Clamp(player.DepthVelocity * 0.0014f, -0.18f, 0.18f);
+            float pitch = MathHelper.Clamp(CombatAltitudeVelocityToWorld(player.CombatVelocity.Y) * 0.04f + player.TravelVelocity * 0.00055f, -0.16f, 0.16f);
+            float roll = MathHelper.Clamp(-player.DepthVelocity * 0.0038f, -0.45f, 0.45f);
+            return Matrix.CreateFromYawPitchRoll(yaw, pitch, roll);
+        }
+
+        private static void DrawPlayerCannon(Player1 player, Matrix playerHullWorld, MeshVolumeCache hullCache)
+        {
+            ProceduralSpriteInstance cannon = player?.CannonSpriteInstance;
+            if (cannon == null || opaqueEffect == null || hullCache == null)
                 return;
 
             MeshVolumeCache cache = GetMeshCache(cannon);
             if (cache.OpaqueIndices.Length == 0)
                 return;
 
-            Vector3 worldAim = MapCombatDirection(Player1.Instance.CombatAimDirection);
+            Vector3 worldAim = MapCombatDirection(player.CombatAimDirection);
             if (worldAim == Vector3.Zero)
                 worldAim = Vector3.Forward;
             else
@@ -507,10 +546,17 @@ namespace SpaceBurst
 
             float yaw = MathHelper.Clamp(MathF.Atan2(worldAim.X, worldAim.Z) * 0.85f, -0.62f, 0.62f);
             float pitch = MathHelper.Clamp(-MathF.Asin(MathHelper.Clamp(worldAim.Y, -1f, 1f)) * 0.54f, -0.3f, 0.28f);
-            float roll = MathHelper.Clamp(-Player1.Instance.DepthVelocity * 0.0018f, -0.18f, 0.18f);
+            float roll = MathHelper.Clamp(-player.DepthVelocity * 0.0018f, -0.18f, 0.18f);
+            Matrix baseRotation = CreatePlayerHullRotation(player);
             Matrix rotation = Matrix.CreateFromYawPitchRoll(yaw, pitch, roll);
-            Vector3 offset = Vector3.Transform(new Vector3(0f, 2.6f, 10.5f), rotation);
-            Matrix world = rotation * Matrix.CreateScale(cannon.PixelScale * 0.26f) * Matrix.CreateTranslation(playerWorldPosition + offset);
+            Matrix combinedRotation = rotation * baseRotation;
+            Vector3 localHardpoint = new Vector3(
+                0f,
+                hullCache.LocalMax.Y * 0.34f,
+                hullCache.LocalMax.Z - 1.35f);
+            Vector3 hardpointWorld = Vector3.Transform(localHardpoint, playerHullWorld);
+            Vector3 muzzleOffset = Vector3.Transform(new Vector3(0f, 0.9f, 3.6f), combinedRotation);
+            Matrix world = combinedRotation * Matrix.CreateScale(cannon.PixelScale * 0.42f) * Matrix.CreateTranslation(hardpointWorld + muzzleOffset);
             GraphicsDevice graphicsDevice = Game1.Instance.GraphicsDevice;
 
             opaqueEffect.World = world;
@@ -823,7 +869,7 @@ namespace SpaceBurst
         private static Vector3 MapCombatPoint(Vector3 combatPoint, float elevation)
         {
             float lateral = combatPoint.Z * DepthWorldScale;
-            float altitude = combatPoint.Y * AltitudeWorldScale + elevation;
+            float altitude = CombatAltitudeToWorld(combatPoint.Y) + elevation;
             float forward = combatPoint.X * ForwardWorldScale;
             return new Vector3(lateral, altitude, forward);
         }
@@ -856,39 +902,85 @@ namespace SpaceBurst
         {
             Vector3 playerWorld = MapCombatPoint(playerCombatPosition, 0f);
             float lateralLead = playerCombatVelocity.Z * 0.022f;
-            float altitudeLead = playerCombatVelocity.Y * 0.016f;
+            float altitudeLead = CombatAltitudeVelocityToWorld(playerCombatVelocity.Y) * 0.1f;
             float forwardPush = MathHelper.Clamp(playerCombatVelocity.X * 0.045f, -18f, 28f);
-            Vector3 position = playerWorld + new Vector3(lateralLead * 0.7f, CameraBaseHeight + altitudeLead, -CameraBaseDistance - forwardPush);
+            float chaseEntryBlend = chaseEntryTimer <= 0f ? 0f : MathHelper.SmoothStep(0f, 1f, chaseEntryTimer / ChaseEntryDurationSeconds);
+            float entrySideBias = -18f * chaseEntryBlend;
+            float entryDistanceBonus = 20f * chaseEntryBlend;
+            float entryLookAhead = 34f * chaseEntryBlend;
+            Vector3 position = playerWorld + new Vector3(CameraSideAnchor + entrySideBias + lateralLead * 0.7f, CameraBaseHeight + altitudeLead, -CameraBaseDistance - forwardPush - entryDistanceBonus);
             Vector3 target = new Vector3(
-                reticle.X * 34f + lateralLead,
+                CameraTargetSideAnchor + entrySideBias * 0.62f + reticle.X * 34f + lateralLead,
                 CameraLookHeight + reticle.Y * 26f + altitudeLead * 0.35f,
-                CameraLookAhead + Math.Max(0f, playerCombatVelocity.X * 0.08f));
+                CameraLookAhead + entryLookAhead + Math.Max(0f, playerCombatVelocity.X * 0.08f));
             target += playerWorld;
             float bank = MathHelper.Clamp(-playerCombatVelocity.Z * 0.0026f, -0.24f, 0.24f);
             return new ChaseCameraState(position, target, bank);
+        }
+
+        private static ChaseCameraState ResolveAimCamera(Vector3 playerCombatPosition, Vector2 reticle)
+        {
+            if (cameraInitialized)
+                return new ChaseCameraState(smoothedCameraPosition, smoothedCameraTarget, smoothedCameraBank);
+
+            return BuildDesiredCamera(playerCombatPosition, Player1.Instance?.CombatVelocity ?? Vector3.Zero, reticle);
         }
 
         private static Vector3 MapCombatDirection(Vector3 combatDirection)
         {
             return new Vector3(
                 combatDirection.Z * DepthWorldScale,
-                combatDirection.Y * AltitudeWorldScale,
+                CombatAltitudeVelocityToWorld(combatDirection.Y),
                 combatDirection.X * ForwardWorldScale);
+        }
+
+        private static Vector3 MapWorldPointToCombat(Vector3 worldPoint)
+        {
+            return new Vector3(
+                worldPoint.Z / ForwardWorldScale,
+                Game1.VirtualHeight * 0.5f - worldPoint.Y / AltitudeWorldScale,
+                worldPoint.X / DepthWorldScale);
+        }
+
+        private static float CombatAltitudeToWorld(float combatAltitude)
+        {
+            return (Game1.VirtualHeight * 0.5f - combatAltitude) * AltitudeWorldScale;
+        }
+
+        private static float CombatAltitudeVelocityToWorld(float combatAltitudeVelocity)
+        {
+            return -combatAltitudeVelocity * AltitudeWorldScale;
+        }
+
+        private static float WorldAltitudeDirectionToCombat(float worldAltitudeDirection)
+        {
+            return -worldAltitudeDirection / AltitudeWorldScale;
         }
 
         private static Matrix CreateProjection()
         {
             float aspectRatio = Math.Max(1f, Game1.VirtualWidth) / (float)Math.Max(1, Game1.VirtualHeight);
-            return Matrix.CreatePerspectiveFieldOfView(MathHelper.ToRadians(52f), aspectRatio, 1f, 1800f);
+            return Matrix.CreatePerspectiveFieldOfView(MathHelper.ToRadians(54f), aspectRatio, 1f, 2600f);
         }
 
         private static Vector2 GetReticleScreenPosition(Vector2 normalized)
         {
-            float x = Game1.VirtualWidth * 0.5f + normalized.X * Game1.VirtualWidth * ReticleHorizontalRange;
-            float y = Game1.VirtualHeight * 0.46f - normalized.Y * Game1.VirtualHeight * ReticleVerticalRange;
+            float horizontalT = normalized.X * 0.5f + 0.5f;
+            float verticalT = 0.5f - normalized.Y * 0.5f;
+            float x = MathHelper.Lerp(ReticleMarginX, Game1.VirtualWidth - ReticleMarginX, horizontalT);
+            float y = MathHelper.Lerp(ReticleMarginY, Game1.VirtualHeight - ReticleMarginY, verticalT);
             return new Vector2(
-                MathHelper.Clamp(x, 96f, Game1.VirtualWidth - 96f),
-                MathHelper.Clamp(y, 96f, Game1.VirtualHeight - 96f));
+                MathHelper.Clamp(x, ReticleMarginX, Game1.VirtualWidth - ReticleMarginX),
+                MathHelper.Clamp(y, ReticleMarginY, Game1.VirtualHeight - ReticleMarginY));
+        }
+
+        private static Vector2 ScreenToNormalizedReticle(Vector2 screenPosition)
+        {
+            float horizontal = (screenPosition.X - ReticleMarginX) / Math.Max(1f, Game1.VirtualWidth - ReticleMarginX * 2f);
+            float vertical = (screenPosition.Y - ReticleMarginY) / Math.Max(1f, Game1.VirtualHeight - ReticleMarginY * 2f);
+            return new Vector2(
+                MathHelper.Clamp(horizontal * 2f - 1f, -1f, 1f),
+                MathHelper.Clamp(1f - vertical * 2f, -1f, 1f));
         }
 
         private static void EnsureEffects(GraphicsDevice graphicsDevice)
@@ -1025,15 +1117,16 @@ namespace SpaceBurst
 
         private static void DrawBackdropDust(SpriteBatch spriteBatch, Texture2D pixel, Color accentColor, Color glowColor, float time, VisualPreset preset)
         {
-            int streakCount = preset == VisualPreset.Low ? 8 : 14;
-            for (int i = 0; i < streakCount; i++)
+            int moteCount = preset == VisualPreset.Low ? 12 : preset == VisualPreset.Neon ? 30 : 20;
+            for (int i = 0; i < moteCount; i++)
             {
-                float x = Hash01(71, i * 17 + 3) * Game1.VirtualWidth;
+                float x = (Hash01(71, i * 17 + 3) * (Game1.VirtualWidth + 120f) + time * (8f + i * 0.22f)) % (Game1.VirtualWidth + 120f) - 60f;
                 float y = Hash01(71, i * 17 + 7) * Game1.VirtualHeight;
-                int width = 28 + (int)(Hash01(71, i * 17 + 11) * (preset == VisualPreset.Neon ? 88f : 64f));
-                int height = 1 + (int)(Hash01(71, i * 17 + 13) * 2f);
-                Color tint = Color.Lerp(accentColor, glowColor, Hash01(71, i * 17 + 19)) * (0.05f + 0.03f * MathF.Abs(MathF.Sin(time * 0.35f + i)));
-                spriteBatch.Draw(pixel, new Rectangle((int)x, (int)y, width, height), tint);
+                int size = 2 + (int)(Hash01(71, i * 17 + 11) * (preset == VisualPreset.Neon ? 7f : 5f));
+                float drift = MathF.Sin(time * (0.18f + i * 0.01f) + i * 0.73f) * (3f + Hash01(71, i * 17 + 13) * 8f);
+                Rectangle moteBounds = new Rectangle((int)MathF.Round(x), (int)MathF.Round(y + drift), size, size);
+                Color tint = Color.Lerp(accentColor, glowColor, Hash01(71, i * 17 + 19)) * (0.06f + 0.05f * MathF.Abs(MathF.Sin(time * 0.2f + i)));
+                spriteBatch.Draw(pixel, moteBounds, tint);
             }
         }
 

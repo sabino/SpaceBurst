@@ -59,6 +59,8 @@ namespace SpaceBurst
         public Vector2Data KnockbackVelocity { get; set; } = new Vector2Data();
         public Vector2Data PendingRespawnPosition { get; set; } = new Vector2Data();
         public Vector2Data ChaseReticle { get; set; } = new Vector2Data();
+        public Vector3Data ChaseEntryRecenterTarget { get; set; } = new Vector3Data();
+        public float ChaseEntryRecenterTimer { get; set; }
         public float RespawnTimer { get; set; }
         public float InvulnerabilityTimer { get; set; }
         public float FireCooldown { get; set; }
