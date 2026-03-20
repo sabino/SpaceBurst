@@ -193,7 +193,12 @@ namespace SpaceBurst
             {
                 DeveloperVisualSettings.CheatsEnabled = value;
                 if (!value)
+                {
                     DeveloperVisualSettings.ShowBounds = false;
+                    DeveloperVisualSettings.ShowGizmos = false;
+                    DeveloperVisualSettings.ShowAimRay = false;
+                    DeveloperVisualSettings.ShowSpawnPreview = false;
+                }
             }
         }
 
@@ -201,6 +206,24 @@ namespace SpaceBurst
         {
             get { return DeveloperVisualSettings.ShowBounds; }
             set { DeveloperVisualSettings.ShowBounds = value && CheatsEnabled; }
+        }
+
+        public bool ShowGizmos
+        {
+            get { return DeveloperVisualSettings.ShowGizmos; }
+            set { DeveloperVisualSettings.ShowGizmos = value && CheatsEnabled; }
+        }
+
+        public bool ShowAimRay
+        {
+            get { return DeveloperVisualSettings.ShowAimRay; }
+            set { DeveloperVisualSettings.ShowAimRay = value && CheatsEnabled; }
+        }
+
+        public bool ShowSpawnPreview
+        {
+            get { return DeveloperVisualSettings.ShowSpawnPreview; }
+            set { DeveloperVisualSettings.ShowSpawnPreview = value && CheatsEnabled; }
         }
 
         public void Update()
@@ -404,6 +427,9 @@ namespace SpaceBurst
             {
                 string.Concat("sv_cheats ", CheatsEnabled ? "1" : "0"),
                 string.Concat("showbounds ", ShowBounds ? "1" : "0"),
+                string.Concat("showgizmos ", ShowGizmos ? "1" : "0"),
+                string.Concat("showaimray ", ShowAimRay ? "1" : "0"),
+                string.Concat("showspawnpreview ", ShowSpawnPreview ? "1" : "0"),
             };
 
             foreach (KeyValuePair<Keys, string> binding in bindings.AllBindings)
@@ -527,6 +553,9 @@ namespace SpaceBurst
         {
             DeveloperVisualSettings.CheatsEnabled = false;
             DeveloperVisualSettings.ShowBounds = false;
+            DeveloperVisualSettings.ShowGizmos = false;
+            DeveloperVisualSettings.ShowAimRay = false;
+            DeveloperVisualSettings.ShowSpawnPreview = false;
             TryExecFile(ConfigFileName);
             TryExecFile(AutoExecFileName);
         }
@@ -563,6 +592,60 @@ namespace SpaceBurst
                         return false;
 
                     ShowBounds = enabled;
+                    return true;
+                }));
+
+            registry.RegisterVariable(new ConsoleVariable(
+                "showgizmos",
+                "Show chase-view combat axes and parity gizmos.",
+                true,
+                true,
+                () => ShowGizmos ? "1" : "0",
+                value =>
+                {
+                    if (!TryParseBool(value, out bool enabled))
+                        return false;
+
+                    if (enabled && !CheatsEnabled)
+                        return false;
+
+                    ShowGizmos = enabled;
+                    return true;
+                }));
+
+            registry.RegisterVariable(new ConsoleVariable(
+                "showaimray",
+                "Show the current chase aim ray.",
+                true,
+                true,
+                () => ShowAimRay ? "1" : "0",
+                value =>
+                {
+                    if (!TryParseBool(value, out bool enabled))
+                        return false;
+
+                    if (enabled && !CheatsEnabled)
+                        return false;
+
+                    ShowAimRay = enabled;
+                    return true;
+                }));
+
+            registry.RegisterVariable(new ConsoleVariable(
+                "showspawnpreview",
+                "Show upcoming chase spawn preview markers.",
+                true,
+                true,
+                () => ShowSpawnPreview ? "1" : "0",
+                value =>
+                {
+                    if (!TryParseBool(value, out bool enabled))
+                        return false;
+
+                    if (enabled && !CheatsEnabled)
+                        return false;
+
+                    ShowSpawnPreview = enabled;
                     return true;
                 }));
 

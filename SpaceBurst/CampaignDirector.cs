@@ -344,9 +344,9 @@ namespace SpaceBurst
             get { return options.Invert3DVertical; }
         }
 
-        public bool Enable3DAimAssist
+        public AimAssist3DMode AimAssist3DMode
         {
-            get { return options.Enable3DAimAssist; }
+            get { return options.AimAssist3DMode; }
         }
 
         public FontTheme FontTheme
@@ -1719,6 +1719,36 @@ namespace SpaceBurst
             return true;
         }
 
+        internal List<Vector3> GetChaseSpawnPreviewPoints()
+        {
+            var previews = new List<Vector3>();
+            if (state != GameFlowState.Playing && state != GameFlowState.Tutorial && state != GameFlowState.Paused)
+                return previews;
+
+            const float previewWindowSeconds = 6.5f;
+            float previewCutoff = stageElapsedSeconds + previewWindowSeconds;
+
+            for (int i = 0; i < scheduledSpawns.Count; i++)
+            {
+                ScheduledSpawn spawn = scheduledSpawns[i];
+                if (spawn.SpawnAtSeconds < stageElapsedSeconds || spawn.SpawnAtSeconds > previewCutoff)
+                    continue;
+
+                previews.Add(spawn.CombatSpawnPoint);
+            }
+
+            for (int i = 0; i < reentryTickets.Count; i++)
+            {
+                ReentryTicket ticket = reentryTickets[i];
+                if (ticket.TriggerAtSeconds < stageElapsedSeconds || ticket.TriggerAtSeconds > previewCutoff)
+                    continue;
+
+                previews.Add(ticket.CombatSpawnPoint);
+            }
+
+            return previews;
+        }
+
         private void JumpToDeveloperStage(int delta)
         {
             if (!options.DeveloperToolsUnlocked || currentStage == null)
@@ -2749,7 +2779,7 @@ namespace SpaceBurst
                 TouchControlsOpacity = source.TouchControlsOpacity,
                 Invert3DHorizontal = source.Invert3DHorizontal,
                 Invert3DVertical = source.Invert3DVertical,
-                Enable3DAimAssist = source.Enable3DAimAssist,
+                AimAssist3DMode = source.AimAssist3DMode,
                 FontTheme = source.FontTheme,
                 VisualPreset = source.VisualPreset,
                 EnableBloom = source.EnableBloom,
@@ -2774,7 +2804,7 @@ namespace SpaceBurst
             target.TouchControlsOpacity = source.TouchControlsOpacity;
             target.Invert3DHorizontal = source.Invert3DHorizontal;
             target.Invert3DVertical = source.Invert3DVertical;
-            target.Enable3DAimAssist = source.Enable3DAimAssist;
+            target.AimAssist3DMode = source.AimAssist3DMode;
             target.FontTheme = source.FontTheme;
             target.VisualPreset = source.VisualPreset;
             target.EnableBloom = source.EnableBloom;
@@ -3060,7 +3090,7 @@ namespace SpaceBurst
                 {
                     string.Concat("INVERT 3D HORIZONTAL  ", options.Invert3DHorizontal ? "ON" : "OFF"),
                     string.Concat("INVERT 3D VERTICAL  ", options.Invert3DVertical ? "ON" : "OFF"),
-                    string.Concat("3D AUTO LOCK  ", options.Enable3DAimAssist ? "ON" : "OFF"),
+                    string.Concat("3D AIM ASSIST  ", options.AimAssist3DMode == AimAssist3DMode.SoftLock ? "SOFT LOCK" : "OFF"),
                     "BACK TO GENERAL",
                 };
             }
@@ -3179,7 +3209,9 @@ namespace SpaceBurst
                         options.Invert3DVertical = !options.Invert3DVertical;
                         break;
                     case 2:
-                        options.Enable3DAimAssist = !options.Enable3DAimAssist;
+                        options.AimAssist3DMode = options.AimAssist3DMode == AimAssist3DMode.Off
+                            ? AimAssist3DMode.SoftLock
+                            : AimAssist3DMode.Off;
                         break;
                     case 3:
                         optionsSection = OptionMenuSection.General;
@@ -4296,10 +4328,12 @@ namespace SpaceBurst
             if (save == null)
                 return;
 
+            ViewMode preservedViewMode = viewMode;
+            Vector2 preservedChaseReticle = Player1.Instance?.ChaseReticle ?? Vector2.Zero;
             currentStageNumber = Math.Max(1, save.CurrentStageNumber);
             currentStage = repository.GetStage(currentStageNumber);
             presentationTier = save.PresentationTier;
-            viewMode = save.ViewMode;
+            viewMode = fromRewind ? preservedViewMode : save.ViewMode;
             resolvedBossDefinition = RestoreBossDefinition(save.ActiveBossDefinition, currentStage?.Boss) ?? ResolveBossDefinitionForStage(currentStageNumber, currentStage);
             selectedBossVariantId = save.ActiveBossDefinition?.VariantId ?? string.Empty;
             if (!CanUseChaseView())
@@ -4437,6 +4471,8 @@ namespace SpaceBurst
                 rewindHoldSeconds = preservedRewindHold;
                 rewindStepAccumulator = preservedRewindAccumulator;
                 state = save.State == GameFlowState.Tutorial ? GameFlowState.Tutorial : GameFlowState.Playing;
+                if (viewMode == ViewMode.Chase3D)
+                    Player1.Instance.PreserveChaseViewState(preservedChaseReticle);
             }
         }
 

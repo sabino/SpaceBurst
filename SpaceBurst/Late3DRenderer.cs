@@ -71,8 +71,8 @@ namespace SpaceBurst
         private const float CameraSideAnchor = -22f;
         private const float CameraTargetSideAnchor = -8f;
         private const float ChaseEntryDurationSeconds = 0.7f;
-        private const float ReticleMarginX = 24f;
-        private const float ReticleMarginY = 28f;
+        private const float ReticleMarginX = 14f;
+        private const float ReticleMarginY = 18f;
 
         private static readonly Dictionary<string, MeshVolumeCache> cacheByKey = new Dictionary<string, MeshVolumeCache>(StringComparer.Ordinal);
         private static readonly RasterizerState cullNoneState = new RasterizerState
@@ -114,6 +114,17 @@ namespace SpaceBurst
 
         public static Vector3 ResolveCombatAimDirection(Vector3 playerCombatPosition, Vector2 reticle)
         {
+            Vector3 aimCombatPoint = ResolveCombatAimPoint(playerCombatPosition, reticle);
+            Vector3 combatDirection = aimCombatPoint - playerCombatPosition;
+            if (combatDirection == Vector3.Zero)
+                return Vector3.UnitX;
+
+            combatDirection.Normalize();
+            return combatDirection;
+        }
+
+        public static Vector3 ResolveCombatAimPoint(Vector3 playerCombatPosition, Vector2 reticle)
+        {
             ChaseCameraState camera = ResolveAimCamera(playerCombatPosition, reticle);
             Matrix view = Matrix.CreateLookAt(camera.Position, camera.Target, camera.Up);
             Matrix projection = CreateProjection();
@@ -125,7 +136,7 @@ namespace SpaceBurst
             Vector3 farPoint = viewport.Unproject(new Vector3(screen, 1f), projection, view, Matrix.Identity);
             Vector3 worldDirection = farPoint - nearPoint;
             if (worldDirection == Vector3.Zero)
-                return Vector3.UnitX;
+                return playerCombatPosition + Vector3.UnitX * 1200f;
 
             worldDirection.Normalize();
             float planeForward = playerWorld.Z + CameraLookAhead + 540f;
@@ -136,13 +147,30 @@ namespace SpaceBurst
                 rayT = 1200f;
 
             Vector3 aimWorldPoint = nearPoint + worldDirection * rayT;
-            Vector3 aimCombatPoint = MapWorldPointToCombat(aimWorldPoint);
-            Vector3 combatDirection = aimCombatPoint - playerCombatPosition;
-            if (combatDirection == Vector3.Zero)
-                return Vector3.UnitX;
+            return MapWorldPointToCombat(aimWorldPoint);
+        }
 
-            combatDirection.Normalize();
-            return combatDirection;
+        internal static bool TryResolvePlayerCombatAimRay(Player1 player, out Vector3 combatOrigin, out Vector3 combatTarget)
+        {
+            combatOrigin = Vector3.Zero;
+            combatTarget = Vector3.UnitX * 1200f;
+            if (player == null || player.SpriteInstance == null || player.CannonSpriteInstance == null)
+                return false;
+
+            if (!TryResolvePlayerCannonPose(player, out _, out _, out Vector3 muzzleWorld, out _))
+                return false;
+
+            Vector3 muzzleCombat = MapWorldPointToCombat(muzzleWorld);
+            Vector3 aimCombatPoint = ResolveCombatAimPoint(player.CombatPosition, player.ChaseReticle);
+            Vector3 aimDirection = aimCombatPoint - muzzleCombat;
+            if (aimDirection == Vector3.Zero)
+                aimDirection = player.CombatAimDirection == Vector3.Zero ? Vector3.UnitX : player.CombatAimDirection;
+            else
+                aimDirection.Normalize();
+
+            combatOrigin = muzzleCombat;
+            combatTarget = muzzleCombat + aimDirection * 1400f;
+            return true;
         }
 
         public static bool TryProjectEntityToReticle(Entity entity, Vector3 playerCombatPosition, Vector2 currentReticle, out Vector2 normalized)
@@ -211,6 +239,12 @@ namespace SpaceBurst
 
             DrawEntityMeshes(graphicsDevice, entities);
             DrawBeams(graphicsDevice, entities);
+            if (DeveloperVisualSettings.ShowGizmos)
+                DrawCombatGizmos(graphicsDevice);
+            if (DeveloperVisualSettings.ShowAimRay)
+                DrawAimRay(graphicsDevice);
+            if (DeveloperVisualSettings.ShowSpawnPreview)
+                DrawSpawnPreview(graphicsDevice, Game1.Instance?.CampaignDirector?.GetChaseSpawnPreviewPoints());
             if (DeveloperVisualSettings.ShowBounds)
                 DrawBounds(graphicsDevice, entities);
 
@@ -538,25 +572,8 @@ namespace SpaceBurst
             if (cache.OpaqueIndices.Length == 0)
                 return;
 
-            Vector3 worldAim = MapCombatDirection(player.CombatAimDirection);
-            if (worldAim == Vector3.Zero)
-                worldAim = Vector3.Forward;
-            else
-                worldAim.Normalize();
-
-            float yaw = MathHelper.Clamp(MathF.Atan2(worldAim.X, worldAim.Z) * 0.85f, -0.62f, 0.62f);
-            float pitch = MathHelper.Clamp(-MathF.Asin(MathHelper.Clamp(worldAim.Y, -1f, 1f)) * 0.54f, -0.3f, 0.28f);
-            float roll = MathHelper.Clamp(-player.DepthVelocity * 0.0018f, -0.18f, 0.18f);
-            Matrix baseRotation = CreatePlayerHullRotation(player);
-            Matrix rotation = Matrix.CreateFromYawPitchRoll(yaw, pitch, roll);
-            Matrix combinedRotation = rotation * baseRotation;
-            Vector3 localHardpoint = new Vector3(
-                0f,
-                hullCache.LocalMax.Y * 0.34f,
-                hullCache.LocalMax.Z - 1.35f);
-            Vector3 hardpointWorld = Vector3.Transform(localHardpoint, playerHullWorld);
-            Vector3 muzzleOffset = Vector3.Transform(new Vector3(0f, 0.9f, 3.6f), combinedRotation);
-            Matrix world = combinedRotation * Matrix.CreateScale(cannon.PixelScale * 0.42f) * Matrix.CreateTranslation(hardpointWorld + muzzleOffset);
+            if (!TryResolvePlayerCannonPose(player, out _, out Matrix world, out _, out _))
+                return;
             GraphicsDevice graphicsDevice = Game1.Instance.GraphicsDevice;
 
             opaqueEffect.World = world;
@@ -957,6 +974,53 @@ namespace SpaceBurst
             return -worldAltitudeDirection / AltitudeWorldScale;
         }
 
+        private static bool TryResolvePlayerCannonPose(Player1 player, out Matrix playerHullWorld, out Matrix cannonWorld, out Vector3 muzzleWorld, out Vector3 muzzleForward)
+        {
+            playerHullWorld = Matrix.Identity;
+            cannonWorld = Matrix.Identity;
+            muzzleWorld = Vector3.Zero;
+            muzzleForward = Vector3.Forward;
+
+            if (player == null || player.SpriteInstance == null || player.CannonSpriteInstance == null)
+                return false;
+
+            MeshVolumeCache hullCache = GetMeshCache(player.SpriteInstance);
+            MeshVolumeCache cannonCache = GetMeshCache(player.CannonSpriteInstance);
+            if (hullCache.OpaqueIndices.Length == 0 || cannonCache.OpaqueIndices.Length == 0)
+                return false;
+
+            Vector3 playerWorld = MapCombatPoint(player.CombatPosition, 0f);
+            Matrix hullRotation = CreatePlayerHullRotation(player);
+            float playerScale = ResolveWorldScale(player);
+            playerHullWorld = hullRotation * Matrix.CreateScale(playerScale) * Matrix.CreateTranslation(playerWorld);
+
+            Vector3 worldAim = MapCombatDirection(player.CombatAimDirection);
+            if (worldAim == Vector3.Zero)
+                worldAim = Vector3.Forward;
+            else
+                worldAim.Normalize();
+
+            float yaw = MathHelper.Clamp(MathF.Atan2(worldAim.X, worldAim.Z) * 0.82f, -0.72f, 0.72f);
+            float pitch = MathHelper.Clamp(-MathF.Asin(MathHelper.Clamp(worldAim.Y, -1f, 1f)) * 0.5f, -0.34f, 0.32f);
+            float roll = MathHelper.Clamp(-player.DepthVelocity * 0.0012f, -0.12f, 0.12f);
+            Matrix aimRotation = Matrix.CreateFromYawPitchRoll(yaw, pitch, roll);
+            Matrix combinedRotation = aimRotation * hullRotation;
+            Vector3 localHardpoint = new Vector3(
+                0f,
+                MathHelper.Lerp(hullCache.LocalMin.Y, hullCache.LocalMax.Y, 0.62f),
+                hullCache.LocalMax.Z - 2.4f);
+            Vector3 hardpointWorld = Vector3.Transform(localHardpoint, playerHullWorld);
+            cannonWorld = combinedRotation * Matrix.CreateScale(player.CannonSpriteInstance.PixelScale * 0.44f) * Matrix.CreateTranslation(hardpointWorld);
+            muzzleWorld = Vector3.Transform(new Vector3(0f, 0f, cannonCache.LocalMax.Z + 0.75f), cannonWorld);
+            muzzleForward = Vector3.Transform(Vector3.Forward, combinedRotation);
+            if (muzzleForward == Vector3.Zero)
+                muzzleForward = Vector3.Forward;
+            else
+                muzzleForward.Normalize();
+
+            return true;
+        }
+
         private static Matrix CreateProjection()
         {
             float aspectRatio = Math.Max(1f, Game1.VirtualWidth) / (float)Math.Max(1, Game1.VirtualHeight);
@@ -1112,6 +1176,71 @@ namespace SpaceBurst
                     pass.Apply();
                     graphicsDevice.DrawUserPrimitives(PrimitiveType.LineList, vertices, 0, vertices.Length / 2);
                 }
+            }
+        }
+
+        private static void DrawCombatGizmos(GraphicsDevice graphicsDevice)
+        {
+            Player1 player = Player1.Instance;
+            if (player == null || player.IsDead)
+                return;
+
+            Vector3 center = MapCombatPoint(player.CombatPosition, 0f);
+            DrawDebugCross(graphicsDevice, center, 2.4f, Color.White * 0.85f);
+            DrawDebugLine(graphicsDevice, center, MapCombatPoint(player.CombatPosition + new Vector3(100f, 0f, 0f), 0f), Color.Orange * 0.92f);
+            DrawDebugLine(graphicsDevice, center, MapCombatPoint(player.CombatPosition + new Vector3(0f, -84f, 0f), 0f), Color.Lime * 0.92f);
+            DrawDebugLine(graphicsDevice, center, MapCombatPoint(player.CombatPosition + new Vector3(0f, 0f, 100f), 0f), Color.Cyan * 0.92f);
+        }
+
+        private static void DrawAimRay(GraphicsDevice graphicsDevice)
+        {
+            Player1 player = Player1.Instance;
+            if (player == null || player.IsDead || !TryResolvePlayerCombatAimRay(player, out Vector3 combatOrigin, out Vector3 combatTarget))
+                return;
+
+            Vector3 start = MapCombatPoint(combatOrigin, 1.2f);
+            Vector3 end = MapCombatPoint(combatTarget, 1.2f);
+            DrawDebugLine(graphicsDevice, start, end, Color.Cyan * 0.8f);
+            DrawDebugCross(graphicsDevice, end, 3f, Color.Cyan * 0.75f);
+        }
+
+        private static void DrawSpawnPreview(GraphicsDevice graphicsDevice, IEnumerable<Vector3> previewPoints)
+        {
+            if (previewPoints == null)
+                return;
+
+            foreach (Vector3 combatPoint in previewPoints)
+            {
+                Vector3 center = MapCombatPoint(combatPoint, 2.2f);
+                DrawDebugCross(graphicsDevice, center, 3.2f, Color.Orange * 0.78f);
+            }
+        }
+
+        private static void DrawDebugCross(GraphicsDevice graphicsDevice, Vector3 center, float size, Color color)
+        {
+            DrawDebugLine(graphicsDevice, center + Vector3.Left * size, center + Vector3.Right * size, color);
+            DrawDebugLine(graphicsDevice, center + Vector3.Up * size, center + Vector3.Down * size, color);
+            DrawDebugLine(graphicsDevice, center + Vector3.Forward * size, center + Vector3.Backward * size, color);
+        }
+
+        private static void DrawDebugLine(GraphicsDevice graphicsDevice, Vector3 start, Vector3 end, Color color)
+        {
+            if (opaqueEffect == null)
+                return;
+
+            VertexPositionColor[] vertices =
+            {
+                new VertexPositionColor(start, color),
+                new VertexPositionColor(end, color),
+            };
+
+            opaqueEffect.World = Matrix.Identity;
+            opaqueEffect.Alpha = 0.95f;
+            for (int passIndex = 0; passIndex < opaqueEffect.CurrentTechnique.Passes.Count; passIndex++)
+            {
+                EffectPass pass = opaqueEffect.CurrentTechnique.Passes[passIndex];
+                pass.Apply();
+                graphicsDevice.DrawUserPrimitives(PrimitiveType.LineList, vertices, 0, 1);
             }
         }
 

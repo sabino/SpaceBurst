@@ -226,9 +226,9 @@ namespace SpaceBurst
             get { return campaignDirector != null ? campaignDirector.Invert3DVertical : startupOptions.Invert3DVertical; }
         }
 
-        internal bool Enable3DAimAssist
+        internal AimAssist3DMode AimAssist3DMode
         {
-            get { return campaignDirector != null ? campaignDirector.Enable3DAimAssist : startupOptions.Enable3DAimAssist; }
+            get { return campaignDirector != null ? campaignDirector.AimAssist3DMode : startupOptions.AimAssist3DMode; }
         }
 
         internal FeedbackDirector Feedback

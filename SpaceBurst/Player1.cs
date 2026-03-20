@@ -12,7 +12,7 @@ namespace SpaceBurst
         private const float RespawnSeconds = 1.1f;
         private const float InvulnerabilitySeconds = 1.1f;
         private const float ContactInvulnerabilitySeconds = 0.45f;
-        private const float ChaseReticleSpeed = 5.2f;
+        private const float ChaseReticleSpeed = 7.8f;
         private const float ChaseEntryRecenterSeconds = 0.7f;
 
         private static Player1 instance;
@@ -182,9 +182,9 @@ namespace SpaceBurst
 
                 CombatVelocity = new Vector3(
                     travelVelocity,
-                    -command.AltitudeInput * moveSpeed + knockbackVelocity.Y,
-                    -command.DepthInput * moveSpeed + knockbackVelocity.X);
-                Orientation = MathHelper.Clamp(command.DepthInput * 0.16f, -0.18f, 0.18f);
+                    command.AltitudeInput * moveSpeed + knockbackVelocity.Y,
+                    command.DepthInput * moveSpeed + knockbackVelocity.X);
+                Orientation = MathHelper.Clamp(-command.DepthInput * 0.16f, -0.18f, 0.18f);
             }
             else
             {
@@ -390,6 +390,13 @@ namespace SpaceBurst
             chaseEntryRecenterTimer = ChaseEntryRecenterSeconds;
         }
 
+        internal void PreserveChaseViewState(Vector2 reticle)
+        {
+            chaseReticle = reticle;
+            chaseEntryRecenterTarget = CombatPosition;
+            chaseEntryRecenterTimer = 0f;
+        }
+
         private void TryFire()
         {
             WeaponLevelDefinition level = ResolveWeaponLevel();
@@ -462,6 +469,7 @@ namespace SpaceBurst
 
             int count = Math.Max(1, level.BeamCount);
             float spacing = Math.Max(0f, level.BeamSpacing);
+            TryResolveChaseAimRay(out Vector3 baseCombatOrigin, out Vector3 combatAimPoint);
             Vector2 direction = cannonDirection;
             if (direction == Vector2.Zero)
                 direction = Vector2.UnitX;
@@ -476,8 +484,10 @@ namespace SpaceBurst
                 float lateralOffset = count <= 1 ? 0f : (i - centerOffset) * spacing;
                 float lateralFactor = count <= 1 ? 0f : (i - centerOffset) / Math.Max(1f, centerOffset);
                 Vector2 origin = Position + direction * 26f + perpendicular * lateralOffset;
-                Vector3 combatDirection = ResolveShotDirection3(direction, 0f, lateralFactor);
-                Vector3 combatOrigin = CombatPosition + combatDirection * 26f + ResolveCombatSpreadOffset(direction, combatDirection, lateralOffset, lateralFactor);
+                Vector3 combatDirection = ResolveShotDirection3(direction, baseCombatOrigin, combatAimPoint, 0f, lateralFactor);
+                Vector3 combatOrigin = CombatSpaceMath.IsDepthAwareViewActive
+                    ? baseCombatOrigin + combatDirection * 4f + ResolveCombatSpreadOffset(direction, combatDirection, lateralOffset, lateralFactor)
+                    : CombatPosition + combatDirection * 26f + ResolveCombatSpreadOffset(direction, combatDirection, lateralOffset, lateralFactor);
                 EntityManager.Add(new BeamShot(
                     origin,
                     direction,
@@ -560,8 +570,11 @@ namespace SpaceBurst
 
             Vector2 perpendicular = new Vector2(-direction.Y, direction.X);
             Vector2 spawnPoint = Position + direction * (30f + forwardOffset) + perpendicular * lateralOffset;
-            Vector3 shotDirection = ResolveShotDirection3(direction, spreadAngle, lateralFactor);
-            Vector3 combatSpawnPoint = CombatPosition + shotDirection * (30f + forwardOffset) + ResolveCombatSpreadOffset(direction, shotDirection, lateralOffset, lateralFactor);
+            TryResolveChaseAimRay(out Vector3 baseCombatOrigin, out Vector3 combatAimPoint);
+            Vector3 shotDirection = ResolveShotDirection3(direction, baseCombatOrigin, combatAimPoint, spreadAngle, lateralFactor);
+            Vector3 combatSpawnPoint = CombatSpaceMath.IsDepthAwareViewActive
+                ? baseCombatOrigin + shotDirection * (6f + forwardOffset) + ResolveCombatSpreadOffset(direction, shotDirection, lateralOffset, lateralFactor)
+                : CombatPosition + shotDirection * (30f + forwardOffset) + ResolveCombatSpreadOffset(direction, shotDirection, lateralOffset, lateralFactor);
             ProceduralSpriteDefinition projectile = WeaponCatalog.CreateProjectileDefinition(ActiveStyle, ActiveWeaponLevel, true);
             EntityManager.Add(new Bullet(
                 spawnPoint,
@@ -584,18 +597,23 @@ namespace SpaceBurst
                 shotDirection * level.ProjectileSpeed));
         }
 
-        private Vector3 ResolveShotDirection3(Vector2 planarDirection, float spreadAngle = 0f, float lateralFactor = 0f)
+        private Vector3 ResolveShotDirection3(Vector2 planarDirection, Vector3 combatOrigin, Vector3 combatTarget, float spreadAngle = 0f, float lateralFactor = 0f)
         {
             if (Game1.Instance != null && Game1.Instance.CurrentViewMode == ViewMode.Chase3D && CombatSpaceMath.IsDepthAwareViewActive)
             {
-                Vector3 direction = combatAimDirection;
+                Vector3 direction = combatTarget - combatOrigin;
+                if (direction == Vector3.Zero)
+                    direction = combatAimDirection;
+
                 if (direction == Vector3.Zero)
                     direction = new Vector3(planarDirection.X, planarDirection.Y, 0f);
 
                 if (direction == Vector3.Zero)
                     direction = Vector3.UnitX;
 
-                direction = ResolveAimAssistedShotDirection(direction);
+                direction.Normalize();
+
+                direction = ResolveAimAssistedShotDirection(combatOrigin, direction);
 
                 if (spreadAngle != 0f || MathF.Abs(lateralFactor) > 0.001f)
                 {
@@ -627,7 +645,26 @@ namespace SpaceBurst
             return resolvedAim;
         }
 
-        private Enemy FindChaseAimAssistTarget(Vector3 baseDirection)
+        private bool TryResolveChaseAimRay(out Vector3 combatOrigin, out Vector3 combatTarget)
+        {
+            Vector3 fallbackDirection = combatAimDirection == Vector3.Zero ? Vector3.UnitX : Vector3.Normalize(combatAimDirection);
+            combatOrigin = CombatPosition + fallbackDirection * 28f;
+            combatTarget = combatOrigin + fallbackDirection * 1200f;
+
+            if (Game1.Instance != null &&
+                Game1.Instance.CurrentViewMode == ViewMode.Chase3D &&
+                CombatSpaceMath.IsDepthAwareViewActive &&
+                Late3DRenderer.TryResolvePlayerCombatAimRay(this, out Vector3 resolvedOrigin, out Vector3 resolvedTarget))
+            {
+                combatOrigin = resolvedOrigin;
+                combatTarget = resolvedTarget;
+                return true;
+            }
+
+            return false;
+        }
+
+        private Enemy FindChaseAimAssistTarget(Vector3 shotOrigin, Vector3 baseDirection)
         {
             if (baseDirection == Vector3.Zero)
                 return null;
@@ -648,24 +685,24 @@ namespace SpaceBurst
                     continue;
 
                 float reticleDistanceSquared = Vector2.DistanceSquared(targetReticle, chaseReticle);
-                if (reticleDistanceSquared > 0.05f)
+                if (reticleDistanceSquared > 0.018f)
                     continue;
 
-                Vector3 targetDirection = enemy.CombatPosition - CombatPosition;
+                Vector3 targetDirection = enemy.CombatPosition - shotOrigin;
                 if (targetDirection == Vector3.Zero)
                     continue;
 
                 targetDirection.Normalize();
                 float aimAlignment = Vector3.Dot(baseDirection, targetDirection);
-                if (aimAlignment < 0.965f)
+                if (aimAlignment < 0.985f)
                     continue;
 
                 float score =
-                    reticleDistanceSquared * 4.2f +
-                    (1f - aimAlignment) * 10f +
+                    reticleDistanceSquared * 7.5f +
+                    (1f - aimAlignment) * 14f +
                     Math.Max(0f, forwardDelta) * 0.00018f +
-                    MathF.Abs(enemy.LateralDepth - LateralDepth) * 0.0011f -
-                    (enemy is BossEnemy ? 0.08f : 0f);
+                    MathF.Abs(enemy.LateralDepth - shotOrigin.Z) * 0.0014f -
+                    (enemy is BossEnemy ? 0.04f : 0f);
 
                 if (score < bestScore)
                 {
@@ -677,21 +714,26 @@ namespace SpaceBurst
             return bestTarget;
         }
 
-        private Vector3 ResolveAimAssistedShotDirection(Vector3 baseDirection)
+        private Vector3 ResolveAimAssistedShotDirection(Vector3 shotOrigin, Vector3 baseDirection)
         {
-            if (Game1.Instance?.Enable3DAimAssist != true)
+            if (Game1.Instance?.AimAssist3DMode != AimAssist3DMode.SoftLock)
                 return baseDirection;
 
-            Enemy assistTarget = FindChaseAimAssistTarget(baseDirection);
+            Enemy assistTarget = FindChaseAimAssistTarget(shotOrigin, baseDirection);
             if (assistTarget == null)
                 return baseDirection;
 
-            Vector3 assistedDirection = assistTarget.CombatPosition - CombatPosition;
+            Vector3 assistedDirection = assistTarget.CombatPosition - shotOrigin;
             if (assistedDirection == Vector3.Zero)
                 return baseDirection;
 
             assistedDirection.Normalize();
-            return assistedDirection;
+            Vector3 blended = Vector3.Lerp(baseDirection, assistedDirection, 0.45f);
+            if (blended == Vector3.Zero)
+                return assistedDirection;
+
+            blended.Normalize();
+            return blended;
         }
 
         internal void DrawPresentationModules(SpriteBatch spriteBatch)
