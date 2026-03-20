@@ -160,6 +160,8 @@ namespace SpaceBurst
                 DrawSideMesh(spriteBatch, radialTexture, cache, sprite, position, scale, accent, tier == PresentationTier.Late3D ? 0.32f : 0.22f);
 
             sprite.Draw(spriteBatch, position, tint, entity.Orientation, scale);
+            if (entity is Player1 player)
+                player.DrawPresentationModules(spriteBatch);
         }
 
         private static void DrawProjectedEntity(SpriteBatch spriteBatch, Texture2D pixel, Texture2D radialTexture, ProjectedEntity item, PresentationTier tier, bool voxelAccentOnly)
@@ -509,6 +511,9 @@ namespace SpaceBurst
 
         private static void DrawSideMesh(SpriteBatch spriteBatch, Texture2D radialTexture, RenderableHullCache cache, ProceduralSpriteInstance sprite, Vector2 position, float scale, Color accent, float intensity)
         {
+            if (!DeveloperVisualSettings.ShowBounds)
+                return;
+
             Rectangle meshBounds = GetEntityBounds(cache.Mesh.Bounds, sprite, position, scale);
             DrawBoundsGlow(spriteBatch, radialTexture, meshBounds, accent * intensity, 0.34f);
             DrawBoundsOutline(spriteBatch, meshBounds, accent * Math.Min(1f, intensity + 0.15f));
@@ -516,6 +521,9 @@ namespace SpaceBurst
 
         private static void DrawProjectedMesh(SpriteBatch spriteBatch, Texture2D radialTexture, RenderableHullCache cache, Vector2 position, float scale, Color accent, float intensity, float depth)
         {
+            if (!DeveloperVisualSettings.ShowBounds)
+                return;
+
             int width = Math.Max(10, (int)MathF.Round(cache.Mesh.Bounds.Width * scale * 0.55f));
             int height = Math.Max(10, (int)MathF.Round(cache.Mesh.Bounds.Height * scale * 0.55f));
             var bounds = new Rectangle((int)MathF.Round(position.X - width * 0.5f), (int)MathF.Round(position.Y - height * 0.5f), width, height);

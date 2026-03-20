@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
 using SpaceBurst.RuntimeData;
 using System;
 using System.Collections.Generic;
@@ -38,6 +39,7 @@ namespace SpaceBurst
         private AudioDirector audioDirector;
         private FeedbackDirector feedbackDirector;
         private CameraRig cameraRig;
+        private ConsoleState developerConsole;
         private Texture2D uiPixel;
         private Texture2D radialTexture;
         private RenderTarget2D worldRenderTarget;
@@ -267,6 +269,7 @@ namespace SpaceBurst
         {
 #if !ANDROID
             ConfigureDesktopDisplayMode(startupOptions.DisplayMode, true);
+            Window.TextInput += OnWindowTextInput;
 #endif
             UpdateVirtualResolution();
             RecalculateViewportMatrices();
@@ -297,6 +300,26 @@ namespace SpaceBurst
             if (!bootComplete)
             {
                 UpdateBootLoader((float)gameTime.ElapsedGameTime.TotalSeconds);
+                base.Update(gameTime);
+                return;
+            }
+
+            developerConsole?.Update();
+            if (developerConsole != null && developerConsole.IsOpen)
+            {
+                GameAudioState pausedAudioState = new GameAudioState(
+                    campaignDirector.CurrentState,
+                    campaignDirector.HasActiveBoss,
+                    campaignDirector.TransitionToBoss,
+                    campaignDirector.CurrentDifficultyFactor,
+                    campaignDirector.TransitionWarpStrength,
+                    campaignDirector.RewindVisualStrength,
+                    campaignDirector.CurrentScrollSpeed,
+                    campaignDirector.CurrentStageNumber,
+                    campaignDirector.TransitionTargetStageNumber,
+                    campaignDirector.CurrentSectionIndex,
+                    campaignDirector.CurrentSectionProgress);
+                audioDirector.Update(pausedAudioState, campaignDirector.MasterVolume, campaignDirector.MusicVolume, campaignDirector.SfxVolume, (float)gameTime.ElapsedGameTime.TotalSeconds);
                 base.Update(gameTime);
                 return;
             }
@@ -345,7 +368,7 @@ namespace SpaceBurst
                     GraphicsDevice.Clear(Color.Transparent);
 
                     spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
-                    DrawBackground(spriteBatch, uiPixel);
+                    Late3DRenderer.DrawBackdrop(spriteBatch, uiPixel, radialTexture, CurrentBackgroundMood, VisualPreset);
                     spriteBatch.End();
 
                     Late3DRenderer.Draw(GraphicsDevice, EntityManager.AllEntities, CurrentBackgroundMood, VisualPreset);
@@ -409,6 +432,13 @@ namespace SpaceBurst
                 spriteBatch.End();
             }
 #endif
+
+            if (developerConsole != null && developerConsole.IsOpen)
+            {
+                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, uiScaleMatrix);
+                developerConsole.Draw(spriteBatch, uiPixel);
+                spriteBatch.End();
+            }
 
             if (!captureCompleted && !string.IsNullOrWhiteSpace(capturePath) && captureDelaySeconds <= 0f)
             {
@@ -627,6 +657,7 @@ namespace SpaceBurst
                 case BootPhase.FinalizeDirector:
                     bootStatus = "FINAL DIRECTOR HANDOFF";
                     campaignDirector.FinishBootToTitle();
+                    developerConsole = new ConsoleState(this, campaignDirector);
                     PrepareCaptureMode();
                     bootPhase = BootPhase.Complete;
                     bootReady = true;
@@ -692,6 +723,13 @@ namespace SpaceBurst
             BitmapFontRenderer.DrawCentered(spriteBatch, pixel, prompt, new Vector2(ScreenSize.X / 2f, VirtualHeight - UiLayoutScale * 96f), bootPromptColor * ((0.35f + promptPulse * 0.35f) * fade), 0.95f);
             spriteBatch.Draw(pixel, full, Color.Black * (1f - fade));
         }
+
+#if !ANDROID
+        private void OnWindowTextInput(object sender, TextInputEventArgs e)
+        {
+            developerConsole?.HandleTextInput(e.Character);
+        }
+#endif
 
         private void UpdateBootPixels(float deltaSeconds)
         {

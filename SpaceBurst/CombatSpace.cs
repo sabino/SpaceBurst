@@ -4,10 +4,14 @@ namespace SpaceBurst
 {
     readonly struct PlayerCommandFrame
     {
-        public Vector2 PlanarMovement { get; init; }
+        public float TravelInput { get; init; }
+        public float AltitudeInput { get; init; }
+        public float DepthInput { get; init; }
         public Vector2 ReticleDelta { get; init; }
         public bool FireHeld { get; init; }
         public bool RewindHeld { get; init; }
+        public bool BoostHeld { get; init; }
+        public bool BrakeHeld { get; init; }
     }
 
     struct CombatPosition3

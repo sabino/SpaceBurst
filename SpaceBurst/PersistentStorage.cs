@@ -8,14 +8,35 @@ namespace SpaceBurst
     static class PersistentStorage
     {
         private static readonly JsonSerializerOptions jsonOptions = CreateOptions();
+        private static readonly string documentsBaseDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            "SpaceBurst");
+        private static readonly string legacyBaseDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "SpaceBurst");
+        private static bool initialized;
 
         private static string BaseDirectory
         {
             get
             {
-                return Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "SpaceBurst");
+                EnsureInitialized();
+                return documentsBaseDirectory;
+            }
+        }
+
+        public static string UserDataDirectory
+        {
+            get { return BaseDirectory; }
+        }
+
+        public static string ConfigDirectory
+        {
+            get
+            {
+                string path = Path.Combine(BaseDirectory, "config");
+                Directory.CreateDirectory(path);
+                return path;
             }
         }
 
@@ -32,6 +53,58 @@ namespace SpaceBurst
         private static string GetRunSlotPath(int slotIndex)
         {
             return Path.Combine(BaseDirectory, string.Concat("slot-", Math.Clamp(slotIndex, 1, 3).ToString(), ".json"));
+        }
+
+        public static string GetConfigFilePath(string fileName)
+        {
+            return Path.Combine(ConfigDirectory, SanitizeRelativeFileName(fileName));
+        }
+
+        public static string ReadConfigText(string fileName)
+        {
+            try
+            {
+                string path = GetConfigFilePath(fileName);
+                return File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        public static string[] ReadConfigLines(string fileName)
+        {
+            try
+            {
+                string path = GetConfigFilePath(fileName);
+                return File.Exists(path) ? File.ReadAllLines(path) : Array.Empty<string>();
+            }
+            catch
+            {
+                return Array.Empty<string>();
+            }
+        }
+
+        public static void WriteConfigText(string fileName, string contents)
+        {
+            string path = GetConfigFilePath(fileName);
+            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ConfigDirectory);
+            File.WriteAllText(path, contents ?? string.Empty);
+        }
+
+        public static void WriteConfigLines(string fileName, string[] lines)
+        {
+            string path = GetConfigFilePath(fileName);
+            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ConfigDirectory);
+            File.WriteAllLines(path, lines ?? Array.Empty<string>());
+        }
+
+        public static void AppendConfigLine(string fileName, string line)
+        {
+            string path = GetConfigFilePath(fileName);
+            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ConfigDirectory);
+            File.AppendAllText(path, string.Concat(line ?? string.Empty, Environment.NewLine));
         }
 
         public static OptionsData LoadOptions()
@@ -143,6 +216,47 @@ namespace SpaceBurst
         {
             Directory.CreateDirectory(BaseDirectory);
             File.WriteAllText(path, JsonSerializer.Serialize(value, jsonOptions));
+        }
+
+        private static void EnsureInitialized()
+        {
+            if (initialized)
+                return;
+
+            initialized = true;
+            Directory.CreateDirectory(documentsBaseDirectory);
+            Directory.CreateDirectory(Path.Combine(documentsBaseDirectory, "config"));
+
+            if (!Directory.Exists(legacyBaseDirectory))
+                return;
+
+            CopyMissingRecursive(legacyBaseDirectory, documentsBaseDirectory);
+        }
+
+        private static void CopyMissingRecursive(string sourceDirectory, string destinationDirectory)
+        {
+            Directory.CreateDirectory(destinationDirectory);
+
+            foreach (string sourceFile in Directory.GetFiles(sourceDirectory))
+            {
+                string destinationFile = Path.Combine(destinationDirectory, Path.GetFileName(sourceFile));
+                if (!File.Exists(destinationFile))
+                    File.Copy(sourceFile, destinationFile);
+            }
+
+            foreach (string sourceSubdirectory in Directory.GetDirectories(sourceDirectory))
+            {
+                string destinationSubdirectory = Path.Combine(destinationDirectory, Path.GetFileName(sourceSubdirectory));
+                CopyMissingRecursive(sourceSubdirectory, destinationSubdirectory);
+            }
+        }
+
+        private static string SanitizeRelativeFileName(string fileName)
+        {
+            string safe = string.IsNullOrWhiteSpace(fileName) ? "default.cfg" : fileName.Trim();
+            safe = safe.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+            safe = safe.TrimStart(Path.DirectorySeparatorChar);
+            return safe;
         }
 
         private static JsonSerializerOptions CreateOptions()

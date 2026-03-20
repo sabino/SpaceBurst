@@ -1612,8 +1612,75 @@ namespace SpaceBurst
             return false;
 #else
             bool unlockedByProgress = PresentationProgression.IsChaseViewUnlocked(currentStageNumber, currentStage);
-            return (unlockedByProgress || options.DeveloperToolsUnlocked) && CurrentPresentationTier == PresentationTier.Late3D;
+            return (unlockedByProgress || options.DeveloperToolsUnlocked || DeveloperVisualSettings.CheatsEnabled) && CurrentPresentationTier == PresentationTier.Late3D;
 #endif
+        }
+
+        internal bool TryConsoleLoadStage(int stageNumber)
+        {
+            if (stageNumber < 1 || stageNumber > 50 || repository.GetStage(stageNumber) == null)
+                return false;
+
+            if (currentStage == null || state == GameFlowState.Title || state == GameFlowState.GameOver || state == GameFlowState.CampaignComplete)
+            {
+                PlayerStatus.FinalizeRun();
+                PlayerStatus.BeginCampaign(repository.GetStage(1));
+                gameplayRandom.Restore(0xC0FFEEu);
+                campaignHadDeath = false;
+                stageHadDeath = false;
+                tutorialReplayMode = false;
+                tutorialStep = TutorialStep.Move;
+                tutorialProgressSeconds = 0f;
+            }
+
+            PrepareStage(stageNumber, false);
+            state = GameFlowState.Paused;
+            pauseReturnState = GameFlowState.Playing;
+            stateTimer = 0f;
+            bannerText = string.Concat("STAGE ", stageNumber.ToString("00"));
+            transitionToBoss = false;
+            transitionTargetStageNumber = 0;
+            activeEventWarning = string.Empty;
+            Player1.Instance.MakeInvulnerable(1f);
+            return true;
+        }
+
+        internal bool TryConsoleSetViewMode(ViewMode requestedMode)
+        {
+#if ANDROID
+            return requestedMode == ViewMode.SideScroller;
+#else
+            if (requestedMode == ViewMode.SideScroller)
+            {
+                viewMode = ViewMode.SideScroller;
+                return true;
+            }
+
+            if (currentStage == null)
+                return false;
+
+            if (CurrentPresentationTier != PresentationTier.Late3D)
+            {
+                if (!DeveloperVisualSettings.CheatsEnabled && !options.DeveloperToolsUnlocked)
+                    return false;
+
+                developerPresentationOverride = PresentationTier.Late3D;
+            }
+
+            if (!CanUseChaseView())
+                return false;
+
+            viewMode = ViewMode.Chase3D;
+            return true;
+#endif
+        }
+
+        internal bool TryConsoleSetPresentationOverride(PresentationTier? overrideTier)
+        {
+            developerPresentationOverride = overrideTier;
+            if (!CanUseChaseView())
+                viewMode = ViewMode.SideScroller;
+            return true;
         }
 
         private void JumpToDeveloperStage(int delta)

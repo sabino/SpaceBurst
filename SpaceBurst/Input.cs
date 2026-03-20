@@ -3,6 +3,8 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Microsoft.Xna.Framework.Input.Touch;
 using SpaceBurst.RuntimeData;
+using System;
+using System.Collections.Generic;
 
 namespace SpaceBurst
 {
@@ -14,6 +16,7 @@ namespace SpaceBurst
         private static MouseState lastMouseState;
         private static GamePadState gamepadState;
         private static GamePadState lastGamepadState;
+        private static readonly HashSet<Keys> consumedKeys = new HashSet<Keys>();
 #if ANDROID
         private static bool androidCancelPressed;
 #endif
@@ -68,6 +71,7 @@ namespace SpaceBurst
             primaryActionPressed = false;
             fireHeld = false;
             rewindHeld = false;
+            consumedKeys.Clear();
 #if ANDROID
             menuDragDelta = Vector2.Zero;
             menuTouchHeld = false;
@@ -90,7 +94,7 @@ namespace SpaceBurst
 
         public static bool WasKeyPressed(Keys key)
         {
-            return lastKeyboardState.IsKeyUp(key) && keyboardState.IsKeyDown(key);
+            return !consumedKeys.Contains(key) && lastKeyboardState.IsKeyUp(key) && keyboardState.IsKeyDown(key);
         }
 
         public static bool WasButtonPressed(Buttons button)
@@ -159,6 +163,15 @@ namespace SpaceBurst
 #endif
         }
 
+        public static bool WasConsoleTogglePressed()
+        {
+#if ANDROID
+            return false;
+#else
+            return WasKeyPressed(Keys.OemTilde);
+#endif
+        }
+
         public static bool IsRewindHeld()
         {
             return rewindHeld;
@@ -220,12 +233,17 @@ namespace SpaceBurst
 
         public static PlayerCommandFrame GetPlayerCommandFrame(ViewMode viewMode)
         {
+            Vector2 movement = GetMovementDirection(viewMode);
             return new PlayerCommandFrame
             {
-                PlanarMovement = GetMovementDirection(viewMode),
+                TravelInput = viewMode == ViewMode.Chase3D ? 0f : movement.X,
+                AltitudeInput = movement.Y,
+                DepthInput = viewMode == ViewMode.Chase3D ? movement.X : 0f,
                 ReticleDelta = GetChaseReticleDelta(),
                 FireHeld = IsFireHeld(),
                 RewindHeld = IsRewindHeld(),
+                BoostHeld = IsBoostHeld(),
+                BrakeHeld = IsBrakeHeld(),
             };
         }
 
@@ -242,19 +260,19 @@ namespace SpaceBurst
 #endif
 
             Vector2 direction = viewMode == ViewMode.Chase3D
-                ? new Vector2(gamepadState.ThumbSticks.Left.Y, gamepadState.ThumbSticks.Left.X)
+                ? new Vector2(gamepadState.ThumbSticks.Left.X, gamepadState.ThumbSticks.Left.Y)
                 : new Vector2(gamepadState.ThumbSticks.Left.X, -gamepadState.ThumbSticks.Left.Y);
 
             if (viewMode == ViewMode.Chase3D)
             {
-                if (keyboardState.IsKeyDown(Keys.W))
-                    direction.X += 1f;
-                if (keyboardState.IsKeyDown(Keys.S))
-                    direction.X -= 1f;
                 if (keyboardState.IsKeyDown(Keys.A))
-                    direction.Y -= 1f;
+                    direction.X -= 1f;
                 if (keyboardState.IsKeyDown(Keys.D))
+                    direction.X += 1f;
+                if (keyboardState.IsKeyDown(Keys.W))
                     direction.Y += 1f;
+                if (keyboardState.IsKeyDown(Keys.S))
+                    direction.Y -= 1f;
             }
             else
             {
@@ -284,6 +302,18 @@ namespace SpaceBurst
             Vector2 direction = gamepadState.ThumbSticks.Right;
             direction.Y *= -1f;
 
+#if !ANDROID
+            if (Player1.Instance != null)
+            {
+                Vector2 mouseAim = pointerPosition - Player1.Instance.Position;
+                if (mouseAim.LengthSquared() > 16f)
+                {
+                    mouseAim.Normalize();
+                    direction += mouseAim;
+                }
+            }
+#endif
+
             if (keyboardState.IsKeyDown(Keys.Left))
                 direction.X -= 1f;
             if (keyboardState.IsKeyDown(Keys.Right))
@@ -298,6 +328,54 @@ namespace SpaceBurst
 
             direction.Normalize();
             return direction;
+        }
+
+        public static bool IsBoostHeld()
+        {
+#if ANDROID
+            return false;
+#else
+            return keyboardState.IsKeyDown(Keys.LeftShift) || keyboardState.IsKeyDown(Keys.RightShift);
+#endif
+        }
+
+        public static bool IsBrakeHeld()
+        {
+#if ANDROID
+            return false;
+#else
+            return keyboardState.IsKeyDown(Keys.LeftControl) || keyboardState.IsKeyDown(Keys.RightControl);
+#endif
+        }
+
+        public static Keys[] GetPressedKeysThisFrame()
+        {
+#if ANDROID
+            return Array.Empty<Keys>();
+#else
+            Keys[] pressed = keyboardState.GetPressedKeys();
+            Keys[] buffer = new Keys[pressed.Length];
+            int count = 0;
+            for (int i = 0; i < pressed.Length; i++)
+            {
+                if (lastKeyboardState.IsKeyUp(pressed[i]))
+                    buffer[count++] = pressed[i];
+            }
+
+            if (count == buffer.Length)
+                return buffer;
+
+            var result = new Keys[count];
+            Array.Copy(buffer, result, count);
+            return result;
+#endif
+        }
+
+        public static void ConsumeKey(Keys key)
+        {
+#if !ANDROID
+            consumedKeys.Add(key);
+#endif
         }
 
         public static Vector2 GetChaseReticleDelta()

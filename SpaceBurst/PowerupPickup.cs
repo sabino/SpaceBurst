@@ -84,6 +84,12 @@ namespace SpaceBurst
 
         public bool OverlapsPlayer()
         {
+            if (!CombatSpaceMath.IsDepthAwareViewActive)
+            {
+                float radius2D = 42f + ApproximateRadius + Player1.Instance.ApproximateRadius;
+                return Vector2.DistanceSquared(Position, Player1.Instance.Position) <= radius2D * radius2D;
+            }
+
             float radius = 42f + ApproximateDepthRadius + Player1.Instance.ApproximateDepthRadius;
             return Vector3.DistanceSquared(CombatPosition, Player1.Instance.CombatPosition) <= radius * radius;
         }

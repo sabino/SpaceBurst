@@ -162,9 +162,42 @@ namespace SpaceBurst
 
             DrawEntityMeshes(graphicsDevice, entities);
             DrawBeams(graphicsDevice, entities);
+            if (DeveloperVisualSettings.ShowBounds)
+                DrawBounds(graphicsDevice, entities);
 
             graphicsDevice.DepthStencilState = DepthStencilState.None;
             graphicsDevice.BlendState = BlendState.AlphaBlend;
+        }
+
+        public static void DrawBackdrop(SpriteBatch spriteBatch, Texture2D pixel, Texture2D radialTexture, BackgroundMoodDefinition mood, VisualPreset preset)
+        {
+            if (spriteBatch == null || pixel == null)
+                return;
+
+            BackgroundMoodDefinition resolvedMood = mood ?? new BackgroundMoodDefinition();
+            Color backColor = ColorUtil.ParseHex(resolvedMood.PrimaryColor, new Color(8, 10, 18));
+            Color midColor = ColorUtil.ParseHex(resolvedMood.SecondaryColor, new Color(18, 22, 38));
+            Color accentColor = ColorUtil.ParseHex(resolvedMood.AccentColor, new Color(110, 193, 255));
+            Color glowColor = ColorUtil.ParseHex(resolvedMood.GlowColor, new Color(246, 198, 116));
+            Rectangle world = new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight);
+            float time = (float)Game1.GameTime.TotalGameTime.TotalSeconds;
+
+            spriteBatch.Draw(pixel, world, backColor);
+            spriteBatch.Draw(pixel, world, midColor * 0.08f);
+
+            if (radialTexture != null)
+            {
+                DrawBackdropGlow(spriteBatch, radialTexture, new Vector2(Game1.VirtualWidth * 0.16f, Game1.VirtualHeight * 0.2f), 440f, accentColor * 0.12f);
+                DrawBackdropGlow(spriteBatch, radialTexture, new Vector2(Game1.VirtualWidth * 0.72f, Game1.VirtualHeight * 0.16f), 320f, glowColor * 0.09f);
+                DrawBackdropGlow(spriteBatch, radialTexture, new Vector2(Game1.VirtualWidth * 0.58f, Game1.VirtualHeight * 0.64f), 560f, midColor * 0.08f);
+                DrawBackdropGlow(spriteBatch, radialTexture, new Vector2(Game1.VirtualWidth * 0.86f, Game1.VirtualHeight * 0.8f), 180f, accentColor * 0.05f);
+            }
+
+            int farStars = preset == VisualPreset.Neon ? 180 : 140;
+            int nearStars = preset == VisualPreset.Low ? 48 : 72;
+            DrawBackdropStars(spriteBatch, pixel, 11, farStars, 1, Color.White * 0.55f, time * 1.6f, 0.018f);
+            DrawBackdropStars(spriteBatch, pixel, 23, nearStars, 2, Color.Lerp(accentColor, glowColor, 0.4f) * 0.75f, time * 4.8f, 0.042f);
+            DrawBackdropDust(spriteBatch, pixel, accentColor, glowColor, time, preset);
         }
 
         public static void DrawOverlayEntities(SpriteBatch spriteBatch, IEnumerable<Entity> entities)
@@ -175,6 +208,9 @@ namespace SpaceBurst
             foreach (Entity entity in entities)
             {
                 if (entity == null || entity.IsExpired)
+                    continue;
+
+                if (entity is ImpactParticle)
                     continue;
 
                 if (entity.SpriteInstance != null || entity is BeamShot)
@@ -231,9 +267,13 @@ namespace SpaceBurst
             spriteBatch.Draw(pixel, new Rectangle(content.X, content.Center.Y, content.Width, 1), Color.White * 0.08f);
             BitmapFontRenderer.Draw(spriteBatch, pixel, "SIDE VIEW", new Vector2(panel.X + 12, panel.Y + 8), Color.White * 0.72f, 0.62f);
 
-            AutoAcquire2DResolver.Result autoAcquire = AutoAcquire2DResolver.Resolve(Player1.Instance.CombatPosition, Player1.Instance.CannonDirection, EntityManager.Enemies);
             Vector2 playerMarker = new Vector2(playerX, playerY);
-            Vector2? targetMarker = null;
+            Vector2 aimDirection = Player1.Instance.CannonDirection;
+            if (aimDirection == Vector2.Zero)
+                aimDirection = Vector2.UnitX;
+            else
+                aimDirection.Normalize();
+            Vector2 aimMarker = playerMarker + new Vector2(aimDirection.X * 26f, aimDirection.Y * 16f);
 
             foreach (Entity entity in entities)
             {
@@ -262,14 +302,10 @@ namespace SpaceBurst
                     Rectangle depthBar = new Rectangle(marker.Center.X, marker.Center.Y - depthHeight / 2, 1, depthHeight);
                     spriteBatch.Draw(pixel, depthBar, tint * 0.5f);
                 }
-
-                if (autoAcquire.Target == entity)
-                    targetMarker = new Vector2(marker.Center.X, marker.Center.Y);
             }
 
             spriteBatch.Draw(pixel, new Rectangle(playerX - 4, playerY - 4, 8, 8), Color.Cyan * 0.95f);
-            if (targetMarker.HasValue)
-                DrawUiLine(spriteBatch, pixel, playerMarker, targetMarker.Value, Color.Gold * 0.52f, 2f);
+            DrawUiLine(spriteBatch, pixel, playerMarker, aimMarker, Color.Cyan * 0.58f, 2f);
         }
 
         private static void DrawEntityMeshes(GraphicsDevice graphicsDevice, IEnumerable<Entity> entities)
@@ -764,6 +800,26 @@ namespace SpaceBurst
             max = Vector3.Max(max, localMax);
         }
 
+        private static Vector3[] BuildBoundsCorners(Vector3 localMin, Vector3 localMax, Matrix world)
+        {
+            Vector3[] corners =
+            {
+                new Vector3(localMin.X, localMin.Y, localMin.Z),
+                new Vector3(localMax.X, localMin.Y, localMin.Z),
+                new Vector3(localMax.X, localMax.Y, localMin.Z),
+                new Vector3(localMin.X, localMax.Y, localMin.Z),
+                new Vector3(localMin.X, localMin.Y, localMax.Z),
+                new Vector3(localMax.X, localMin.Y, localMax.Z),
+                new Vector3(localMax.X, localMax.Y, localMax.Z),
+                new Vector3(localMin.X, localMax.Y, localMax.Z),
+            };
+
+            for (int i = 0; i < corners.Length; i++)
+                corners[i] = Vector3.Transform(corners[i], world);
+
+            return corners;
+        }
+
         private static Vector3 MapCombatPoint(Vector3 combatPoint, float elevation)
         {
             float lateral = combatPoint.Z * DepthWorldScale;
@@ -899,6 +955,96 @@ namespace SpaceBurst
 
             Color depthTint = relativeDepth > 0f ? new Color(118, 188, 255) : new Color(255, 124, 214);
             return Color.Lerp(baseColor, depthTint, MathHelper.Clamp(MathF.Abs(relativeDepth) / 140f, 0.18f, 0.55f));
+        }
+
+        private static void DrawBackdropGlow(SpriteBatch spriteBatch, Texture2D radialTexture, Vector2 center, float radius, Color color)
+        {
+            spriteBatch.Draw(
+                radialTexture,
+                center,
+                null,
+                color,
+                0f,
+                new Vector2(radialTexture.Width / 2f, radialTexture.Height / 2f),
+                radius * 2f / radialTexture.Width,
+                SpriteEffects.None,
+                0f);
+        }
+
+        private static void DrawBackdropStars(SpriteBatch spriteBatch, Texture2D pixel, int seed, int count, int size, Color color, float drift, float parallax)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                float xSeed = Hash01(seed, i * 13 + 1);
+                float ySeed = Hash01(seed, i * 13 + 5);
+                float twinkle = 0.42f + 0.58f * MathF.Abs(MathF.Sin(drift * (0.8f + i * 0.013f) + i));
+                float x = (xSeed * Game1.VirtualWidth + drift * (18f + i * parallax)) % (Game1.VirtualWidth + 60f) - 30f;
+                float y = 20f + ySeed * (Game1.VirtualHeight - 40f);
+                spriteBatch.Draw(pixel, new Rectangle((int)x, (int)y, size, size), color * twinkle);
+            }
+        }
+
+        private static void DrawBounds(GraphicsDevice graphicsDevice, IEnumerable<Entity> entities)
+        {
+            foreach (Entity entity in entities)
+            {
+                if (entity == null || entity.IsExpired || entity.SpriteInstance == null)
+                    continue;
+
+                ProceduralMeshInstance mesh = CreateMeshInstance(entity);
+                if (mesh?.Cache == null)
+                    continue;
+
+                Vector3[] corners = BuildBoundsCorners(mesh.Cache.LocalMin, mesh.Cache.LocalMax, mesh.World);
+                var vertices = new[]
+                {
+                    new VertexPositionColor(corners[0], Color.Lime), new VertexPositionColor(corners[1], Color.Lime),
+                    new VertexPositionColor(corners[1], Color.Lime), new VertexPositionColor(corners[2], Color.Lime),
+                    new VertexPositionColor(corners[2], Color.Lime), new VertexPositionColor(corners[3], Color.Lime),
+                    new VertexPositionColor(corners[3], Color.Lime), new VertexPositionColor(corners[0], Color.Lime),
+                    new VertexPositionColor(corners[4], Color.Lime), new VertexPositionColor(corners[5], Color.Lime),
+                    new VertexPositionColor(corners[5], Color.Lime), new VertexPositionColor(corners[6], Color.Lime),
+                    new VertexPositionColor(corners[6], Color.Lime), new VertexPositionColor(corners[7], Color.Lime),
+                    new VertexPositionColor(corners[7], Color.Lime), new VertexPositionColor(corners[4], Color.Lime),
+                    new VertexPositionColor(corners[0], Color.Lime), new VertexPositionColor(corners[4], Color.Lime),
+                    new VertexPositionColor(corners[1], Color.Lime), new VertexPositionColor(corners[5], Color.Lime),
+                    new VertexPositionColor(corners[2], Color.Lime), new VertexPositionColor(corners[6], Color.Lime),
+                    new VertexPositionColor(corners[3], Color.Lime), new VertexPositionColor(corners[7], Color.Lime),
+                };
+
+                opaqueEffect.World = Matrix.Identity;
+                opaqueEffect.Alpha = 0.85f;
+                for (int passIndex = 0; passIndex < opaqueEffect.CurrentTechnique.Passes.Count; passIndex++)
+                {
+                    EffectPass pass = opaqueEffect.CurrentTechnique.Passes[passIndex];
+                    pass.Apply();
+                    graphicsDevice.DrawUserPrimitives(PrimitiveType.LineList, vertices, 0, vertices.Length / 2);
+                }
+            }
+        }
+
+        private static void DrawBackdropDust(SpriteBatch spriteBatch, Texture2D pixel, Color accentColor, Color glowColor, float time, VisualPreset preset)
+        {
+            int streakCount = preset == VisualPreset.Low ? 8 : 14;
+            for (int i = 0; i < streakCount; i++)
+            {
+                float x = Hash01(71, i * 17 + 3) * Game1.VirtualWidth;
+                float y = Hash01(71, i * 17 + 7) * Game1.VirtualHeight;
+                int width = 28 + (int)(Hash01(71, i * 17 + 11) * (preset == VisualPreset.Neon ? 88f : 64f));
+                int height = 1 + (int)(Hash01(71, i * 17 + 13) * 2f);
+                Color tint = Color.Lerp(accentColor, glowColor, Hash01(71, i * 17 + 19)) * (0.05f + 0.03f * MathF.Abs(MathF.Sin(time * 0.35f + i)));
+                spriteBatch.Draw(pixel, new Rectangle((int)x, (int)y, width, height), tint);
+            }
+        }
+
+        private static float Hash01(int seed, int salt)
+        {
+            int value = seed * 73856093 ^ salt * 19349663;
+            value ^= value >> 13;
+            value *= 1274126177;
+            value ^= value >> 16;
+            uint positive = unchecked((uint)value);
+            return (positive & 0x00FFFFFF) / 16777215f;
         }
 
         private static void DrawUiBorder(SpriteBatch spriteBatch, Texture2D pixel, Rectangle bounds, Color color)
