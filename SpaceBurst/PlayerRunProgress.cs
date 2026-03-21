@@ -1,3 +1,4 @@
+using Microsoft.Xna.Framework;
 using SpaceBurst.RuntimeData;
 using System;
 
@@ -8,6 +9,7 @@ namespace SpaceBurst
         public WeaponInventoryState Weapons { get; } = new WeaponInventoryState();
         public PowerupDropState Powerups { get; } = new PowerupDropState();
 
+        public GameDifficulty Difficulty { get; private set; } = GameDifficulty.Easy;
         public int StartingLives { get; private set; } = 3;
         public int ShipsPerLife { get; private set; } = 2;
         public bool MedalEligible { get; private set; } = true;
@@ -36,10 +38,11 @@ namespace SpaceBurst
             }
         }
 
-        public void BeginCampaign(StageDefinition stage)
+        public void BeginCampaign(StageDefinition stage, GameDifficulty difficulty)
         {
-            StartingLives = stage?.StartingLives > 0 ? stage.StartingLives : 3;
-            ShipsPerLife = stage?.ShipsPerLife > 0 ? stage.ShipsPerLife : 2;
+            Difficulty = difficulty;
+            StartingLives = ResolveStartingLives(stage);
+            ShipsPerLife = ResolveShipsPerLife(stage);
             Weapons.Reset();
             Powerups.Reset();
             MedalEligible = true;
@@ -54,8 +57,8 @@ namespace SpaceBurst
             if (stage == null)
                 return;
 
-            StartingLives = stage.StartingLives > 0 ? stage.StartingLives : StartingLives;
-            ShipsPerLife = stage.ShipsPerLife > 0 ? stage.ShipsPerLife : ShipsPerLife;
+            StartingLives = ResolveStartingLives(stage);
+            ShipsPerLife = ResolveShipsPerLife(stage);
         }
 
         public void MarkMedalIneligible()
@@ -112,10 +115,73 @@ namespace SpaceBurst
             NonWeaponUpgradeCount++;
         }
 
+        public float GetWavePressure(int stageNumber)
+        {
+            DifficultyProfile profile = DifficultyTuning.GetProfile(Difficulty);
+            float pressure = DifficultyTuning.GetStagePressure(stageNumber) * profile.StagePressureScale
+                + DifficultyTuning.GetPowerPressure(PowerBudget) * profile.PowerPressureScale;
+            return MathHelper.Clamp(MathF.Max(profile.WavePressureFloor, pressure), 0f, 1.75f);
+        }
+
+        public float GetBossPressure(int stageNumber)
+        {
+            DifficultyProfile profile = DifficultyTuning.GetProfile(Difficulty);
+            float pressure = DifficultyTuning.GetStagePressure(stageNumber) * (profile.StagePressureScale + 0.1f)
+                + DifficultyTuning.GetPowerPressure(PowerBudget) * profile.BossPowerPressureScale;
+            return MathHelper.Clamp(MathF.Max(profile.BossPressureFloor, pressure), 0f, 2f);
+        }
+
+        public float GetEnemyDamageMultiplier(int stageNumber, bool boss)
+        {
+            DifficultyProfile profile = DifficultyTuning.GetProfile(Difficulty);
+            float pressure = boss ? GetBossPressure(stageNumber) : GetWavePressure(stageNumber);
+            float baseMultiplier = boss ? profile.BossDamageMultiplier : profile.WaveDamageMultiplier;
+            float bonus = boss ? 0.6f : 0.38f;
+            return baseMultiplier * (1f + pressure * bonus);
+        }
+
+        public float GetEnemyDurabilityMultiplier(int stageNumber, bool boss)
+        {
+            DifficultyProfile profile = DifficultyTuning.GetProfile(Difficulty);
+            float pressure = boss ? GetBossPressure(stageNumber) : GetWavePressure(stageNumber);
+            float baseMultiplier = boss ? profile.BossDurabilityMultiplier : profile.WaveDurabilityMultiplier;
+            float bonus = boss ? 0.82f : 0.34f;
+            return baseMultiplier * (1f + pressure * bonus);
+        }
+
+        public float GetEnemyFireIntervalScale(int stageNumber, bool boss)
+        {
+            DifficultyProfile profile = DifficultyTuning.GetProfile(Difficulty);
+            float pressure = boss ? GetBossPressure(stageNumber) : GetWavePressure(stageNumber);
+            float baseScale = boss ? profile.BossFireIntervalScale : profile.WaveFireIntervalScale;
+            float reduction = boss ? 0.16f : 0.1f;
+            return MathF.Max(0.34f, baseScale - pressure * reduction);
+        }
+
+        public float GetDropChanceMultiplier(int stageNumber, bool boss)
+        {
+            DifficultyProfile profile = DifficultyTuning.GetProfile(Difficulty);
+            float pressure = boss ? GetBossPressure(stageNumber) : GetWavePressure(stageNumber);
+            return MathF.Max(0.2f, profile.DropChanceMultiplier * (1f - pressure * 0.12f));
+        }
+
+        public float GetDropWeightMultiplier(int stageNumber, bool boss)
+        {
+            DifficultyProfile profile = DifficultyTuning.GetProfile(Difficulty);
+            float pressure = boss ? GetBossPressure(stageNumber) : GetWavePressure(stageNumber);
+            return MathF.Max(0.2f, profile.DropWeightMultiplier * (1f - pressure * 0.08f));
+        }
+
+        public bool IsOneHitKillEnabled()
+        {
+            return DifficultyTuning.GetProfile(Difficulty).OneHitKill;
+        }
+
         public PlayerRunProgressSnapshotData CaptureSnapshot()
         {
             return new PlayerRunProgressSnapshotData
             {
+                Difficulty = Difficulty,
                 StartingLives = StartingLives,
                 ShipsPerLife = ShipsPerLife,
                 MedalEligible = MedalEligible,
@@ -133,6 +199,7 @@ namespace SpaceBurst
             if (snapshot == null)
                 return;
 
+            Difficulty = snapshot.Difficulty;
             StartingLives = snapshot.StartingLives > 0 ? snapshot.StartingLives : 3;
             ShipsPerLife = snapshot.ShipsPerLife > 0 ? snapshot.ShipsPerLife : 2;
             MedalEligible = snapshot.MedalEligible;
@@ -142,6 +209,20 @@ namespace SpaceBurst
             DropBonusChance = MathF.Max(0f, snapshot.DropBonusChance);
             Weapons.RestoreSnapshot(snapshot.Weapons);
             Powerups.RestoreSnapshot(snapshot.Powerups);
+        }
+
+        private int ResolveStartingLives(StageDefinition stage)
+        {
+            DifficultyProfile profile = DifficultyTuning.GetProfile(Difficulty);
+            int baseLives = stage?.StartingLives > 0 ? stage.StartingLives : 3;
+            return Math.Max(1, baseLives + profile.LivesDelta);
+        }
+
+        private int ResolveShipsPerLife(StageDefinition stage)
+        {
+            DifficultyProfile profile = DifficultyTuning.GetProfile(Difficulty);
+            int baseShips = stage?.ShipsPerLife > 0 ? stage.ShipsPerLife : 2;
+            return Math.Max(1, baseShips + profile.ShipsDelta);
         }
     }
 }

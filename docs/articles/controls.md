@@ -5,6 +5,7 @@
 - `W A S D`: move
 - `Arrow Keys`: aim
 - `Space`: fire
+- `A / S / D` during upgrade drafts: pick left / middle / right instantly
 - `Q / E`: rotate owned weapon styles
 - `R`: rewind
 - `Esc`: pause
@@ -34,7 +35,17 @@ The first run starts with a tutorial prologue. It teaches movement, aiming, firi
 ## Options
 
 - `UI Scale`: enlarges menus, HUD, tutorial/help text, and touch affordances immediately.
-- `World Scale`: adjusts the rendered playfield zoom without shrinking menu readability.
-- `Font Theme`: switches between `Compact` and `Readable` built-in bitmap typography.
+- `3D Gameplay`: holds invert-axis and 3D aim-assist settings on desktop.
 - Android uses the same visual/audio options as desktop, except display mode is hidden because mobile always uses fullscreen.
-- Android defaults to the `Readable` font theme and uses touch-specific copy instead of keyboard prompts.
+- The game uses one shared readable bitmap font across HUD, menus, help, and drafts.
+
+## Difficulty
+
+- New runs open with a difficulty picker.
+- `Easy` matches the original baseline balance.
+- `Normal`, `Hard`, `Insane`, and `Realistic` progressively reduce retries and raise enemy and boss pressure.
+- `Realistic` makes any real hit consume the current ship immediately.
+
+## HUD
+
+- `HULL` shows current ship integrity.

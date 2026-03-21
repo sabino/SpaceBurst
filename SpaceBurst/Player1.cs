@@ -40,6 +40,7 @@ namespace SpaceBurst
         private float fireCooldown;
         private float droneSupportTimer;
         private float chaseEntryRecenterTimer;
+        private float authoritativeHullRatio = 1f;
         private bool hullDestroyedQueued;
 
         public bool IsDead
@@ -101,10 +102,7 @@ namespace SpaceBurst
         {
             get
             {
-                if (sprite?.Mask == null || sprite.Mask.InitialOccupiedCount <= 0)
-                    return 1f;
-
-                return sprite.Mask.OccupiedCount / (float)sprite.Mask.InitialOccupiedCount;
+                return MathHelper.Clamp(authoritativeHullRatio, 0f, 1f);
             }
         }
 
@@ -219,6 +217,7 @@ namespace SpaceBurst
 
         public void ResetForStage()
         {
+            authoritativeHullRatio = 1f;
             RefreshLoadoutVisuals();
             CombatPosition = new Vector3(GetSpawnPosition(), 0f);
             pendingRespawnPosition = Position;
@@ -259,17 +258,24 @@ namespace SpaceBurst
             if (IsInvulnerable)
                 return false;
 
-            DamageResult result = sprite.ApplyDamage(Position, impactPoint, RenderScale, damageMask, damageMask.ContactImpact, Math.Max(1, damage));
+            bool oneHitKill = PlayerStatus.RunProgress.IsOneHitKillEnabled();
+            int resolvedDamage = oneHitKill && sprite?.Mask != null
+                ? Math.Max(sprite.Mask.InitialOccupiedCount, Math.Max(1, damage))
+                : Math.Max(1, damage);
+
+            DamageResult result = sprite.ApplyDamage(Position, impactPoint, RenderScale, damageMask, damageMask.ContactImpact, resolvedDamage);
             if (result.CellsRemoved > 0)
             {
                 invulnerabilityTimer = ContactInvulnerabilitySeconds;
                 EntityManager.SpawnImpactParticles(impactPoint, ColorUtil.ParseHex(WeaponCatalog.GetStyle(ActiveStyle).AccentColor, Color.Orange), damageMask.ContactImpact.DebrisBurstCount, damageMask.ContactImpact.DebrisSpeed, Vector2.Zero);
                 Game1.Instance.Feedback?.Handle(new FeedbackEvent(FeedbackEventType.PlayerDamaged, impactPoint, MathHelper.Clamp(damage * 0.18f, 0.45f, 1f), ActiveStyle, result.CoreCellsRemoved > 0));
+                SyncAuthoritativeHullRatio();
             }
 
-            if (result.Destroyed)
+            if (result.Destroyed || oneHitKill)
             {
                 hullDestroyedQueued = true;
+                authoritativeHullRatio = 0f;
                 return true;
             }
 
@@ -346,6 +352,7 @@ namespace SpaceBurst
                 FireCooldown = fireCooldown,
                 DroneSupportTimer = droneSupportTimer,
                 HullDestroyedQueued = hullDestroyedQueued,
+                HullIntegrityRatio = authoritativeHullRatio,
                 HullMask = sprite?.CaptureMaskSnapshot() ?? new MaskSnapshotData(),
             };
         }
@@ -379,6 +386,8 @@ namespace SpaceBurst
             droneSupportTimer = snapshot.DroneSupportTimer;
             hullDestroyedQueued = snapshot.HullDestroyedQueued;
             sprite?.RestoreMaskSnapshot(snapshot.HullMask);
+            authoritativeHullRatio = snapshot.HullIntegrityRatio > 0f ? snapshot.HullIntegrityRatio : 1f;
+            SyncAuthoritativeHullRatio();
             RestoreEntityId(snapshot.EntityId);
             ClampToArena();
         }
@@ -890,12 +899,14 @@ namespace SpaceBurst
 
         private void RefreshLoadoutVisuals()
         {
+            float preservedHullRatio = authoritativeHullRatio > 0f ? authoritativeHullRatio : 1f;
             WeaponStyleId style = ActiveStyle;
             int level = Math.Max(0, ActiveWeaponLevel);
             sprite = new ProceduralSpriteInstance(Game1.Instance.GraphicsDevice, WeaponCatalog.CreateHullDefinition(style, level));
             cannonSprite = new ProceduralSpriteInstance(Game1.Instance.GraphicsDevice, WeaponCatalog.CreateCannonDefinition(style, level));
             damageMask = WeaponCatalog.CreatePlayerDamageMask(style, level);
             RenderScale = 1f;
+            ApplyHullIntegrityRatio(preservedHullRatio);
         }
 
         private WeaponLevelDefinition ResolveWeaponLevel()
@@ -979,6 +990,7 @@ namespace SpaceBurst
 
         private void RestoreAfterRespawn()
         {
+            authoritativeHullRatio = 1f;
             RefreshLoadoutVisuals();
             CombatPosition = new Vector3(pendingRespawnPosition, 0f);
             ClampToArena();
@@ -992,6 +1004,56 @@ namespace SpaceBurst
             chaseEntryRecenterTarget = Vector3.Zero;
             chaseEntryRecenterTimer = 0f;
             color = Color.White;
+        }
+
+        private void ApplyHullIntegrityRatio(float ratio)
+        {
+            if (sprite?.Mask == null || sprite.Mask.InitialOccupiedCount <= 0)
+            {
+                authoritativeHullRatio = 1f;
+                return;
+            }
+
+            float clampedRatio = MathHelper.Clamp(ratio, 0.04f, 1f);
+            int targetOccupied = Math.Max(1, (int)MathF.Round(sprite.Mask.InitialOccupiedCount * clampedRatio));
+            TrimHullCells(targetOccupied, preserveCore: true);
+            TrimHullCells(targetOccupied, preserveCore: false);
+            SyncAuthoritativeHullRatio();
+        }
+
+        private void TrimHullCells(int targetOccupied, bool preserveCore)
+        {
+            if (sprite?.Mask == null)
+                return;
+
+            for (int x = 0; x < sprite.Mask.Width && sprite.Mask.OccupiedCount > targetOccupied; x++)
+            {
+                for (int yStep = 0; yStep < sprite.Mask.Height && sprite.Mask.OccupiedCount > targetOccupied; yStep++)
+                {
+                    int y = yStep % 2 == 0
+                        ? yStep / 2
+                        : sprite.Mask.Height - 1 - yStep / 2;
+
+                    if (!sprite.Mask.IsOccupied(x, y))
+                        continue;
+
+                    if (preserveCore && sprite.Mask.IsCore(x, y))
+                        continue;
+
+                    sprite.Mask.RemoveCell(x, y);
+                }
+            }
+        }
+
+        private void SyncAuthoritativeHullRatio()
+        {
+            if (sprite?.Mask == null || sprite.Mask.InitialOccupiedCount <= 0)
+            {
+                authoritativeHullRatio = 1f;
+                return;
+            }
+
+            authoritativeHullRatio = MathHelper.Clamp(sprite.Mask.OccupiedCount / (float)sprite.Mask.InitialOccupiedCount, 0f, 1f);
         }
 
         private void SpawnMuzzleFx(WeaponLevelDefinition level, Vector2 position)

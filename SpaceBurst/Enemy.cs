@@ -38,7 +38,7 @@ namespace SpaceBurst
 
         public override int ContactDamage
         {
-            get { return damageMask.ContactDamage; }
+            get { return Math.Max(1, (int)MathF.Round(damageMask.ContactDamage * GetDamageOutputMultiplier())); }
         }
 
         public virtual bool IsBoss
@@ -120,7 +120,7 @@ namespace SpaceBurst
             accentColor = ColorUtil.ParseHex(archetype.Sprite.AccentColor, Color.Orange);
             phaseOffset = spawnPoint.Y * 0.013f;
             DeterministicRngState gameplayRandom = Game1.Instance?.GameplayRandom ?? fallbackGameplayRandom;
-            fireCooldown = archetype.FireIntervalSeconds * (0.6f + gameplayRandom.NextFloat(0f, 0.6f));
+            fireCooldown = archetype.FireIntervalSeconds * GetFireIntervalScale() * (0.6f + gameplayRandom.NextFloat(0f, 0.6f));
             depthAnchor = initialDepthAnchor ?? gameplayRandom.NextFloat(-130f, 130f);
             depthAmplitude = initialDepthAmplitude ?? (18f + gameplayRandom.NextFloat(0f, 42f));
             depthFrequency = initialDepthFrequency ?? (0.45f + gameplayRandom.NextFloat(0f, 0.65f));
@@ -363,7 +363,8 @@ namespace SpaceBurst
             PlayerStatus.IncreaseMultiplier();
 
             float bonusChance = Game1.Instance != null ? Game1.Instance.CurrentPowerDropBonusChance : 0f;
-            if (archetype.PowerupEligible && PlayerStatus.RunProgress.Powerups.ShouldDrop(Game1.Instance?.GameplayRandom, bonusChance, archetype.PowerupWeight, IsBoss))
+            float dropWeight = archetype.PowerupWeight * PlayerStatus.RunProgress.GetDropWeightMultiplier(GetCurrentStageNumber(), IsBoss);
+            if (archetype.PowerupEligible && PlayerStatus.RunProgress.Powerups.ShouldDrop(Game1.Instance?.GameplayRandom, bonusChance, dropWeight, IsBoss))
                 EntityManager.Add(new PowerupPickup(Position, ResolvePowerupStyle(), CombatPosition));
         }
 
@@ -406,7 +407,8 @@ namespace SpaceBurst
         protected virtual void UpdateMovement(float deltaSeconds)
         {
             float scrollSpeed = Game1.Instance.CurrentScrollSpeed;
-            float baseSpeed = archetype.MoveSpeed * Math.Max(0.35f, speedMultiplier);
+            float pressureSpeedScale = 1f + GetCurrentPressure() * (IsBoss ? 0.12f : 0.08f);
+            float baseSpeed = archetype.MoveSpeed * Math.Max(0.35f, speedMultiplier) * pressureSpeedScale;
             float phase = ageSeconds * Math.Max(0.2f, movementFrequency) + phaseOffset;
             float desiredY = targetY;
             float desiredXVelocity = -(baseSpeed + scrollSpeed);
@@ -455,7 +457,7 @@ namespace SpaceBurst
             if (fireCooldown > 0f)
                 return;
 
-            fireCooldown = archetype.FireIntervalSeconds;
+            fireCooldown = archetype.FireIntervalSeconds * GetFireIntervalScale();
 
             switch (firePattern)
             {
@@ -494,7 +496,7 @@ namespace SpaceBurst
                 spawnPoint,
                 direction * 420f,
                 false,
-                Math.Max(1, damageMask.ProjectileDamage),
+                Math.Max(1, (int)MathF.Round(damageMask.ProjectileDamage * GetDamageOutputMultiplier())),
                 damageMask.ContactImpact,
                 Element.EnemyBulletDefinition,
                 0,
@@ -514,7 +516,8 @@ namespace SpaceBurst
 
         private void ApplyImpact(Vector2 impactPoint, int damage, ImpactProfileDefinition impactProfile, Vector2 sourceVelocity, ImpactFxStyle impactFxStyle, bool causeShockwave)
         {
-            DamageResult result = sprite.ApplyDamage(Position, impactPoint, RenderScale, damageMask, impactProfile, damage);
+            int scaledDamage = Math.Max(1, (int)MathF.Round(damage / Math.Max(0.25f, GetDurabilityMultiplier())));
+            DamageResult result = sprite.ApplyDamage(Position, impactPoint, RenderScale, damageMask, impactProfile, scaledDamage);
             flashTimer = result.CoreCellsRemoved > 0 ? 0.14f : 0.08f;
             color = result.CoreCellsRemoved > 0 ? Color.Lerp(Color.White, Color.OrangeRed, 0.55f) : (result.CellsRemoved > 0 ? Color.Lerp(Color.White, accentColor, 0.28f) : Color.White);
 
@@ -535,6 +538,33 @@ namespace SpaceBurst
                 Destroy(result.CoreCellsRemoved > 0 && archetype.DestroyOnCoreBreach);
             else if (causeShockwave && result.CoreCellsRemoved > 0)
                 EntityManager.SpawnShockwave(impactPoint, accentColor * 0.24f, 8f, 54f, 0.18f);
+        }
+
+        protected int GetCurrentStageNumber()
+        {
+            return Math.Max(1, Game1.Instance?.CampaignDirector?.CurrentStageNumber ?? 1);
+        }
+
+        protected float GetCurrentPressure()
+        {
+            return IsBoss
+                ? PlayerStatus.RunProgress.GetBossPressure(GetCurrentStageNumber())
+                : PlayerStatus.RunProgress.GetWavePressure(GetCurrentStageNumber());
+        }
+
+        protected float GetDamageOutputMultiplier()
+        {
+            return PlayerStatus.RunProgress.GetEnemyDamageMultiplier(GetCurrentStageNumber(), IsBoss);
+        }
+
+        protected float GetDurabilityMultiplier()
+        {
+            return PlayerStatus.RunProgress.GetEnemyDurabilityMultiplier(GetCurrentStageNumber(), IsBoss);
+        }
+
+        protected float GetFireIntervalScale()
+        {
+            return PlayerStatus.RunProgress.GetEnemyFireIntervalScale(GetCurrentStageNumber(), IsBoss);
         }
     }
 }

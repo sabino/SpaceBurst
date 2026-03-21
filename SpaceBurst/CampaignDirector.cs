@@ -82,6 +82,14 @@ namespace SpaceBurst
         {
             Keys.Up, Keys.Up, Keys.Down, Keys.Down, Keys.Left, Keys.Right, Keys.Left, Keys.Right, Keys.D, Keys.E, Keys.V
         };
+        private static readonly GameDifficulty[] DifficultyChoices =
+        {
+            GameDifficulty.Easy,
+            GameDifficulty.Normal,
+            GameDifficulty.Hard,
+            GameDifficulty.Insane,
+            GameDifficulty.Realistic,
+        };
 
         private StageDefinition currentStage;
         private BossDefinition resolvedBossDefinition;
@@ -94,6 +102,7 @@ namespace SpaceBurst
         private int currentStageNumber = 1;
         private int currentSectionIndex;
         private int titleSelection;
+        private int difficultySelection;
         private int pauseSelection;
         private int optionsSelection;
         private int slotSelection;
@@ -123,6 +132,7 @@ namespace SpaceBurst
         private float bossApproachTimer;
         private float draftTimer;
         private float audioQualityApplyDelay;
+        private bool difficultySelectSkipTutorial;
         private bool draftFromTutorial;
         private bool tutorialReplayMode;
         private bool audioQualityDialogOpen;
@@ -317,9 +327,10 @@ namespace SpaceBurst
         {
             get
             {
-                float stageFactor = MathHelper.Clamp((currentStageNumber - 1) / 49f, 0f, 1f);
-                float runFactor = MathHelper.Clamp(PlayerStatus.RunProgress.PowerBudget * 0.02f, 0f, 0.28f);
-                return activeBoss != null ? MathHelper.Clamp(stageFactor + runFactor + 0.15f, 0f, 1f) : MathHelper.Clamp(stageFactor + runFactor, 0f, 1f);
+                float pressure = activeBoss != null
+                    ? PlayerStatus.RunProgress.GetBossPressure(currentStageNumber)
+                    : PlayerStatus.RunProgress.GetWavePressure(currentStageNumber);
+                return MathHelper.Clamp(pressure / (activeBoss != null ? 1.45f : 1.2f), 0f, 1f);
             }
         }
 
@@ -338,7 +349,8 @@ namespace SpaceBurst
             get
             {
                 SectionDefinition section = GetActiveSection();
-                return (section?.PowerDropBonusChance ?? 0f) + PlayerStatus.RunProgress.DropBonusChance;
+                float baseChance = (section?.PowerDropBonusChance ?? 0f) + PlayerStatus.RunProgress.DropBonusChance;
+                return baseChance * PlayerStatus.RunProgress.GetDropChanceMultiplier(currentStageNumber, activeBoss != null);
             }
         }
 
@@ -394,7 +406,7 @@ namespace SpaceBurst
 
         public FontTheme FontTheme
         {
-            get { return options.FontTheme; }
+            get { return FontTheme.Readable; }
         }
 
         public float MasterVolume
@@ -422,6 +434,7 @@ namespace SpaceBurst
             get
             {
                 return state == GameFlowState.Title
+                    || state == GameFlowState.DifficultySelect
                     || state == GameFlowState.Help
                     || state == GameFlowState.Paused
                     || state == GameFlowState.Options
@@ -568,6 +581,9 @@ namespace SpaceBurst
                 case GameFlowState.Title:
                     UpdateTitle();
                     break;
+                case GameFlowState.DifficultySelect:
+                    UpdateDifficultySelect();
+                    break;
                 case GameFlowState.Options:
                     UpdateOptions();
                     break;
@@ -611,6 +627,10 @@ namespace SpaceBurst
             {
                 case GameFlowState.Title:
                     DrawTitle(spriteBatch, pixel);
+                    break;
+                case GameFlowState.DifficultySelect:
+                    DrawTitle(spriteBatch, pixel);
+                    DrawDifficultySelect(spriteBatch, pixel);
                     break;
                 case GameFlowState.Options:
                     if (slotReturnState != GameFlowState.Title)
@@ -692,6 +712,30 @@ namespace SpaceBurst
 
             if (Input.WasConfirmPressed() || pointerActivated)
                 ActivateTitleSelection(titleSelection);
+        }
+
+        private void UpdateDifficultySelect()
+        {
+            List<UiButton> buttons = GetDifficultyButtons();
+            UpdateVerticalSelection(ref difficultySelection, buttons.Count);
+            bool pointerActivated = HandlePointerSelection(buttons, ref difficultySelection);
+
+            if (Input.WasCancelPressed())
+            {
+                state = GameFlowState.Title;
+                return;
+            }
+
+            if (!Input.WasConfirmPressed() && !pointerActivated)
+                return;
+
+            if (difficultySelection >= DifficultyChoices.Length)
+            {
+                state = GameFlowState.Title;
+                return;
+            }
+
+            ConfirmDifficultySelection();
         }
 
         private void UpdatePause()
@@ -804,7 +848,7 @@ namespace SpaceBurst
                         if (tutorialReplayMode)
                             EnterTitle(false);
                         else
-                            BeginFreshCampaign();
+                            BeginFreshCampaign(PlayerStatus.RunProgress.Difficulty);
                     }
                     else
                     {
@@ -1216,6 +1260,26 @@ namespace SpaceBurst
                 return;
             }
 
+#if !ANDROID
+            if (Input.WasKeyPressed(Keys.A))
+            {
+                ApplyDraftSelection(0);
+                return;
+            }
+
+            if (Input.WasKeyPressed(Keys.S) && draftCards.Count > 1)
+            {
+                ApplyDraftSelection(1);
+                return;
+            }
+
+            if (Input.WasKeyPressed(Keys.D) && draftCards.Count > 2)
+            {
+                ApplyDraftSelection(2);
+                return;
+            }
+#endif
+
             if (Input.WasNavigateLeftPressed())
                 draftSelection = (draftSelection + draftCards.Count - 1) % draftCards.Count;
             else if (Input.WasNavigateRightPressed())
@@ -1234,12 +1298,6 @@ namespace SpaceBurst
             if (draftTimer <= 0f)
             {
                 ApplyDraftSelection(options.AutoUpgradeDraft ? gameplayRandom.NextInt(0, draftCards.Count) : draftSelection);
-                return;
-            }
-
-            if (options.AutoUpgradeDraft && pointerActivated)
-            {
-                ApplyDraftSelection(gameplayRandom.NextInt(0, draftCards.Count));
                 return;
             }
 
@@ -1375,13 +1433,7 @@ namespace SpaceBurst
 
         private void StartCampaign()
         {
-            if (!options.TutorialCompleted)
-            {
-                StartTutorial(false, GameFlowState.Playing);
-                return;
-            }
-
-            BeginFreshCampaign();
+            OpenDifficultySelect(false);
         }
 
         private void CompleteStage()
@@ -1406,8 +1458,14 @@ namespace SpaceBurst
 
         private void BeginFreshCampaign()
         {
+            BeginFreshCampaign(options.LastSelectedDifficulty);
+        }
+
+        private void BeginFreshCampaign(GameDifficulty difficulty)
+        {
+            options.LastSelectedDifficulty = difficulty;
             PlayerStatus.FinalizeRun();
-            PlayerStatus.BeginCampaign(repository.GetStage(1));
+            PlayerStatus.BeginCampaign(repository.GetStage(1), difficulty);
             gameplayRandom.Restore(0xC0FFEEu);
             campaignHadDeath = false;
             stageHadDeath = false;
@@ -1420,8 +1478,14 @@ namespace SpaceBurst
 
         private void StartTutorial(bool replayMode, GameFlowState returnState)
         {
+            StartTutorial(replayMode, returnState, ResolvePreferredRunDifficulty());
+        }
+
+        private void StartTutorial(bool replayMode, GameFlowState returnState, GameDifficulty difficulty)
+        {
+            options.LastSelectedDifficulty = difficulty;
             PlayerStatus.FinalizeRun();
-            PlayerStatus.BeginCampaign(repository.GetStage(1));
+            PlayerStatus.BeginCampaign(repository.GetStage(1), difficulty);
             PlayerStatus.RunProgress.Weapons.SetStyleProgress(WeaponStyleId.Pulse, 3, 0, true);
             gameplayRandom.Restore(0xC0FFEEu);
             currentStageNumber = 1;
@@ -1809,7 +1873,7 @@ namespace SpaceBurst
             if (currentStage == null || state == GameFlowState.Title || state == GameFlowState.GameOver || state == GameFlowState.CampaignComplete)
             {
                 PlayerStatus.FinalizeRun();
-                PlayerStatus.BeginCampaign(repository.GetStage(1));
+                PlayerStatus.BeginCampaign(repository.GetStage(1), ResolvePreferredRunDifficulty());
                 gameplayRandom.Restore(0xC0FFEEu);
                 campaignHadDeath = false;
                 stageHadDeath = false;
@@ -2203,7 +2267,7 @@ namespace SpaceBurst
                     if (tutorialReplayMode)
                         EnterTitle(false);
                     else
-                        BeginFreshCampaign();
+                        BeginFreshCampaign(PlayerStatus.RunProgress.Difficulty);
                     break;
             }
         }
@@ -2256,8 +2320,8 @@ namespace SpaceBurst
             draftCards.Add(BuildWeaponDraftCard(draftChargeStyle));
             if (tutorialMode)
             {
-                draftCards.Add(CreateDraftCard(UpgradeCardType.MobilityTuning, "THRUSTER TUNE", "MOVE FASTER THROUGH THE FIELD", "#6EC1FF"));
-                draftCards.Add(CreateDraftCard(UpgradeCardType.RewindBattery, "REWIND CELL", "LOWER REWIND METER DRAIN", "#56F0FF"));
+                draftCards.Add(CreateDraftCard(UpgradeCardType.MobilityTuning));
+                draftCards.Add(CreateDraftCard(UpgradeCardType.RewindBattery));
             }
             else
             {
@@ -2279,7 +2343,11 @@ namespace SpaceBurst
             }
 
             draftSelection = 0;
-            draftTimer = 10f;
+            string[] hotkeys = { "A", "S", "D" };
+            for (int i = 0; i < draftCards.Count; i++)
+                draftCards[i].HotkeyLabel = i < hotkeys.Length ? hotkeys[i] : string.Empty;
+
+            draftTimer = 5f;
             draftReturnState = returnState;
             draftFromTutorial = tutorialMode;
             state = GameFlowState.UpgradeDraft;
@@ -2289,18 +2357,31 @@ namespace SpaceBurst
         {
             WeaponInventoryState inventory = PlayerStatus.RunProgress.Weapons;
             WeaponStyleDefinition activeStyle = WeaponCatalog.GetStyle(styleId);
+            string subtitle;
             string description;
+            string deltaText;
+            string previewText = GetWeaponDraftPreview(styleId);
             if (!inventory.OwnsStyle(styleId))
             {
+                subtitle = "UNLOCK + EQUIP";
                 description = string.Concat("UNLOCK ", activeStyle.DisplayName, " AND EQUIP IT");
+                deltaText = "LV 0 -> LV 1";
             }
             else
             {
                 int styleLevel = inventory.GetLevel(styleId);
                 if (styleLevel < 3)
+                {
+                    subtitle = "LEVEL SURGE";
                     description = string.Concat("BOOST ", activeStyle.DisplayName, " TO LEVEL ", (styleLevel + 1).ToString());
+                    deltaText = string.Concat("LV ", styleLevel.ToString(), " -> LV ", (styleLevel + 1).ToString());
+                }
                 else
+                {
+                    subtitle = "RANK SURGE";
                     description = string.Concat("RAISE ", activeStyle.DisplayName, " TO RANK ", (inventory.GetRank(styleId) + 1).ToString());
+                    deltaText = string.Concat("RK ", inventory.GetRank(styleId).ToString(), " -> RK ", (inventory.GetRank(styleId) + 1).ToString());
+                }
             }
 
             return new UpgradeDraftCard
@@ -2308,7 +2389,11 @@ namespace SpaceBurst
                 Type = UpgradeCardType.WeaponSurge,
                 StyleId = styleId,
                 Title = string.Concat(activeStyle.DisplayName, " SURGE"),
+                Subtitle = subtitle,
                 Description = description,
+                PreviewText = previewText,
+                DeltaText = deltaText,
+                BadgeText = "WEAPON",
                 AccentColor = activeStyle.AccentColor,
             };
         }
@@ -2318,26 +2403,76 @@ namespace SpaceBurst
             switch (type)
             {
                 case UpgradeCardType.MobilityTuning:
-                    return CreateDraftCard(type, "THRUSTER TUNE", "INCREASE SHIP MOVE SPEED FOR THE RUN", "#6EC1FF");
+                    return CreateDraftCard(
+                        type,
+                        "THRUSTER TUNE",
+                        "SYSTEM BOOST",
+                        "INCREASE SHIP MOVE SPEED FOR THE RUN",
+                        string.Concat("SPD ", MathF.Round(PlayerStatus.RunProgress.MoveSpeedMultiplier * 100f).ToString("0"), "% -> ", MathF.Round(MathF.Min(1.8f, PlayerStatus.RunProgress.MoveSpeedMultiplier + 0.08f) * 100f).ToString("0"), "%"),
+                        "+SPEED",
+                        "#6EC1FF");
                 case UpgradeCardType.EmergencyReserve:
-                    return CreateDraftCard(type, "EMERGENCY RESERVE", "GAIN +1 SHIP NOW AND ON EACH NEW LIFE", "#FFB347");
+                    return CreateDraftCard(
+                        type,
+                        "EMERGENCY RESERVE",
+                        "SURVIVAL",
+                        "GAIN +1 SHIP NOW AND ON EACH NEW LIFE",
+                        string.Concat("SHIPS ", PlayerStatus.RunProgress.ShipsPerLife.ToString(), " -> ", (PlayerStatus.RunProgress.ShipsPerLife + 1).ToString()),
+                        "+1 SHIP",
+                        "#FFB347");
                 case UpgradeCardType.RewindBattery:
-                    return CreateDraftCard(type, "REWIND CELL", "LOWER REWIND METER DRAIN AND REFILL IT", "#56F0FF");
+                    return CreateDraftCard(
+                        type,
+                        "REWIND CELL",
+                        "UTILITY",
+                        "LOWER REWIND METER DRAIN AND REFILL IT",
+                        string.Concat("DRAIN -", MathF.Round((PlayerStatus.RunProgress.RewindEfficiency + 0.12f) * 100f).ToString("0"), "%"),
+                        "-DRAIN",
+                        "#56F0FF");
                 case UpgradeCardType.LuckyCore:
-                    return CreateDraftCard(type, "LUCKY CORE", "IMPROVE DROP MOMENTUM AND EARN SCORE", "#7AE582");
+                    return CreateDraftCard(
+                        type,
+                        "LUCKY CORE",
+                        "ECONOMY",
+                        "IMPROVE DROP MOMENTUM AND EARN SCORE",
+                        string.Concat("DROP +", MathF.Round((PlayerStatus.RunProgress.DropBonusChance + 0.03f) * 100f).ToString("0"), "%"),
+                        "+DROP",
+                        "#7AE582");
                 default:
                     return BuildWeaponDraftCard(draftChargeStyle);
             }
         }
 
-        private static UpgradeDraftCard CreateDraftCard(UpgradeCardType type, string title, string description, string accent)
+        private static UpgradeDraftCard CreateDraftCard(UpgradeCardType type, string title, string subtitle, string description, string deltaText, string previewText, string accent)
         {
             return new UpgradeDraftCard
             {
                 Type = type,
                 Title = title,
+                Subtitle = subtitle,
                 Description = description,
+                DeltaText = deltaText,
+                PreviewText = previewText,
+                BadgeText = "SYSTEM",
                 AccentColor = accent,
+            };
+        }
+
+        private static string GetWeaponDraftPreview(WeaponStyleId styleId)
+        {
+            return styleId switch
+            {
+                WeaponStyleId.Pulse => "DMG +RATE",
+                WeaponStyleId.Spread => "ARC +PELLETS",
+                WeaponStyleId.Laser => "BEAM +TICKS",
+                WeaponStyleId.Plasma => "BLAST +AREA",
+                WeaponStyleId.Missile => "HOMING +BLAST",
+                WeaponStyleId.Rail => "PIERCE +RANGE",
+                WeaponStyleId.Arc => "CHAIN +JOLT",
+                WeaponStyleId.Blade => "WAVE +COVER",
+                WeaponStyleId.Drone => "DRONES +BOLTS",
+                WeaponStyleId.Fortress => "BURST +WALL",
+                _ => "POWER UP",
             };
         }
 
@@ -2762,6 +2897,53 @@ namespace SpaceBurst
             PersistentStorage.SaveMedals(medals);
         }
 
+        private void OpenDifficultySelect(bool skipTutorial)
+        {
+            difficultySelectSkipTutorial = skipTutorial;
+            int selection = Array.IndexOf(DifficultyChoices, options.LastSelectedDifficulty);
+            difficultySelection = selection >= 0 ? selection : 0;
+            state = GameFlowState.DifficultySelect;
+        }
+
+        private void ConfirmDifficultySelection()
+        {
+            GameDifficulty difficulty = DifficultyChoices[Math.Clamp(difficultySelection, 0, DifficultyChoices.Length - 1)];
+            options.LastSelectedDifficulty = difficulty;
+            if (optionsSnapshot != null)
+                optionsSnapshot.LastSelectedDifficulty = difficulty;
+
+            if (difficultySelectSkipTutorial)
+            {
+                options.TutorialCompleted = true;
+                if (optionsSnapshot != null)
+                    optionsSnapshot.TutorialCompleted = true;
+            }
+
+            PersistentStorage.SaveOptions(options);
+
+            if (difficultySelectSkipTutorial)
+            {
+                BeginFreshCampaign(difficulty);
+                return;
+            }
+
+            if (!options.TutorialCompleted)
+            {
+                StartTutorial(false, GameFlowState.Playing, difficulty);
+                return;
+            }
+
+            BeginFreshCampaign(difficulty);
+        }
+
+        private GameDifficulty ResolvePreferredRunDifficulty()
+        {
+            if (currentStage != null && state != GameFlowState.Title && state != GameFlowState.GameOver && state != GameFlowState.CampaignComplete)
+                return PlayerStatus.RunProgress.Difficulty;
+
+            return options.LastSelectedDifficulty;
+        }
+
         private void ActivateTitleSelection(int selection)
         {
             bool showSkipTutorial = !options.TutorialCompleted;
@@ -2774,9 +2956,7 @@ namespace SpaceBurst
 
             if (showSkipTutorial && selection == index++)
             {
-                options.TutorialCompleted = true;
-                PersistentStorage.SaveOptions(options);
-                BeginFreshCampaign();
+                OpenDifficultySelect(true);
                 return;
             }
 
@@ -2811,6 +2991,23 @@ namespace SpaceBurst
             }
 
             Game1.Instance.Exit();
+        }
+
+        private List<UiButton> GetDifficultyButtons()
+        {
+            float uiScale = Game1.Instance != null ? Game1.Instance.UiLayoutScale : 1f;
+            int width = Math.Max(UiPx(300), (int)MathF.Round(320f * uiScale));
+            int height = Math.Max(UiPx(42), (int)MathF.Round(46f * uiScale));
+            int spacing = Math.Max(UiPx(10), (int)MathF.Round(12f * uiScale));
+            int x = Game1.VirtualWidth / 2 - UiPx(380);
+            int top = UiPx(214);
+
+            var buttons = new List<UiButton>(DifficultyChoices.Length + 1);
+            for (int i = 0; i < DifficultyChoices.Length; i++)
+                buttons.Add(new UiButton(new Rectangle(x, top + i * (height + spacing), width, height), DifficultyTuning.GetLabel(DifficultyChoices[i])));
+
+            buttons.Add(new UiButton(new Rectangle(x, top + DifficultyChoices.Length * (height + spacing) + UiPx(6), width, height), "BACK"));
+            return buttons;
         }
 
         private bool HandlePointerSelection(List<UiButton> buttons, ref int selection)
@@ -2942,6 +3139,7 @@ namespace SpaceBurst
                 ShowHelpHints = source.ShowHelpHints,
                 TutorialCompleted = source.TutorialCompleted,
                 AutoUpgradeDraft = source.AutoUpgradeDraft,
+                LastSelectedDifficulty = source.LastSelectedDifficulty,
                 DisplayMode = source.DisplayMode,
                 UiScalePercent = source.UiScalePercent,
                 TouchControlsOpacity = source.TouchControlsOpacity,
@@ -2968,6 +3166,7 @@ namespace SpaceBurst
             target.ShowHelpHints = source.ShowHelpHints;
             target.TutorialCompleted = source.TutorialCompleted;
             target.AutoUpgradeDraft = source.AutoUpgradeDraft;
+            target.LastSelectedDifficulty = source.LastSelectedDifficulty;
             target.DisplayMode = source.DisplayMode;
             target.UiScalePercent = source.UiScalePercent;
             target.TouchControlsOpacity = source.TouchControlsOpacity;
@@ -3313,7 +3512,6 @@ namespace SpaceBurst
             return new[]
             {
                 new OptionRowDefinition("UI SCALE", string.Concat(options.UiScalePercent, "%"), "SETS MENU SIZE AND GENERAL UI READABILITY.", OptionRowControlKind.Slider),
-                new OptionRowDefinition("FONT THEME", options.FontTheme.ToString().ToUpperInvariant(), "SWAPS BETWEEN THE COMPACT AND READABLE PIXEL FONT SETS.", OptionRowControlKind.Cycle),
                 new OptionRowDefinition("VISUAL PRESET", options.VisualPreset.ToString().ToUpperInvariant(), "CHANGES OVERALL EFFECT DENSITY, BLOOM, AND POST PROCESSING STYLE.", OptionRowControlKind.Cycle),
                 new OptionRowDefinition("BLOOM", options.EnableBloom ? "ON" : "OFF", "ADDS GLOW AROUND BRIGHT SHOTS, EXPLOSIONS, AND HIGHLIGHTS.", OptionRowControlKind.Toggle),
                 new OptionRowDefinition("SHOCKWAVES", options.EnableShockwaves ? "ON" : "OFF", "ENABLES RIPPLE AND IMPACT WAVE EFFECTS ON HEAVIER HITS.", OptionRowControlKind.Toggle),
@@ -3343,7 +3541,6 @@ namespace SpaceBurst
             {
                 new OptionRowDefinition("DISPLAY MODE", options.DisplayMode == DesktopDisplayMode.BorderlessFullscreen ? "BORDERLESS FULLSCREEN" : "WINDOWED", "SWITCHES BETWEEN WINDOWED PLAY AND BORDERLESS FULLSCREEN.", OptionRowControlKind.Cycle),
                 new OptionRowDefinition("UI SCALE", string.Concat(options.UiScalePercent, "%"), "SETS MENU SIZE AND GENERAL UI READABILITY.", OptionRowControlKind.Slider),
-                new OptionRowDefinition("FONT THEME", options.FontTheme.ToString().ToUpperInvariant(), "SWAPS BETWEEN THE COMPACT AND READABLE PIXEL FONT SETS.", OptionRowControlKind.Cycle),
                 new OptionRowDefinition("VISUAL PRESET", options.VisualPreset.ToString().ToUpperInvariant(), "CHANGES OVERALL EFFECT DENSITY, BLOOM, AND POST PROCESSING STYLE.", OptionRowControlKind.Cycle),
                 new OptionRowDefinition("BLOOM", options.EnableBloom ? "ON" : "OFF", "ADDS GLOW AROUND BRIGHT SHOTS, EXPLOSIONS, AND HIGHLIGHTS.", OptionRowControlKind.Toggle),
                 new OptionRowDefinition("SHOCKWAVES", options.EnableShockwaves ? "ON" : "OFF", "ENABLES RIPPLE AND IMPACT WAVE EFFECTS ON HEAVIER HITS.", OptionRowControlKind.Toggle),
@@ -3384,15 +3581,15 @@ namespace SpaceBurst
             {
                 0 => (options.UiScalePercent - 70f) / 150f,
 #if ANDROID
+                7 => options.MasterVolume,
+                8 => options.MusicVolume,
+                9 => options.SfxVolume,
+                10 => (options.TouchControlsOpacity - 20f) / 80f,
+#else
+                _ when optionsSection == OptionMenuSection.ThreeDGameplay => 0f,
                 8 => options.MasterVolume,
                 9 => options.MusicVolume,
                 10 => options.SfxVolume,
-                11 => (options.TouchControlsOpacity - 20f) / 80f,
-#else
-                _ when optionsSection == OptionMenuSection.ThreeDGameplay => 0f,
-                9 => options.MasterVolume,
-                10 => options.MusicVolume,
-                11 => options.SfxVolume,
 #endif
                 _ => 0f,
             };
@@ -3410,6 +3607,19 @@ namespace SpaceBurst
                     break;
                 }
 #if ANDROID
+                case 7:
+                    options.MasterVolume = MathF.Round(clamped * 20f) / 20f;
+                    break;
+                case 8:
+                    options.MusicVolume = MathF.Round(clamped * 20f) / 20f;
+                    break;
+                case 9:
+                    options.SfxVolume = MathF.Round(clamped * 20f) / 20f;
+                    break;
+                case 10:
+                    options.TouchControlsOpacity = UiScaleHelper.ClampTouchControlsOpacity(20 + (int)MathF.Round(clamped * 80f));
+                    break;
+#else
                 case 8:
                     options.MasterVolume = MathF.Round(clamped * 20f) / 20f;
                     break;
@@ -3417,19 +3627,6 @@ namespace SpaceBurst
                     options.MusicVolume = MathF.Round(clamped * 20f) / 20f;
                     break;
                 case 10:
-                    options.SfxVolume = MathF.Round(clamped * 20f) / 20f;
-                    break;
-                case 11:
-                    options.TouchControlsOpacity = UiScaleHelper.ClampTouchControlsOpacity(20 + (int)MathF.Round(clamped * 80f));
-                    break;
-#else
-                case 9:
-                    options.MasterVolume = MathF.Round(clamped * 20f) / 20f;
-                    break;
-                case 10:
-                    options.MusicVolume = MathF.Round(clamped * 20f) / 20f;
-                    break;
-                case 11:
                     options.SfxVolume = MathF.Round(clamped * 20f) / 20f;
                     break;
 #endif
@@ -3471,43 +3668,40 @@ namespace SpaceBurst
                     options.UiScalePercent = AdjustOptionPercent(options.UiScalePercent, delta, UiScaleOptions);
                     break;
                 case 1:
-                    options.FontTheme = options.FontTheme == FontTheme.Compact ? FontTheme.Readable : FontTheme.Compact;
-                    break;
-                case 2:
                     options.VisualPreset = (VisualPreset)(((int)options.VisualPreset + 3 + delta) % 3);
                     break;
-                case 3:
+                case 2:
                     options.EnableBloom = !options.EnableBloom;
                     break;
-                case 4:
+                case 3:
                     options.EnableShockwaves = !options.EnableShockwaves;
                     break;
-                case 5:
+                case 4:
                     options.EnableNeonOutlines = !options.EnableNeonOutlines;
                     break;
-                case 6:
+                case 5:
                     options.ScreenShakeStrength = (ScreenShakeStrength)(((int)options.ScreenShakeStrength + 3 + delta) % 3);
                     break;
-                case 7:
+                case 6:
                     pendingAudioQualityPreset = CycleAudioQuality(delta, pendingAudioQualityPreset);
                     audioQualityDialogOpen = true;
                     break;
-                case 8:
+                case 7:
                     options.MasterVolume = AdjustVolume(options.MasterVolume, delta);
                     break;
-                case 9:
+                case 8:
                     options.MusicVolume = AdjustVolume(options.MusicVolume, delta);
                     break;
-                case 10:
+                case 9:
                     options.SfxVolume = AdjustVolume(options.SfxVolume, delta);
                     break;
-                case 11:
+                case 10:
                     options.TouchControlsOpacity = UiScaleHelper.ClampTouchControlsOpacity(options.TouchControlsOpacity + delta * 5);
                     break;
-                case 12:
+                case 11:
                     options.AutoUpgradeDraft = !options.AutoUpgradeDraft;
                     break;
-                case 13:
+                case 12:
                     options.ShowHelpHints = !options.ShowHelpHints;
                     break;
 #else
@@ -3521,43 +3715,40 @@ namespace SpaceBurst
                     options.UiScalePercent = AdjustOptionPercent(options.UiScalePercent, delta, UiScaleOptions);
                     break;
                 case 2:
-                    options.FontTheme = options.FontTheme == FontTheme.Compact ? FontTheme.Readable : FontTheme.Compact;
-                    break;
-                case 3:
                     options.VisualPreset = (VisualPreset)(((int)options.VisualPreset + 3 + delta) % 3);
                     break;
-                case 4:
+                case 3:
                     options.EnableBloom = !options.EnableBloom;
                     break;
-                case 5:
+                case 4:
                     options.EnableShockwaves = !options.EnableShockwaves;
                     break;
-                case 6:
+                case 5:
                     options.EnableNeonOutlines = !options.EnableNeonOutlines;
                     break;
-                case 7:
+                case 6:
                     options.ScreenShakeStrength = (ScreenShakeStrength)(((int)options.ScreenShakeStrength + 3 + delta) % 3);
                     break;
-                case 8:
+                case 7:
                     pendingAudioQualityPreset = CycleAudioQuality(delta, pendingAudioQualityPreset);
                     audioQualityDialogOpen = true;
                     break;
-                case 9:
+                case 8:
                     options.MasterVolume = AdjustVolume(options.MasterVolume, delta);
                     break;
-                case 10:
+                case 9:
                     options.MusicVolume = AdjustVolume(options.MusicVolume, delta);
                     break;
-                case 11:
+                case 10:
                     options.SfxVolume = AdjustVolume(options.SfxVolume, delta);
                     break;
-                case 12:
+                case 11:
                     options.AutoUpgradeDraft = !options.AutoUpgradeDraft;
                     break;
-                case 13:
+                case 12:
                     options.ShowHelpHints = !options.ShowHelpHints;
                     break;
-                case 14:
+                case 13:
                     optionsSection = OptionMenuSection.ThreeDGameplay;
                     optionsSelection = 0;
                     optionsScrollOffset = 0f;
@@ -3893,6 +4084,80 @@ namespace SpaceBurst
 #endif
         }
 
+        private void DrawDifficultySelect(SpriteBatch spriteBatch, Texture2D pixel)
+        {
+            spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), Color.Black * 0.58f);
+
+            Rectangle panel = new Rectangle(Game1.VirtualWidth / 2 - UiPx(430), UiPx(92), UiPx(860), Game1.VirtualHeight - UiPx(184));
+            Rectangle summaryBounds = new Rectangle(Game1.VirtualWidth / 2 - UiPx(12), UiPx(214), UiPx(360), UiPx(278));
+            DrawPanel(spriteBatch, pixel, panel, Color.Black * 0.82f, Color.White * 0.18f);
+            DrawCenteredText(spriteBatch, pixel, "SELECT DIFFICULTY", panel.Center.X, panel.Y + UiPx(22), Color.White, 2.35f);
+            DrawCenteredText(
+                spriteBatch,
+                pixel,
+                difficultySelectSkipTutorial ? "START WITHOUT TUTORIAL" : options.TutorialCompleted ? "START CAMPAIGN" : "NEW RUN STARTS WITH THE TUTORIAL PROLOGUE",
+                panel.Center.X,
+                panel.Y + UiPx(58),
+                Color.White * 0.7f,
+                1.05f);
+
+            List<UiButton> buttons = GetDifficultyButtons();
+            for (int i = 0; i < buttons.Count; i++)
+                DrawButton(spriteBatch, pixel, buttons[i], i == difficultySelection);
+
+            DrawPanel(spriteBatch, pixel, summaryBounds, Color.Black * 0.3f, Color.White * 0.14f);
+            if (difficultySelection < DifficultyChoices.Length)
+            {
+                GameDifficulty difficulty = DifficultyChoices[difficultySelection];
+                DrawCenteredText(spriteBatch, pixel, DifficultyTuning.GetLabel(difficulty), summaryBounds.Center.X, summaryBounds.Y + UiPx(16), Color.Orange, 1.55f);
+                Vector2 summarySize = BitmapFontRenderer.Measure(GetDifficultySummaryText(difficulty), 1.08f);
+                BitmapFontRenderer.Draw(
+                    spriteBatch,
+                    pixel,
+                    GetDifficultySummaryText(difficulty),
+                    new Vector2(summaryBounds.Center.X - summarySize.X / 2f, summaryBounds.Y + UiPx(54)),
+                    Color.White * 0.82f,
+                    1.08f);
+            }
+            else
+            {
+                DrawCenteredText(spriteBatch, pixel, "RETURN TO TITLE", summaryBounds.Center.X, summaryBounds.Y + UiPx(18), Color.White, 1.4f);
+                DrawCenteredText(spriteBatch, pixel, "CANCELS THE CURRENT START FLOW WITHOUT CHANGING YOUR LAST PICK.", summaryBounds.Center.X, summaryBounds.Y + UiPx(62), Color.White * 0.72f, 0.95f);
+            }
+
+#if ANDROID
+            DrawCenteredText(spriteBatch, pixel, "TAP A DIFFICULTY TO BEGIN  ANDROID BACK RETURNS", panel.Center.X, panel.Bottom - UiPx(38), Color.White * 0.7f, 1.02f);
+#else
+            DrawCenteredText(spriteBatch, pixel, "ENTER STARTS  ESC RETURNS  LAST PICK STAYS PRESELECTED", panel.Center.X, panel.Bottom - UiPx(38), Color.White * 0.7f, 1.02f);
+#endif
+        }
+
+        private string GetDifficultySummaryText(GameDifficulty difficulty)
+        {
+            DifficultyProfile profile = DifficultyTuning.GetProfile(difficulty);
+            StageDefinition openingStage = repository.GetStage(1);
+            int openingLives = Math.Max(1, (openingStage?.StartingLives ?? 3) + profile.LivesDelta);
+            int openingShips = Math.Max(1, (openingStage?.ShipsPerLife ?? 2) + profile.ShipsDelta);
+            string retries = string.Concat("OPENING RETRIES  ", openingLives.ToString(), " LIVES  /  ", openingShips.ToString(), " SHIPS");
+            string waves = difficulty switch
+            {
+                GameDifficulty.Easy => "WAVES  CURRENT BASELINE PRESSURE AND GENEROUS CORE FLOW",
+                GameDifficulty.Normal => "WAVES  MODERATE AGGRESSION RISE WITH LIGHTLY REDUCED DROPS",
+                GameDifficulty.Hard => "WAVES  CLEARLY FASTER, TOUGHER, AND LESS GENEROUS",
+                GameDifficulty.Insane => "WAVES  HIGH THREAT WITH VERY LITTLE RECOVERY ROOM",
+                _ => "WAVES  EXTREME PRESSURE WITH SLOWEST POWER GROWTH",
+            };
+            string bosses = difficulty switch
+            {
+                GameDifficulty.Easy => "BOSSES  KEEP A THREAT FLOOR ABOVE REGULAR WAVES",
+                GameDifficulty.Normal => "BOSSES  HIT HARDER AND SCALE ABOVE PLAYER POWER",
+                GameDifficulty.Hard => "BOSSES  HIGHER FIRE DENSITY WITH HEAVIER INTEGRITY",
+                GameDifficulty.Insane => "BOSSES  BRUTAL PHASE PRESSURE AND LITTLE MERCY",
+                _ => "BOSSES  ONE HIT COSTS THE CURRENT SHIP",
+            };
+            return string.Concat(retries, "\n", waves, "\n", bosses);
+        }
+
         private void DrawSabinoIntro(SpriteBatch spriteBatch, Texture2D pixel)
         {
             Rectangle logoBounds = GetTitleLogoBounds();
@@ -4073,11 +4338,11 @@ namespace SpaceBurst
                 Rectangle rowBounds = new Rectangle((Game1.VirtualWidth - UiPx(920)) / 2, UiPx(180) + i * UiPx(88), UiPx(920), UiPx(68));
                 DrawPanel(spriteBatch, pixel, rowBounds, i == slotSelection ? Color.White * 0.12f : Color.White * 0.05f, i == slotSelection ? Color.Orange : Color.White * 0.2f);
                 string line = summary.HasData
-                    ? string.Concat("SLOT ", (i + 1).ToString(), "  STAGE ", summary.StageNumber.ToString("00"), "  SCORE ", summary.Score.ToString(), "  ", summary.ActiveStyle)
+                    ? string.Concat("SLOT ", (i + 1).ToString(), "  ", DifficultyTuning.GetLabel(summary.Difficulty), "  STAGE ", summary.StageNumber.ToString("00"), "  SCORE ", summary.Score.ToString(), "  ", summary.ActiveStyle)
                     : string.Concat("SLOT ", (i + 1).ToString(), "  EMPTY");
                 BitmapFontRenderer.Draw(spriteBatch, pixel, line, new Vector2(rowBounds.X + UiPx(16), rowBounds.Y + UiPx(10)), Color.White, 1.5f);
                 if (summary.HasData && !string.IsNullOrWhiteSpace(summary.SavedAtUtc))
-                    BitmapFontRenderer.Draw(spriteBatch, pixel, summary.SavedAtUtc, new Vector2(rowBounds.X + UiPx(16), rowBounds.Y + UiPx(38)), Color.White * 0.65f, 1.1f);
+                    BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat(summary.StageName?.ToUpperInvariant() ?? string.Empty, "  ", summary.SavedAtUtc), new Vector2(rowBounds.X + UiPx(16), rowBounds.Y + UiPx(38)), Color.White * 0.65f, 1.1f);
             }
 
             Rectangle backBounds = new Rectangle((Game1.VirtualWidth - UiPx(920)) / 2, UiPx(180) + 3 * UiPx(88), UiPx(920), UiPx(58));
@@ -4110,11 +4375,11 @@ namespace SpaceBurst
 #if ANDROID
                     DrawHelpPage(spriteBatch, pixel, "CONTROLS\nLEFT PAD MOVE  RIGHT PAD AIM AND FIRE\nTOP WEAPON HUD SWAPS STYLE  STAGE HEADER PAUSES\nHOLD THE TOP RIGHT REWIND BUTTON TO REWIND\nUSE THE ARROWS BELOW TO BROWSE HELP", 186f);
 #else
-                    DrawHelpPage(spriteBatch, pixel, "CONTROLS\nWASD MOVE  ARROWS AIM  SPACE FIRE\nQ E SWITCH STYLE  R REWIND  ESC PAUSE  F1 HELP\nPRESS ENTER HERE TO REPLAY THE TUTORIAL", 186f);
+                    DrawHelpPage(spriteBatch, pixel, "CONTROLS\nWASD MOVE  ARROWS AIM  SPACE FIRE\nQ E SWITCH STYLE  R REWIND  ESC PAUSE  F1 HELP\nA S D PICK DRAFT CARDS  ENTER REPLAYS TUTORIAL HERE", 186f);
 #endif
                     break;
                 case 1:
-                    DrawHelpPage(spriteBatch, pixel, "POWER CORES\nEACH P CORE MATCHES A WEAPON STYLE\nMATCH YOUR ACTIVE STYLE TO BOOST IT IMMEDIATELY UP TO LEVEL 3\nOTHER CORES STORE STYLE SPECIFIC CHARGES FOR TRANSITION DRAFTS\nIF TIME RUNS OUT THE HIGHLIGHTED CARD IS AUTO PICKED", 186f);
+                    DrawHelpPage(spriteBatch, pixel, "POWER CORES\nEACH P CORE MATCHES A WEAPON STYLE\nMATCH YOUR ACTIVE STYLE TO BOOST IT IMMEDIATELY UP TO LEVEL 3\nOTHER CORES STORE STYLE SPECIFIC CHARGES FOR TRANSITION DRAFTS\nAUTO DRAFT RANDOMIZES AT ZERO  A S D PICK LEFT MID RIGHT", 186f);
                     DrawWeaponIcons(spriteBatch, pixel, 410f, 0, 5);
                     break;
                 case 2:
@@ -4256,7 +4521,7 @@ namespace SpaceBurst
 
             BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("LIVES ", PlayerStatus.Lives.ToString()), new Vector2(livesBounds.X + 12f, livesBounds.Y + 12f), Color.White, 2f);
             BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("SHIPS ", PlayerStatus.Ships.ToString()), new Vector2(livesBounds.X + 12f, livesBounds.Y + 38f), Color.White, 2f);
-            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("SAFE ", Math.Max(0f, Player1.Instance.HullRatio * 100f).ToString("0"), "%"), new Vector2(livesBounds.X + 12f, livesBounds.Bottom - 22f), Color.White * 0.55f, 1.15f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("HULL ", Math.Max(0f, Player1.Instance.HullRatio * 100f).ToString("0"), "%"), new Vector2(livesBounds.X + 12f, livesBounds.Bottom - 22f), Color.White * 0.55f, 1.15f);
 
             DrawStyleHud(spriteBatch, pixel, activeBounds);
             DrawOwnedStyleHud(spriteBatch, pixel, ownedBounds, inventory);
@@ -4270,6 +4535,7 @@ namespace SpaceBurst
                 : (!string.IsNullOrEmpty(activeEventWarning) ? activeEventWarning : (state == GameFlowState.Tutorial ? tutorialStep.ToString().ToUpperInvariant() : currentStage?.Name?.ToUpperInvariant() ?? "RUN"));
             DrawCenteredText(spriteBatch, pixel, stageSubLabel, stageBounds.Center.X, stageBounds.Y + 46f, !string.IsNullOrEmpty(activeEventWarning) ? Color.Orange : Color.White * 0.7f, GetFittedScale(stageSubLabel, stageBounds.Width - 20f, 1.08f, 0.82f));
             string presentationLabel = string.Concat(
+                DifficultyTuning.GetLabel(PlayerStatus.RunProgress.Difficulty), "  ",
                 presentationTier.ToString().ToUpperInvariant(),
                 CanUseChaseView()
                     ? (viewMode == ViewMode.Chase3D ? "  V SIDE" : "  V CHASE")
@@ -4508,11 +4774,11 @@ namespace SpaceBurst
             DrawCenteredText(spriteBatch, pixel, options.AutoUpgradeDraft ? string.Concat("AUTO PICKS RANDOMLY IN ", Math.Max(0f, draftTimer).ToString("0.0"), "s") : string.Concat("CHOOSE IN ", Math.Max(0f, draftTimer).ToString("0.0"), "s"), Game1.ScreenSize.X / 2f, 146f, Color.White * 0.72f, 1.18f);
 
             int cardWidth = 300;
-            int cardHeight = 220;
+            int cardHeight = 246;
             int gap = 24;
             int totalWidth = cardWidth * 3 + gap * 2;
             int startX = (Game1.VirtualWidth - totalWidth) / 2;
-            int y = 214;
+            int y = 198;
 
             for (int i = 0; i < draftCards.Count; i++)
             {
@@ -4520,26 +4786,40 @@ namespace SpaceBurst
                 Rectangle bounds = new Rectangle(startX + i * (cardWidth + gap), y, cardWidth, cardHeight);
                 Color accent = ColorUtil.ParseHex(card.AccentColor, Color.Orange);
                 DrawPanel(spriteBatch, pixel, bounds, i == draftSelection ? accent * 0.16f : Color.Black * 0.45f, i == draftSelection ? accent : Color.White * 0.2f);
-                BitmapFontRenderer.Draw(spriteBatch, pixel, card.Title, new Vector2(bounds.X + 18f, bounds.Y + 16f), Color.White, 1.45f);
-                BitmapFontRenderer.Draw(spriteBatch, pixel, card.Description, new Vector2(bounds.X + 18f, bounds.Y + 52f), Color.White * 0.8f, 1.05f);
+                spriteBatch.Draw(pixel, new Rectangle(bounds.X, bounds.Y, bounds.Width, 10), accent * 0.82f);
+                if (!string.IsNullOrWhiteSpace(card.HotkeyLabel))
+                {
+                    Rectangle hotkeyBounds = new Rectangle(bounds.Right - 54, bounds.Y + 14, 34, 20);
+                    DrawPanel(spriteBatch, pixel, hotkeyBounds, accent * 0.16f, accent * 0.8f);
+                    DrawCenteredText(spriteBatch, pixel, card.HotkeyLabel, hotkeyBounds.Center.X, hotkeyBounds.Y + 2f, Color.White, 0.96f);
+                }
+
+                BitmapFontRenderer.Draw(spriteBatch, pixel, card.Title, new Vector2(bounds.X + 18f, bounds.Y + 22f), Color.White, 1.38f);
+                BitmapFontRenderer.Draw(spriteBatch, pixel, card.Subtitle, new Vector2(bounds.X + 18f, bounds.Y + 52f), accent * 0.92f, 0.95f);
+                if (!string.IsNullOrWhiteSpace(card.DeltaText))
+                    BitmapFontRenderer.Draw(spriteBatch, pixel, card.DeltaText, new Vector2(bounds.X + 18f, bounds.Y + 78f), Color.White, 1.06f);
+                BitmapFontRenderer.Draw(spriteBatch, pixel, card.Description, new Vector2(bounds.X + 18f, bounds.Y + 106f), Color.White * 0.82f, 0.94f);
 
                 if (card.Type == UpgradeCardType.WeaponSurge)
                 {
                     WeaponStyleDefinition style = WeaponCatalog.GetStyle(card.StyleId);
-                    PixelArtRenderer.DrawRows(spriteBatch, pixel, style.IconRows, new Vector2(bounds.Center.X, bounds.Bottom - 56f), 5f, ColorUtil.ParseHex(style.PrimaryColor, Color.White), ColorUtil.ParseHex(style.SecondaryColor, Color.LightBlue), accent, true);
+                    PixelArtRenderer.DrawRows(spriteBatch, pixel, style.IconRows, new Vector2(bounds.Center.X, bounds.Bottom - 64f), 6f, ColorUtil.ParseHex(style.PrimaryColor, Color.White), ColorUtil.ParseHex(style.SecondaryColor, Color.LightBlue), accent, true);
+                    BitmapFontRenderer.DrawCentered(spriteBatch, pixel, card.PreviewText, new Vector2(bounds.Center.X, bounds.Bottom - 30f), Color.White * 0.8f, 0.95f);
                 }
                 else
                 {
-                    spriteBatch.Draw(pixel, new Rectangle(bounds.X + 18, bounds.Bottom - 58, bounds.Width - 36, 14), accent * 0.18f);
-                    spriteBatch.Draw(pixel, new Rectangle(bounds.X + 18, bounds.Bottom - 58, Math.Max(10, (bounds.Width - 36) * (i == draftSelection ? 3 : 2) / 5), 14), accent * 0.7f);
+                    Rectangle previewPanel = new Rectangle(bounds.X + 18, bounds.Bottom - 72, bounds.Width - 36, 38);
+                    DrawPanel(spriteBatch, pixel, previewPanel, accent * 0.15f, accent * 0.55f);
+                    DrawCenteredText(spriteBatch, pixel, card.PreviewText, previewPanel.Center.X, previewPanel.Y + 6f, Color.White, 1.08f);
+                    BitmapFontRenderer.DrawCentered(spriteBatch, pixel, card.BadgeText, new Vector2(previewPanel.Center.X, previewPanel.Bottom - 12f), Color.White * 0.6f, 0.78f);
                 }
             }
 
-            DrawCenteredText(spriteBatch, pixel, string.Concat("STORED CHARGES ", PlayerStatus.RunProgress.StoredUpgradeCharges.ToString()), Game1.ScreenSize.X / 2f, 480f, Color.White * 0.75f, 1.15f);
+            DrawCenteredText(spriteBatch, pixel, string.Concat("STORED CHARGES ", PlayerStatus.RunProgress.StoredUpgradeCharges.ToString()), Game1.ScreenSize.X / 2f, 476f, Color.White * 0.75f, 1.15f);
 #if ANDROID
-            DrawCenteredText(spriteBatch, pixel, "TAP A CARD TO PICK IT  AUTO DRAFT CHOOSES RANDOMLY", Game1.ScreenSize.X / 2f, 520f, Color.White * 0.62f, 1.05f);
+            DrawCenteredText(spriteBatch, pixel, "TAP A CARD TO PICK IT  AUTO DRAFT ROLLS RANDOMLY AT 0", Game1.ScreenSize.X / 2f, 520f, Color.White * 0.62f, 1.05f);
 #else
-            DrawCenteredText(spriteBatch, pixel, "LEFT RIGHT SELECT  ENTER PICK  ESC AUTO PICK", Game1.ScreenSize.X / 2f, 520f, Color.White * 0.62f, 1.05f);
+            DrawCenteredText(spriteBatch, pixel, "A / S / D PICK LEFT / MID / RIGHT   ARROWS + ENTER STILL WORK", Game1.ScreenSize.X / 2f, 520f, Color.White * 0.62f, 1.05f);
 #endif
         }
 
@@ -4591,7 +4871,12 @@ namespace SpaceBurst
                 case TutorialStep.UpgradeDraft:
                     stepIndex = 6;
                     title = "UPGRADE DRAFT";
-                    body = "PICK A CARD. TRANSITIONS SPEND STORED CHARGES THIS WAY BETWEEN STAGES.";
+                    body =
+#if ANDROID
+                        "PICK A CARD. TRANSITIONS SPEND STORED CHARGES THIS WAY BETWEEN STAGES.";
+#else
+                        "PICK A CARD. PRESS A / S / D TO TAKE LEFT / MID / RIGHT INSTANTLY.";
+#endif
                     break;
                 case TutorialStep.SwitchStyle:
                     stepIndex = 7;
@@ -4693,6 +4978,7 @@ namespace SpaceBurst
             {
                 CurrentStageNumber = currentStageNumber,
                 CurrentSectionIndex = currentSectionIndex,
+                Difficulty = PlayerStatus.RunProgress.Difficulty,
                 ViewMode = viewMode,
                 PresentationTier = presentationTier,
                 State = state == GameFlowState.SaveSlots || state == GameFlowState.LoadSlots || state == GameFlowState.Options ? GameFlowState.Paused : state,
@@ -4748,6 +5034,7 @@ namespace SpaceBurst
                     HasData = true,
                     StageNumber = currentStageNumber,
                     StageName = currentStage?.Name ?? string.Empty,
+                    Difficulty = PlayerStatus.RunProgress.Difficulty,
                     Score = PlayerStatus.Score,
                     SavedAtUtc = System.DateTime.UtcNow.ToString("u"),
                     ActiveStyle = PlayerStatus.RunProgress.Weapons.ActiveStyle.ToString().ToUpperInvariant(),
@@ -4810,6 +5097,9 @@ namespace SpaceBurst
 
             gameplayRandom.Restore(save.GameplayRngState == 0 ? 1u : save.GameplayRngState);
             PlayerStatus.RestoreSnapshot(save.PlayerStatus);
+            options.LastSelectedDifficulty = save.Difficulty;
+            if (!fromRewind)
+                PersistentStorage.SaveOptions(options);
             if (invalidateMedals)
                 PlayerStatus.RunProgress.MarkMedalIneligible();
 

@@ -68,7 +68,7 @@ namespace SpaceBurst
         {
             this.definition = definition;
             phaseThresholds = new List<float>(definition.PhaseThresholds ?? new List<float> { 0.75f, 0.5f, 0.25f });
-            bossFireCooldown = Math.Max(0.45f, archetype.FireIntervalSeconds);
+            bossFireCooldown = Math.Max(0.3f, archetype.FireIntervalSeconds * GetFireIntervalScale());
             depthAmplitude = Math.Max(depthAmplitude, 42f + definition.PresentationScale * 18f);
         }
 
@@ -185,7 +185,7 @@ namespace SpaceBurst
             if (bossFireCooldown > 0f)
                 return;
 
-            bossFireCooldown = Math.Max(0.35f, archetype.FireIntervalSeconds - currentPhase * 0.08f);
+            bossFireCooldown = Math.Max(0.25f, (archetype.FireIntervalSeconds - currentPhase * 0.08f) * GetFireIntervalScale());
 
             switch (definition.FirePattern)
             {
