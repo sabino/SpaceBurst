@@ -906,6 +906,7 @@ namespace SpaceBurst
             Rectangle[] optionBounds = GetOptionRowBounds(viewport, rows.Length);
             (Rectangle discardBounds, Rectangle applyBounds) = GetOptionActionBounds();
             Vector2 pointer = Input.PointerPosition;
+            Vector2 releasePointer = Input.UiPointerReleasePosition;
 
             if (audioQualityApplyPending)
             {
@@ -1026,55 +1027,61 @@ namespace SpaceBurst
                 int capturedControlId = Input.CapturedUiControlId;
                 bool activateOnRelease = !Input.IsUiPointerDragging();
 
-                if (capturedControlId == PointerControlOptionsDiscard && discardBounds.Contains(pointer) && activateOnRelease)
+                if (UiPointerInteraction.DidCapturedControlActivate(capturedControlId, PointerControlOptionsDiscard, discardBounds, true, !activateOnRelease, pointer, releasePointer))
                 {
                     Input.ClearUiControlCapture();
                     DiscardOptionsAndClose();
                     return;
                 }
 
-                if (capturedControlId == PointerControlOptionsApply && applyBounds.Contains(pointer) && activateOnRelease)
+                if (UiPointerInteraction.DidCapturedControlActivate(capturedControlId, PointerControlOptionsApply, applyBounds, true, !activateOnRelease, pointer, releasePointer))
                 {
                     Input.ClearUiControlCapture();
                     ConfirmOptionsAndClose();
                     return;
                 }
 
-                if (capturedControlId == PointerControlOptionsScrollbarUp && GetOptionScrollbarButtonBounds(viewport, true).Contains(pointer) && activateOnRelease)
+                if (UiPointerInteraction.DidCapturedControlActivate(capturedControlId, PointerControlOptionsScrollbarUp, GetOptionScrollbarButtonBounds(viewport, true), true, !activateOnRelease, pointer, releasePointer))
                 {
                     optionsScrollOffset -= UiPx(96);
                     ClampOptionsScroll();
                 }
-                else if (capturedControlId == PointerControlOptionsScrollbarDown && GetOptionScrollbarButtonBounds(viewport, false).Contains(pointer) && activateOnRelease)
+                else if (UiPointerInteraction.DidCapturedControlActivate(capturedControlId, PointerControlOptionsScrollbarDown, GetOptionScrollbarButtonBounds(viewport, false), true, !activateOnRelease, pointer, releasePointer))
                 {
                     optionsScrollOffset += UiPx(96);
                     ClampOptionsScroll();
                 }
-                else if (capturedControlId == PointerControlOptionsScrollbarTrack && GetOptionScrollbarTrackBounds(viewport).Contains(pointer) && activateOnRelease)
+                else if (UiPointerInteraction.DidCapturedControlActivate(capturedControlId, PointerControlOptionsScrollbarTrack, GetOptionScrollbarTrackBounds(viewport), true, !activateOnRelease, pointer, releasePointer))
                 {
                     Rectangle thumbBounds = GetOptionScrollbarThumbBounds(viewport);
-                    optionsScrollOffset += pointer.Y < thumbBounds.Y ? -viewport.Height * 0.7f : viewport.Height * 0.7f;
+                    optionsScrollOffset += releasePointer.Y < thumbBounds.Y ? -viewport.Height * 0.7f : viewport.Height * 0.7f;
                     ClampOptionsScroll();
                 }
                 else if (IsOptionStepperLeftControlId(capturedControlId))
                 {
                     int index = DecodeIndexedControlId(capturedControlId, PointerControlOptionStepperLeftBase);
-                    if (index >= 0 && index < optionBounds.Length && GetOptionStepperLeftBounds(optionBounds[index]).Contains(pointer) && activateOnRelease)
+                    if (index >= 0
+                        && index < optionBounds.Length
+                        && UiPointerInteraction.DidCapturedControlActivate(capturedControlId, PointerControlOptionStepperLeftBase + index, GetOptionStepperLeftBounds(optionBounds[index]), true, !activateOnRelease, pointer, releasePointer))
                         AdjustOptionByStep(index, -1);
                 }
                 else if (IsOptionStepperRightControlId(capturedControlId))
                 {
                     int index = DecodeIndexedControlId(capturedControlId, PointerControlOptionStepperRightBase);
-                    if (index >= 0 && index < optionBounds.Length && GetOptionStepperRightBounds(optionBounds[index]).Contains(pointer) && activateOnRelease)
+                    if (index >= 0
+                        && index < optionBounds.Length
+                        && UiPointerInteraction.DidCapturedControlActivate(capturedControlId, PointerControlOptionStepperRightBase + index, GetOptionStepperRightBounds(optionBounds[index]), true, !activateOnRelease, pointer, releasePointer))
                         AdjustOptionByStep(index, 1);
                 }
                 else if (IsOptionRowControlId(capturedControlId))
                 {
                     int index = DecodeIndexedControlId(capturedControlId, PointerControlOptionRowBase);
-                    if (index >= 0 && index < optionBounds.Length && optionBounds[index].Contains(pointer) && activateOnRelease)
+                    if (index >= 0
+                        && index < optionBounds.Length
+                        && UiPointerInteraction.DidCapturedControlActivate(capturedControlId, PointerControlOptionRowBase + index, optionBounds[index], true, !activateOnRelease, pointer, releasePointer))
                     {
                         optionsSelection = index;
-                        ActivateOptionFromPointer(index, optionBounds[index], pointer);
+                        ActivateOptionFromPointer(index, optionBounds[index], releasePointer);
                     }
                 }
 
@@ -1129,6 +1136,7 @@ namespace SpaceBurst
         {
             (Rectangle leftBounds, Rectangle rightBounds, Rectangle tutorialBounds) = GetHelpActionBounds();
             Vector2 pointer = Input.PointerPosition;
+            Vector2 releasePointer = Input.UiPointerReleasePosition;
             if (Input.WasUiPointerPressed())
             {
                 if (leftBounds.Contains(pointer))
@@ -1144,11 +1152,12 @@ namespace SpaceBurst
             if (Input.WasUiPointerReleased())
             {
                 bool activateOnRelease = !Input.IsUiPointerDragging();
-                if (Input.IsUiControlCaptured(PointerControlHelpLeft) && leftBounds.Contains(pointer) && activateOnRelease)
+                if (UiPointerInteraction.DidCapturedControlActivate(Input.CapturedUiControlId, PointerControlHelpLeft, leftBounds, true, !activateOnRelease, pointer, releasePointer))
                     helpPageIndex = (helpPageIndex + HelpPageCount - 1) % HelpPageCount;
-                else if (Input.IsUiControlCaptured(PointerControlHelpRight) && rightBounds.Contains(pointer) && activateOnRelease)
+                else if (UiPointerInteraction.DidCapturedControlActivate(Input.CapturedUiControlId, PointerControlHelpRight, rightBounds, true, !activateOnRelease, pointer, releasePointer))
                     helpPageIndex = (helpPageIndex + 1) % HelpPageCount;
-                else if (Input.IsUiControlCaptured(PointerControlHelpTutorial) && helpPageIndex == 0 && tutorialBounds.Contains(pointer) && activateOnRelease)
+                else if (helpPageIndex == 0
+                    && UiPointerInteraction.DidCapturedControlActivate(Input.CapturedUiControlId, PointerControlHelpTutorial, tutorialBounds, true, !activateOnRelease, pointer, releasePointer))
                 {
                     Input.ClearUiControlCapture();
                     StartTutorial(true, helpReturnState);
@@ -3066,6 +3075,7 @@ namespace SpaceBurst
         private bool HandlePointerSelectionCore(IReadOnlyList<Rectangle> bounds, ref int selection, int controlIdBase)
         {
             Vector2 pointer = Input.PointerPosition;
+            Vector2 releasePointer = Input.UiPointerReleasePosition;
             int hitIndex = -1;
             for (int i = 0; i < bounds.Count; i++)
             {
@@ -3089,11 +3099,17 @@ namespace SpaceBurst
 
             if (Input.WasUiPointerReleased())
             {
-                int capturedIndex = Input.CapturedUiControlId - controlIdBase;
-                bool hasCapturedSelection = capturedIndex >= 0 && capturedIndex < bounds.Count;
-                bool activated = hasCapturedSelection
-                    && !Input.IsUiPointerDragging()
-                    && (hitIndex == capturedIndex || PlatformServices.Capabilities.SupportsTouch);
+                bool activated = UiPointerInteraction.TryGetActivatedCapturedIndex(
+                    Input.CapturedUiControlId,
+                    controlIdBase,
+                    bounds,
+                    true,
+                    Input.IsUiPointerDragging(),
+                    pointer,
+                    releasePointer,
+                    out int capturedIndex);
+                if (activated)
+                    selection = capturedIndex;
                 Input.ClearUiControlCapture();
                 return activated;
             }
@@ -3466,6 +3482,7 @@ namespace SpaceBurst
             AudioQualityPreset[] presets = GetAudioQualityOptions();
             (Rectangle _, Rectangle[] presetBounds, Rectangle cancelBounds, Rectangle applyBounds) = GetAudioQualityDialogBounds();
             Vector2 pointer = Input.PointerPosition;
+            Vector2 releasePointer = Input.UiPointerReleasePosition;
 
             if (Input.WasCancelPressed())
             {
@@ -3507,7 +3524,7 @@ namespace SpaceBurst
 
                 for (int i = 0; i < presetBounds.Length; i++)
                 {
-                    if (capturedControlId == GetAudioDialogPresetControlId(i) && presetBounds[i].Contains(pointer) && activateOnRelease)
+                    if (UiPointerInteraction.DidCapturedControlActivate(capturedControlId, GetAudioDialogPresetControlId(i), presetBounds[i], true, !activateOnRelease, pointer, releasePointer))
                     {
                         pendingAudioQualityPreset = presets[i];
                         Input.ClearUiControlCapture();
@@ -3515,7 +3532,7 @@ namespace SpaceBurst
                     }
                 }
 
-                if (capturedControlId == PointerControlAudioDialogCancel && cancelBounds.Contains(pointer) && activateOnRelease)
+                if (UiPointerInteraction.DidCapturedControlActivate(capturedControlId, PointerControlAudioDialogCancel, cancelBounds, true, !activateOnRelease, pointer, releasePointer))
                 {
                     audioQualityDialogOpen = false;
                     pendingAudioQualityPreset = options.AudioQualityPreset;
@@ -3523,7 +3540,7 @@ namespace SpaceBurst
                     return;
                 }
 
-                if (capturedControlId == PointerControlAudioDialogApply && applyBounds.Contains(pointer) && activateOnRelease)
+                if (UiPointerInteraction.DidCapturedControlActivate(capturedControlId, PointerControlAudioDialogApply, applyBounds, true, !activateOnRelease, pointer, releasePointer))
                 {
                     options.AudioQualityPreset = pendingAudioQualityPreset;
                     audioQualityDialogOpen = false;
