@@ -536,8 +536,9 @@ namespace SpaceBurst
             Rectangle rewindBounds = GetRewindButtonBounds(gameplayBounds, stickRadius);
             HudLayout layout = GetTouchHudLayout();
             Rectangle weaponBounds = HudLayoutCalculator.GetAndroidWeaponTouchBounds(layout);
-                Rectangle pauseBounds = HudLayoutCalculator.GetAndroidPauseTouchBounds(layout);
+            Rectangle pauseBounds = HudLayoutCalculator.GetAndroidPauseTouchBounds(layout);
             bool topButtonFound = false;
+            bool hadTrackedTopButton = touchTopButtonId != -1;
 
             foreach (TouchLocation touch in touches)
             {
@@ -656,6 +657,18 @@ namespace SpaceBurst
                 rewindTouchId = -1;
             if (!topButtonFound)
             {
+                if (hadTrackedTopButton)
+                {
+                    Vector2 delta = pointerPosition - touchTopButtonStartPosition;
+                    if (delta.LengthSquared() <= MenuTapThreshold * MenuTapThreshold)
+                    {
+                        if (touchTopButtonTarget == TouchTopButton.WeaponSwap)
+                            touchStyleCyclePressed = true;
+                        else if (touchTopButtonTarget == TouchTopButton.Pause)
+                            touchPausePressed = true;
+                    }
+                }
+
                 touchTopButtonId = -1;
                 touchTopButtonTarget = TouchTopButton.None;
                 touchTopButtonStartPosition = Vector2.Zero;
@@ -775,6 +788,8 @@ namespace SpaceBurst
         private static void UpdateMenuTouchState(TouchCollection touches)
         {
             bool trackedMenuTouchFound = false;
+            bool hadTrackedMenuTouch = menuTouchId != -1 && menuTouchHeld;
+            bool releasedMenuTouchThisFrame = false;
 
             foreach (TouchLocation touch in touches)
             {
@@ -825,6 +840,7 @@ namespace SpaceBurst
 
                         uiPointerReleased = true;
                         uiPointerReleasePosition = uiPosition;
+                        releasedMenuTouchThisFrame = true;
                         menuTouchId = -1;
                         menuTouchStartPosition = Vector2.Zero;
                         menuTouchLastPosition = Vector2.Zero;
@@ -854,6 +870,17 @@ namespace SpaceBurst
 
             if (!trackedMenuTouchFound)
             {
+                if (hadTrackedMenuTouch && !releasedMenuTouchThisFrame)
+                {
+                    Vector2 releasePosition = menuTouchLastPosition != Vector2.Zero ? menuTouchLastPosition : menuTouchStartPosition;
+                    Vector2 totalDelta = releasePosition - menuTouchStartPosition;
+                    if (!menuTouchDragging && totalDelta.LengthSquared() <= MenuTapThreshold * MenuTapThreshold)
+                        primaryActionPressed = true;
+
+                    uiPointerReleased = true;
+                    uiPointerReleasePosition = releasePosition;
+                }
+
                 menuTouchId = -1;
                 menuTouchHeld = false;
                 menuTouchDragging = false;
