@@ -406,7 +406,7 @@ namespace SpaceBurst
 
         public FontTheme FontTheme
         {
-            get { return FontTheme.Readable; }
+            get { return FontTheme.Compact; }
         }
 
         public float MasterVolume
@@ -629,7 +629,7 @@ namespace SpaceBurst
                     DrawTitle(spriteBatch, pixel);
                     break;
                 case GameFlowState.DifficultySelect:
-                    DrawTitle(spriteBatch, pixel);
+                    DrawBackdrop(spriteBatch, pixel, 0.92f, "SEAMLESS CAMPAIGN WITH REWIND");
                     DrawDifficultySelect(spriteBatch, pixel);
                     break;
                 case GameFlowState.Options:
@@ -2993,14 +2993,25 @@ namespace SpaceBurst
             Game1.Instance.Exit();
         }
 
+        private Rectangle GetDifficultySelectPanelBounds()
+        {
+            return new Rectangle(Game1.VirtualWidth / 2 - UiPx(470), UiPx(88), UiPx(940), Game1.VirtualHeight - UiPx(176));
+        }
+
+        private Rectangle GetDifficultySummaryBounds(Rectangle panel)
+        {
+            return new Rectangle(panel.X + UiPx(404), panel.Y + UiPx(122), panel.Width - UiPx(458), panel.Height - UiPx(212));
+        }
+
         private List<UiButton> GetDifficultyButtons()
         {
             float uiScale = Game1.Instance != null ? Game1.Instance.UiLayoutScale : 1f;
-            int width = Math.Max(UiPx(300), (int)MathF.Round(320f * uiScale));
-            int height = Math.Max(UiPx(42), (int)MathF.Round(46f * uiScale));
+            Rectangle panel = GetDifficultySelectPanelBounds();
+            int width = Math.Max(UiPx(300), (int)MathF.Round(324f * uiScale));
+            int height = Math.Max(UiPx(42), (int)MathF.Round(44f * uiScale));
             int spacing = Math.Max(UiPx(10), (int)MathF.Round(12f * uiScale));
-            int x = Game1.VirtualWidth / 2 - UiPx(380);
-            int top = UiPx(214);
+            int x = panel.X + UiPx(52);
+            int top = panel.Y + UiPx(122);
 
             var buttons = new List<UiButton>(DifficultyChoices.Length + 1);
             for (int i = 0; i < DifficultyChoices.Length; i++)
@@ -4086,10 +4097,10 @@ namespace SpaceBurst
 
         private void DrawDifficultySelect(SpriteBatch spriteBatch, Texture2D pixel)
         {
-            spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), Color.Black * 0.58f);
+            spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), Color.Black * 0.72f);
 
-            Rectangle panel = new Rectangle(Game1.VirtualWidth / 2 - UiPx(430), UiPx(92), UiPx(860), Game1.VirtualHeight - UiPx(184));
-            Rectangle summaryBounds = new Rectangle(Game1.VirtualWidth / 2 - UiPx(12), UiPx(214), UiPx(360), UiPx(278));
+            Rectangle panel = GetDifficultySelectPanelBounds();
+            Rectangle summaryBounds = GetDifficultySummaryBounds(panel);
             DrawPanel(spriteBatch, pixel, panel, Color.Black * 0.82f, Color.White * 0.18f);
             DrawCenteredText(spriteBatch, pixel, "SELECT DIFFICULTY", panel.Center.X, panel.Y + UiPx(22), Color.White, 2.35f);
             DrawCenteredText(
@@ -4109,27 +4120,30 @@ namespace SpaceBurst
             if (difficultySelection < DifficultyChoices.Length)
             {
                 GameDifficulty difficulty = DifficultyChoices[difficultySelection];
-                DrawCenteredText(spriteBatch, pixel, DifficultyTuning.GetLabel(difficulty), summaryBounds.Center.X, summaryBounds.Y + UiPx(16), Color.Orange, 1.55f);
-                Vector2 summarySize = BitmapFontRenderer.Measure(GetDifficultySummaryText(difficulty), 1.08f);
+                DrawCenteredText(spriteBatch, pixel, DifficultyTuning.GetLabel(difficulty), summaryBounds.Center.X, summaryBounds.Y + UiPx(18), Color.Orange, 1.42f);
+                string wrappedSummary = BitmapFontRenderer.Wrap(GetDifficultySummaryText(difficulty), summaryBounds.Width - UiPx(34), 0.94f);
                 BitmapFontRenderer.Draw(
                     spriteBatch,
                     pixel,
-                    GetDifficultySummaryText(difficulty),
-                    new Vector2(summaryBounds.Center.X - summarySize.X / 2f, summaryBounds.Y + UiPx(54)),
+                    wrappedSummary,
+                    new Vector2(summaryBounds.X + UiPx(18), summaryBounds.Y + UiPx(58)),
                     Color.White * 0.82f,
-                    1.08f);
+                    0.94f);
             }
             else
             {
-                DrawCenteredText(spriteBatch, pixel, "RETURN TO TITLE", summaryBounds.Center.X, summaryBounds.Y + UiPx(18), Color.White, 1.4f);
-                DrawCenteredText(spriteBatch, pixel, "CANCELS THE CURRENT START FLOW WITHOUT CHANGING YOUR LAST PICK.", summaryBounds.Center.X, summaryBounds.Y + UiPx(62), Color.White * 0.72f, 0.95f);
+                DrawCenteredText(spriteBatch, pixel, "RETURN TO TITLE", summaryBounds.Center.X, summaryBounds.Y + UiPx(18), Color.White, 1.28f);
+                string wrappedCancel = BitmapFontRenderer.Wrap("CANCELS THE CURRENT START FLOW WITHOUT CHANGING YOUR LAST PICK.", summaryBounds.Width - UiPx(34), 0.9f);
+                BitmapFontRenderer.Draw(spriteBatch, pixel, wrappedCancel, new Vector2(summaryBounds.X + UiPx(18), summaryBounds.Y + UiPx(60)), Color.White * 0.72f, 0.9f);
             }
 
 #if ANDROID
-            DrawCenteredText(spriteBatch, pixel, "TAP A DIFFICULTY TO BEGIN  ANDROID BACK RETURNS", panel.Center.X, panel.Bottom - UiPx(38), Color.White * 0.7f, 1.02f);
+            const string footerText = "TAP A DIFFICULTY TO BEGIN  ANDROID BACK RETURNS";
 #else
-            DrawCenteredText(spriteBatch, pixel, "ENTER STARTS  ESC RETURNS  LAST PICK STAYS PRESELECTED", panel.Center.X, panel.Bottom - UiPx(38), Color.White * 0.7f, 1.02f);
+            const string footerText = "ENTER STARTS  ESC RETURNS  LAST PICK STAYS PRESELECTED";
 #endif
+            float footerScale = ScaleTextToFit(footerText, panel.Width - UiPx(40), 0.96f, 0.7f);
+            DrawCenteredText(spriteBatch, pixel, footerText, panel.Center.X, panel.Bottom - UiPx(42), Color.White * 0.7f, footerScale);
         }
 
         private string GetDifficultySummaryText(GameDifficulty difficulty)
@@ -4143,16 +4157,16 @@ namespace SpaceBurst
             {
                 GameDifficulty.Easy => "WAVES  CURRENT BASELINE PRESSURE AND GENEROUS CORE FLOW",
                 GameDifficulty.Normal => "WAVES  MODERATE AGGRESSION RISE WITH LIGHTLY REDUCED DROPS",
-                GameDifficulty.Hard => "WAVES  CLEARLY FASTER, TOUGHER, AND LESS GENEROUS",
+                GameDifficulty.Hard => "WAVES  FASTER, TOUGHER, AND LESS GENEROUS FROM THE OPENING STAGES",
                 GameDifficulty.Insane => "WAVES  HIGH THREAT WITH VERY LITTLE RECOVERY ROOM",
                 _ => "WAVES  EXTREME PRESSURE WITH SLOWEST POWER GROWTH",
             };
             string bosses = difficulty switch
             {
                 GameDifficulty.Easy => "BOSSES  KEEP A THREAT FLOOR ABOVE REGULAR WAVES",
-                GameDifficulty.Normal => "BOSSES  HIT HARDER AND SCALE ABOVE PLAYER POWER",
-                GameDifficulty.Hard => "BOSSES  HIGHER FIRE DENSITY WITH HEAVIER INTEGRITY",
-                GameDifficulty.Insane => "BOSSES  BRUTAL PHASE PRESSURE AND LITTLE MERCY",
+                GameDifficulty.Normal => "BOSSES  HIT HARDER, FIRE FASTER, AND SCALE ABOVE PLAYER POWER",
+                GameDifficulty.Hard => "BOSSES  OPEN WITH HEAVIER BARRAGES, FASTER SHOTS, AND TOUGHER PHASES",
+                GameDifficulty.Insane => "BOSSES  BRUTAL OPENERS, DENSE SUPPORT BURSTS, AND LITTLE MERCY",
                 _ => "BOSSES  ONE HIT COSTS THE CURRENT SHIP",
             };
             return string.Concat(retries, "\n", waves, "\n", bosses);

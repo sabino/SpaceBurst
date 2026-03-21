@@ -483,6 +483,11 @@ namespace SpaceBurst
             }
         }
 
+        protected virtual float GetProjectileSpeed()
+        {
+            return 420f;
+        }
+
         protected void SpawnBullet(Vector2 direction)
         {
             if (direction == Vector2.Zero)
@@ -491,10 +496,11 @@ namespace SpaceBurst
                 direction.Normalize();
 
             Vector2 spawnPoint = Position + direction * (ApproximateRadius * 0.75f);
+            float projectileSpeed = GetProjectileSpeed();
             Vector3 combatDirection = Vector3.Normalize(new Vector3(direction.X, direction.Y, Player1.Instance != null ? MathHelper.Clamp((Player1.Instance.LateralDepth - LateralDepth) * 0.012f, -0.65f, 0.65f) : 0f));
             EntityManager.Add(new Bullet(
                 spawnPoint,
-                direction * 420f,
+                direction * projectileSpeed,
                 false,
                 Math.Max(1, (int)MathF.Round(damageMask.ProjectileDamage * GetDamageOutputMultiplier())),
                 damageMask.ContactImpact,
@@ -510,7 +516,7 @@ namespace SpaceBurst
                 0,
                 0f,
                 new Vector3(spawnPoint.X, spawnPoint.Y, LateralDepth),
-                combatDirection * 420f));
+                combatDirection * projectileSpeed));
             Game1.Instance.Audio?.PlayEnemyShot(0.8f);
         }
 

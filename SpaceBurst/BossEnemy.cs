@@ -185,45 +185,42 @@ namespace SpaceBurst
             if (bossFireCooldown > 0f)
                 return;
 
-            bossFireCooldown = Math.Max(0.25f, (archetype.FireIntervalSeconds - currentPhase * 0.08f) * GetFireIntervalScale());
+            float minimumCooldown = PlayerStatus.RunProgress.GetBossMinimumFireCooldown(GetCurrentStageNumber());
+            bossFireCooldown = Math.Max(minimumCooldown, (archetype.FireIntervalSeconds - currentPhase * 0.08f) * GetFireIntervalScale());
+            int extraFanShots = PlayerStatus.RunProgress.GetBossExtraFanShots(GetCurrentStageNumber());
 
             switch (definition.FirePattern)
             {
                 case FirePattern.AimedShot:
-                    Vector2 aimed = Player1.Instance.Position - Position;
-                    if (aimed == Vector2.Zero)
-                        aimed = -Vector2.UnitX;
-                    else
-                        aimed.Normalize();
-
-                    SpawnBullet(aimed);
+                    SpawnAimedBurst(extraFanShots >= 2 ? 3 : 1, 0.09f);
                     break;
 
                 case FirePattern.SpreadPulse:
-                    SpawnBullet(new Vector2(-1f, -0.25f));
-                    SpawnBullet(new Vector2(-1f, 0f));
-                    SpawnBullet(new Vector2(-1f, 0.25f));
+                    FireFan(Math.Max(3, 3 + extraFanShots), 0.17f);
                     break;
 
                 default:
                     float fanStep = definition.Type == BossType.CombinedBossSixth ? 0.12f : 0.17f;
-                    int fanCount = definition.Type == BossType.CombinedBossSixth ? 7 : 5;
-                    int fanHalf = fanCount / 2;
-                    for (int index = -fanHalf; index <= fanHalf; index++)
-                        SpawnBullet(new Vector2(-1f, index * fanStep));
+                    int fanCount = (definition.Type == BossType.CombinedBossSixth ? 7 : 5) + extraFanShots;
+                    if (fanCount % 2 == 0)
+                        fanCount++;
+                    FireFan(fanCount, fanStep);
 
                     if (definition.Type == BossType.CombinedBossSixth && currentPhase >= 1)
                     {
-                        Vector2 combinedAimed = Player1.Instance.Position - Position;
-                        if (combinedAimed == Vector2.Zero)
-                            combinedAimed = -Vector2.UnitX;
-                        else
-                            combinedAimed.Normalize();
-
-                        SpawnBullet(combinedAimed);
+                        SpawnAimedBurst(1 + Math.Max(0, extraFanShots / 2), 0.07f);
+                    }
+                    else if (extraFanShots > 0 && currentPhase >= 1)
+                    {
+                        SpawnAimedBurst(3, 0.08f);
                     }
                     break;
             }
+        }
+
+        protected override float GetProjectileSpeed()
+        {
+            return 420f * PlayerStatus.RunProgress.GetBossProjectileSpeedMultiplier(GetCurrentStageNumber());
         }
 
         private void CheckPhaseTransitions()
@@ -237,6 +234,7 @@ namespace SpaceBurst
 
         private void QueueSupportBurst()
         {
+            int supportBonus = PlayerStatus.RunProgress.GetBossSupportCountBonus(GetCurrentStageNumber());
             switch (definition.Type)
             {
                 case BossType.WalkerBoss:
@@ -246,11 +244,11 @@ namespace SpaceBurst
                         ArchetypeId = currentPhase % 2 == 0 ? "Interceptor" : "Carrier",
                         StartSeconds = 0f,
                         Lane = currentPhase % 5,
-                        Count = 3 + currentPhase,
+                        Count = 3 + currentPhase + supportBonus,
                         SpawnLeadDistance = 240f,
-                        SpawnIntervalSeconds = 0.25f,
-                        SpacingX = 84f,
-                        SpeedMultiplier = 1f + currentPhase * 0.1f,
+                        SpawnIntervalSeconds = Math.Max(0.14f, 0.25f - supportBonus * 0.03f),
+                        SpacingX = Math.Max(60f, 84f - supportBonus * 8f),
+                        SpeedMultiplier = 1f + currentPhase * 0.1f + supportBonus * 0.08f,
                         MovePatternOverride = MovePattern.SineWave,
                         FirePatternOverride = currentPhase > 1 ? FirePattern.ForwardPulse : FirePattern.None,
                         Amplitude = 60f + currentPhase * 12f,
@@ -264,11 +262,11 @@ namespace SpaceBurst
                         ArchetypeId = currentPhase % 2 == 0 ? "Destroyer" : "Bulwark",
                         StartSeconds = 0f,
                         Lane = 1 + (currentPhase % 3),
-                        Count = 2 + currentPhase,
+                        Count = 2 + currentPhase + supportBonus,
                         SpawnLeadDistance = 300f,
-                        SpawnIntervalSeconds = 0.32f,
-                        SpacingX = 112f,
-                        SpeedMultiplier = 1.05f + currentPhase * 0.08f,
+                        SpawnIntervalSeconds = Math.Max(0.18f, 0.32f - supportBonus * 0.03f),
+                        SpacingX = Math.Max(84f, 112f - supportBonus * 10f),
+                        SpeedMultiplier = 1.05f + currentPhase * 0.08f + supportBonus * 0.08f,
                         MovePatternOverride = currentPhase % 2 == 0 ? MovePattern.Dive : MovePattern.TurretCarrier,
                         FirePatternOverride = FirePattern.SpreadPulse,
                         Amplitude = 72f + currentPhase * 8f,
@@ -282,11 +280,11 @@ namespace SpaceBurst
                         ArchetypeId = currentPhase % 3 == 0 ? "Bulwark" : (currentPhase % 2 == 0 ? "Destroyer" : "Carrier"),
                         StartSeconds = 0f,
                         Lane = currentPhase % 5,
-                        Count = 4 + currentPhase,
+                        Count = 4 + currentPhase + supportBonus,
                         SpawnLeadDistance = 320f,
-                        SpawnIntervalSeconds = 0.2f,
-                        SpacingX = 92f,
-                        SpeedMultiplier = 1.12f + currentPhase * 0.12f,
+                        SpawnIntervalSeconds = Math.Max(0.12f, 0.2f - supportBonus * 0.02f),
+                        SpacingX = Math.Max(68f, 92f - supportBonus * 8f),
+                        SpeedMultiplier = 1.12f + currentPhase * 0.12f + supportBonus * 0.08f,
                         MovePatternOverride = currentPhase % 2 == 0 ? MovePattern.Dive : MovePattern.SineWave,
                         FirePatternOverride = FirePattern.SpreadPulse,
                         Amplitude = 68f + currentPhase * 10f,
@@ -300,11 +298,11 @@ namespace SpaceBurst
                         ArchetypeId = currentPhase % 2 == 0 ? "Destroyer" : "Interceptor",
                         StartSeconds = 0f,
                         Lane = 2,
-                        Count = 3 + currentPhase,
+                        Count = 3 + currentPhase + supportBonus,
                         SpawnLeadDistance = 260f,
-                        SpawnIntervalSeconds = 0.22f,
-                        SpacingX = 96f,
-                        SpeedMultiplier = 1.05f + currentPhase * 0.12f,
+                        SpawnIntervalSeconds = Math.Max(0.14f, 0.22f - supportBonus * 0.02f),
+                        SpacingX = Math.Max(68f, 96f - supportBonus * 8f),
+                        SpeedMultiplier = 1.05f + currentPhase * 0.12f + supportBonus * 0.08f,
                         MovePatternOverride = currentPhase % 2 == 0 ? MovePattern.RetreatBackfire : MovePattern.SineWave,
                         FirePatternOverride = currentPhase > 1 ? FirePattern.ForwardPulse : FirePattern.None,
                         Amplitude = 64f,
@@ -312,6 +310,42 @@ namespace SpaceBurst
                     });
                     break;
             }
+        }
+
+        private void FireFan(int count, float verticalStep)
+        {
+            int half = count / 2;
+            for (int index = -half; index <= half; index++)
+                SpawnBullet(new Vector2(-1f, index * verticalStep));
+        }
+
+        private void SpawnAimedBurst(int count, float angleStep)
+        {
+            Vector2 aimed = Player1.Instance.Position - Position;
+            if (aimed == Vector2.Zero)
+                aimed = -Vector2.UnitX;
+            else
+                aimed.Normalize();
+
+            if (count <= 1)
+            {
+                SpawnBullet(aimed);
+                return;
+            }
+
+            if (count % 2 == 0)
+                count++;
+
+            int half = count / 2;
+            for (int index = -half; index <= half; index++)
+                SpawnBullet(Rotate(aimed, angleStep * index));
+        }
+
+        private static Vector2 Rotate(Vector2 direction, float radians)
+        {
+            float cos = MathF.Cos(radians);
+            float sin = MathF.Sin(radians);
+            return new Vector2(direction.X * cos - direction.Y * sin, direction.X * sin + direction.Y * cos);
         }
     }
 }

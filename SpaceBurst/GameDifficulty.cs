@@ -27,9 +27,14 @@ namespace SpaceBurst
             float dropWeightMultiplier,
             float wavePressureFloor,
             float bossPressureFloor,
+            float earlyBossPressureFloor,
             float stagePressureScale,
             float powerPressureScale,
             float bossPowerPressureScale,
+            float bossProjectileSpeedMultiplier,
+            int bossExtraFanShots,
+            int bossSupportCountBonus,
+            float bossMinimumFireCooldown,
             bool oneHitKill)
         {
             LivesDelta = livesDelta;
@@ -44,9 +49,14 @@ namespace SpaceBurst
             DropWeightMultiplier = dropWeightMultiplier;
             WavePressureFloor = wavePressureFloor;
             BossPressureFloor = bossPressureFloor;
+            EarlyBossPressureFloor = earlyBossPressureFloor;
             StagePressureScale = stagePressureScale;
             PowerPressureScale = powerPressureScale;
             BossPowerPressureScale = bossPowerPressureScale;
+            BossProjectileSpeedMultiplier = bossProjectileSpeedMultiplier;
+            BossExtraFanShots = bossExtraFanShots;
+            BossSupportCountBonus = bossSupportCountBonus;
+            BossMinimumFireCooldown = bossMinimumFireCooldown;
             OneHitKill = oneHitKill;
         }
 
@@ -62,9 +72,14 @@ namespace SpaceBurst
         public float DropWeightMultiplier { get; }
         public float WavePressureFloor { get; }
         public float BossPressureFloor { get; }
+        public float EarlyBossPressureFloor { get; }
         public float StagePressureScale { get; }
         public float PowerPressureScale { get; }
         public float BossPowerPressureScale { get; }
+        public float BossProjectileSpeedMultiplier { get; }
+        public int BossExtraFanShots { get; }
+        public int BossSupportCountBonus { get; }
+        public float BossMinimumFireCooldown { get; }
         public bool OneHitKill { get; }
     }
 
@@ -87,9 +102,14 @@ namespace SpaceBurst
                     dropWeightMultiplier: 0.94f,
                     wavePressureFloor: 0.1f,
                     bossPressureFloor: 0.28f,
+                    earlyBossPressureFloor: 0.42f,
                     stagePressureScale: 1.05f,
                     powerPressureScale: 1.08f,
                     bossPowerPressureScale: 0.92f,
+                    bossProjectileSpeedMultiplier: 1.04f,
+                    bossExtraFanShots: 0,
+                    bossSupportCountBonus: 0,
+                    bossMinimumFireCooldown: 0.22f,
                     oneHitKill: false),
                 GameDifficulty.Hard => new DifficultyProfile(
                     livesDelta: -1,
@@ -97,16 +117,21 @@ namespace SpaceBurst
                     waveDamageMultiplier: 1.2f,
                     waveDurabilityMultiplier: 1.18f,
                     waveFireIntervalScale: 0.88f,
-                    bossDamageMultiplier: 1.34f,
-                    bossDurabilityMultiplier: 1.4f,
-                    bossFireIntervalScale: 0.82f,
+                    bossDamageMultiplier: 1.42f,
+                    bossDurabilityMultiplier: 1.56f,
+                    bossFireIntervalScale: 0.76f,
                     dropChanceMultiplier: 0.78f,
                     dropWeightMultiplier: 0.82f,
                     wavePressureFloor: 0.18f,
                     bossPressureFloor: 0.42f,
+                    earlyBossPressureFloor: 0.86f,
                     stagePressureScale: 1.1f,
                     powerPressureScale: 1.14f,
                     bossPowerPressureScale: 0.96f,
+                    bossProjectileSpeedMultiplier: 1.18f,
+                    bossExtraFanShots: 2,
+                    bossSupportCountBonus: 1,
+                    bossMinimumFireCooldown: 0.18f,
                     oneHitKill: false),
                 GameDifficulty.Insane => new DifficultyProfile(
                     livesDelta: -2,
@@ -114,16 +139,21 @@ namespace SpaceBurst
                     waveDamageMultiplier: 1.4f,
                     waveDurabilityMultiplier: 1.34f,
                     waveFireIntervalScale: 0.76f,
-                    bossDamageMultiplier: 1.62f,
-                    bossDurabilityMultiplier: 1.72f,
-                    bossFireIntervalScale: 0.68f,
+                    bossDamageMultiplier: 1.72f,
+                    bossDurabilityMultiplier: 1.92f,
+                    bossFireIntervalScale: 0.62f,
                     dropChanceMultiplier: 0.58f,
                     dropWeightMultiplier: 0.62f,
                     wavePressureFloor: 0.3f,
                     bossPressureFloor: 0.6f,
+                    earlyBossPressureFloor: 1.08f,
                     stagePressureScale: 1.2f,
                     powerPressureScale: 1.2f,
                     bossPowerPressureScale: 1f,
+                    bossProjectileSpeedMultiplier: 1.32f,
+                    bossExtraFanShots: 4,
+                    bossSupportCountBonus: 2,
+                    bossMinimumFireCooldown: 0.14f,
                     oneHitKill: false),
                 GameDifficulty.Realistic => new DifficultyProfile(
                     livesDelta: -2,
@@ -131,16 +161,21 @@ namespace SpaceBurst
                     waveDamageMultiplier: 1.9f,
                     waveDurabilityMultiplier: 1.5f,
                     waveFireIntervalScale: 0.68f,
-                    bossDamageMultiplier: 2.2f,
-                    bossDurabilityMultiplier: 1.92f,
-                    bossFireIntervalScale: 0.58f,
+                    bossDamageMultiplier: 2.3f,
+                    bossDurabilityMultiplier: 2.1f,
+                    bossFireIntervalScale: 0.52f,
                     dropChanceMultiplier: 0.42f,
                     dropWeightMultiplier: 0.5f,
                     wavePressureFloor: 0.38f,
                     bossPressureFloor: 0.78f,
+                    earlyBossPressureFloor: 1.28f,
                     stagePressureScale: 1.28f,
                     powerPressureScale: 1.24f,
                     bossPowerPressureScale: 1.04f,
+                    bossProjectileSpeedMultiplier: 1.46f,
+                    bossExtraFanShots: 4,
+                    bossSupportCountBonus: 3,
+                    bossMinimumFireCooldown: 0.1f,
                     oneHitKill: true),
                 _ => new DifficultyProfile(
                     livesDelta: 0,
@@ -155,9 +190,14 @@ namespace SpaceBurst
                     dropWeightMultiplier: 1f,
                     wavePressureFloor: 0f,
                     bossPressureFloor: 0.15f,
+                    earlyBossPressureFloor: 0.22f,
                     stagePressureScale: 1f,
                     powerPressureScale: 1f,
                     bossPowerPressureScale: 0.88f,
+                    bossProjectileSpeedMultiplier: 1f,
+                    bossExtraFanShots: 0,
+                    bossSupportCountBonus: 0,
+                    bossMinimumFireCooldown: 0.25f,
                     oneHitKill: false),
             };
         }

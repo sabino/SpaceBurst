@@ -131,6 +131,51 @@ namespace SpaceBurst
             Draw(spriteBatch, pixel, text, center - new Vector2(size.X / 2f, 0f), color, scale);
         }
 
+        public static string Wrap(string text, float maxWidth, float scale)
+        {
+            string normalized = Normalize(text);
+            if (string.IsNullOrWhiteSpace(normalized) || maxWidth <= 0f)
+                return normalized;
+
+            string[] paragraphs = normalized.Split('\n');
+            var wrappedParagraphs = new List<string>(paragraphs.Length);
+            for (int paragraphIndex = 0; paragraphIndex < paragraphs.Length; paragraphIndex++)
+            {
+                string paragraph = paragraphs[paragraphIndex].Trim();
+                if (paragraph.Length == 0)
+                {
+                    wrappedParagraphs.Add(string.Empty);
+                    continue;
+                }
+
+                string[] words = paragraph.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                string currentLine = string.Empty;
+                var lines = new List<string>();
+                for (int wordIndex = 0; wordIndex < words.Length; wordIndex++)
+                {
+                    string candidate = currentLine.Length == 0
+                        ? words[wordIndex]
+                        : string.Concat(currentLine, " ", words[wordIndex]);
+                    if (currentLine.Length > 0 && Measure(candidate, scale).X > maxWidth)
+                    {
+                        lines.Add(currentLine);
+                        currentLine = words[wordIndex];
+                    }
+                    else
+                    {
+                        currentLine = candidate;
+                    }
+                }
+
+                if (currentLine.Length > 0)
+                    lines.Add(currentLine);
+
+                wrappedParagraphs.Add(string.Join("\n", lines));
+            }
+
+            return string.Join("\n", wrappedParagraphs);
+        }
+
         private static string Normalize(string text)
         {
             return (text ?? string.Empty).ToUpperInvariant().Replace("\r\n", "\n");
@@ -157,7 +202,9 @@ namespace SpaceBurst
 
         private static FontThemeMetrics ResolveMetrics()
         {
-            return new FontThemeMetrics(scaleMultiplier: 1.28f, lineHeight: 10f, characterSpacing: 2, drawOutline: true);
+            return CurrentTheme == FontTheme.Readable
+                ? new FontThemeMetrics(scaleMultiplier: 1.15f, lineHeight: 9f, characterSpacing: 2, drawOutline: true)
+                : new FontThemeMetrics(scaleMultiplier: 1f, lineHeight: 8f, characterSpacing: 1, drawOutline: false);
         }
 
         private readonly struct FontThemeMetrics

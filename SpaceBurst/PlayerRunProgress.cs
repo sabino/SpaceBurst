@@ -128,7 +128,11 @@ namespace SpaceBurst
             DifficultyProfile profile = DifficultyTuning.GetProfile(Difficulty);
             float pressure = DifficultyTuning.GetStagePressure(stageNumber) * (profile.StagePressureScale + 0.1f)
                 + DifficultyTuning.GetPowerPressure(PowerBudget) * profile.BossPowerPressureScale;
-            return MathHelper.Clamp(MathF.Max(profile.BossPressureFloor, pressure), 0f, 2f);
+            float floor = profile.BossPressureFloor;
+            if (stageNumber <= 10)
+                floor = MathF.Max(floor, profile.EarlyBossPressureFloor);
+
+            return MathHelper.Clamp(MathF.Max(floor, pressure), 0f, 2f);
         }
 
         public float GetEnemyDamageMultiplier(int stageNumber, bool boss)
@@ -175,6 +179,40 @@ namespace SpaceBurst
         public bool IsOneHitKillEnabled()
         {
             return DifficultyTuning.GetProfile(Difficulty).OneHitKill;
+        }
+
+        public float GetBossProjectileSpeedMultiplier(int stageNumber)
+        {
+            DifficultyProfile profile = DifficultyTuning.GetProfile(Difficulty);
+            float pressure = GetBossPressure(stageNumber);
+            float pressureBlend = MathHelper.Clamp(pressure * 0.8f, 0f, 1f);
+            return MathHelper.Lerp(1f, profile.BossProjectileSpeedMultiplier, pressureBlend);
+        }
+
+        public int GetBossExtraFanShots(int stageNumber)
+        {
+            DifficultyProfile profile = DifficultyTuning.GetProfile(Difficulty);
+            if (profile.BossExtraFanShots <= 0)
+                return 0;
+
+            return GetBossPressure(stageNumber) >= 0.75f ? profile.BossExtraFanShots : Math.Max(0, profile.BossExtraFanShots - 2);
+        }
+
+        public int GetBossSupportCountBonus(int stageNumber)
+        {
+            DifficultyProfile profile = DifficultyTuning.GetProfile(Difficulty);
+            if (profile.BossSupportCountBonus <= 0)
+                return 0;
+
+            return GetBossPressure(stageNumber) >= 0.7f ? profile.BossSupportCountBonus : Math.Max(0, profile.BossSupportCountBonus - 1);
+        }
+
+        public float GetBossMinimumFireCooldown(int stageNumber)
+        {
+            DifficultyProfile profile = DifficultyTuning.GetProfile(Difficulty);
+            float pressure = GetBossPressure(stageNumber);
+            float relaxed = MathF.Max(0.08f, profile.BossMinimumFireCooldown + 0.03f);
+            return MathHelper.Lerp(relaxed, profile.BossMinimumFireCooldown, MathHelper.Clamp(pressure, 0f, 1f));
         }
 
         public PlayerRunProgressSnapshotData CaptureSnapshot()
