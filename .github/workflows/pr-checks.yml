@@ -30,6 +30,9 @@ jobs:
       - name: Run runtime tests
         run: dotnet test SpaceBurst.Runtime.Tests/SpaceBurst.Runtime.Tests.csproj -c Release --no-build -v minimal
 
+      - name: Run game input tests
+        run: dotnet test SpaceBurst.Tests/SpaceBurst.Tests.csproj -c Release --no-build -v minimal
+
   linux-publish-smoke:
     name: Linux Publish Smoke
     runs-on: ubuntu-latest

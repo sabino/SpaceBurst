@@ -39,6 +39,7 @@ namespace SpaceBurst
         private const float MenuTapThreshold = 18f;
 #if ANDROID || BLAZORGL
         private const float StickRadiusFactor = 0.11f;
+        private static readonly TouchInputModeTracker touchInputModeTracker = new TouchInputModeTracker();
         private static Vector2 touchMovementDirection;
         private static Vector2 touchAimDirection;
         private static int menuTouchId = -1;
@@ -53,6 +54,7 @@ namespace SpaceBurst
         private static bool touchStyleCyclePressed;
         private static int touchTopButtonId = -1;
         private static Vector2 touchTopButtonStartPosition;
+        private static Vector2 touchTopButtonLastPosition;
         private static TouchTopButton touchTopButtonTarget = TouchTopButton.None;
         private static Vector2 movementTouchOrigin;
         private static Vector2 movementTouchPosition;
@@ -511,15 +513,21 @@ namespace SpaceBurst
 #if ANDROID || BLAZORGL
         private static void UpdateTouchState(TouchCollection touches)
         {
-            pointerPosition = Game1.ScreenSize / 2f;
             touchPausePressed = false;
             touchStyleCyclePressed = false;
             fireHeld = false;
             rewindHeld = false;
+            bool useGameplayTouchControls = ShouldUseGameplayTouchControls();
+            TouchInputResetTarget resetTarget = touchInputModeTracker.TransitionTo(
+                useGameplayTouchControls ? TouchInputMode.Gameplay : TouchInputMode.Menu);
 
-            if (!ShouldUseGameplayTouchControls())
-            {
+            if (resetTarget == TouchInputResetTarget.Menu)
+                ResetMenuTouchState();
+            else if (resetTarget == TouchInputResetTarget.Gameplay)
                 ResetGameplayTouchState();
+
+            if (!useGameplayTouchControls)
+            {
                 UpdateMenuTouchState(touches);
                 return;
             }
@@ -564,6 +572,7 @@ namespace SpaceBurst
                 if (touch.Id == touchTopButtonId)
                 {
                     topButtonFound = touch.State != TouchLocationState.Released && touch.State != TouchLocationState.Invalid;
+                    touchTopButtonLastPosition = uiPosition;
                     Vector2 delta = uiPosition - touchTopButtonStartPosition;
                     bool tapRelease = touch.State == TouchLocationState.Released && delta.LengthSquared() <= MenuTapThreshold * MenuTapThreshold;
                     if (tapRelease)
@@ -611,6 +620,7 @@ namespace SpaceBurst
                     topButtonFound = true;
                     touchTopButtonTarget = TouchTopButton.WeaponSwap;
                     touchTopButtonStartPosition = uiPosition;
+                    touchTopButtonLastPosition = uiPosition;
                 }
                 else if (pauseBounds.Contains(uiPosition))
                 {
@@ -618,6 +628,7 @@ namespace SpaceBurst
                     topButtonFound = true;
                     touchTopButtonTarget = TouchTopButton.Pause;
                     touchTopButtonStartPosition = uiPosition;
+                    touchTopButtonLastPosition = uiPosition;
                 }
                 else if (screenPosition.X < gameplayBounds.Center.X)
                 {
@@ -659,7 +670,10 @@ namespace SpaceBurst
             {
                 if (hadTrackedTopButton)
                 {
-                    Vector2 delta = pointerPosition - touchTopButtonStartPosition;
+                    Vector2 releasePosition = touchTopButtonLastPosition != Vector2.Zero
+                        ? touchTopButtonLastPosition
+                        : touchTopButtonStartPosition;
+                    Vector2 delta = releasePosition - touchTopButtonStartPosition;
                     if (delta.LengthSquared() <= MenuTapThreshold * MenuTapThreshold)
                     {
                         if (touchTopButtonTarget == TouchTopButton.WeaponSwap)
@@ -672,6 +686,7 @@ namespace SpaceBurst
                 touchTopButtonId = -1;
                 touchTopButtonTarget = TouchTopButton.None;
                 touchTopButtonStartPosition = Vector2.Zero;
+                touchTopButtonLastPosition = Vector2.Zero;
             }
 
             touchMovementDirection = GetVirtualStickDirection(movementTouchOrigin, movementTouchPosition, stickRadius);
@@ -790,13 +805,14 @@ namespace SpaceBurst
             bool trackedMenuTouchFound = false;
             bool hadTrackedMenuTouch = menuTouchId != -1 && menuTouchHeld;
             bool releasedMenuTouchThisFrame = false;
+            Rectangle uiBounds = Game1.UiRenderBounds;
 
             foreach (TouchLocation touch in touches)
             {
                 Vector2 screenPosition = Vector2.Clamp(
                     touch.Position,
-                    Vector2.Zero,
-                    Game1.ScreenSize - Vector2.One);
+                    new Vector2(uiBounds.Left, uiBounds.Top),
+                    new Vector2(uiBounds.Right - 1, uiBounds.Bottom - 1));
 
                 Vector2 uiPosition = Game1.ScreenToUi(screenPosition);
                 pointerPosition = uiPosition;
@@ -877,6 +893,7 @@ namespace SpaceBurst
                     if (!menuTouchDragging && totalDelta.LengthSquared() <= MenuTapThreshold * MenuTapThreshold)
                         primaryActionPressed = true;
 
+                    pointerPosition = releasePosition;
                     uiPointerReleased = true;
                     uiPointerReleasePosition = releasePosition;
                 }
@@ -890,23 +907,31 @@ namespace SpaceBurst
 
         private static void ResetGameplayTouchState()
         {
-            menuTouchId = -1;
-            menuTouchStartPosition = Vector2.Zero;
-            menuTouchLastPosition = Vector2.Zero;
-            menuTouchHeld = false;
-            menuTouchDragging = false;
             movementTouchId = -1;
             aimTouchId = -1;
             rewindTouchId = -1;
             touchTopButtonId = -1;
             touchTopButtonTarget = TouchTopButton.None;
             touchTopButtonStartPosition = Vector2.Zero;
+            touchTopButtonLastPosition = Vector2.Zero;
             movementTouchOrigin = Vector2.Zero;
             movementTouchPosition = Vector2.Zero;
             aimTouchOrigin = Vector2.Zero;
             aimTouchPosition = Vector2.Zero;
             touchMovementDirection = Vector2.Zero;
             touchAimDirection = Vector2.Zero;
+        }
+
+        private static void ResetMenuTouchState()
+        {
+            menuTouchId = -1;
+            menuTouchStartPosition = Vector2.Zero;
+            menuTouchLastPosition = Vector2.Zero;
+            menuTouchHeld = false;
+            menuTouchDragging = false;
+            uiPointerHeld = false;
+            uiPointerDragging = false;
+            capturedUiControlId = -1;
         }
 
         private static HudLayout GetTouchHudLayout()
