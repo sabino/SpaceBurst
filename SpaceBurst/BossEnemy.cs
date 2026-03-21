@@ -53,7 +53,8 @@ namespace SpaceBurst
         public BossEnemy(
             EnemyArchetypeDefinition archetype,
             BossDefinition definition,
-            Vector2 spawnPoint)
+            Vector2 spawnPoint,
+            Vector3? combatSpawnPoint = null)
             : base(
                 archetype,
                 spawnPoint,
@@ -62,11 +63,13 @@ namespace SpaceBurst
                 definition.FirePattern,
                 1f,
                 archetype.MovementAmplitude * 1.15f,
-                archetype.MovementFrequency)
+                archetype.MovementFrequency,
+                combatSpawnPoint)
         {
             this.definition = definition;
             phaseThresholds = new List<float>(definition.PhaseThresholds ?? new List<float> { 0.75f, 0.5f, 0.25f });
             bossFireCooldown = Math.Max(0.45f, archetype.FireIntervalSeconds);
+            depthAmplitude = Math.Max(depthAmplitude, 42f + definition.PresentationScale * 18f);
         }
 
         public bool TryConsumeSupportGroup(out SpawnGroupDefinition group)
@@ -164,7 +167,16 @@ namespace SpaceBurst
                 (desiredX - Position.X) * 1.8f - scrollSpeed * 0.45f,
                 (desiredY - Position.Y) * 2.8f);
 
-            Velocity = Vector2.Lerp(Velocity, desiredVelocity, Math.Min(1f, 3.8f * deltaSeconds));
+            float desiredDepth = depthAnchor + (float)Math.Sin(phase * (0.55f + currentPhase * 0.08f)) * depthAmplitude;
+            if (definition.Type == BossType.CombinedBossSixth)
+                desiredDepth += (float)Math.Cos(phase * 0.9f) * depthAmplitude * 0.28f;
+
+            Vector3 desiredCombatVelocity = new Vector3(
+                desiredVelocity.X,
+                desiredVelocity.Y,
+                (desiredDepth - LateralDepth) * 1.8f);
+
+            CombatVelocity = Vector3.Lerp(CombatVelocity, desiredCombatVelocity, Math.Min(1f, 3.8f * deltaSeconds));
         }
 
         protected override void TryFire(float deltaSeconds)

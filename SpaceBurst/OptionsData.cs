@@ -19,6 +19,10 @@ namespace SpaceBurst
 #else
             75;
 #endif
+        public bool Invert3DHorizontal { get; set; } = true;
+        public bool Invert3DVertical { get; set; }
+        public bool HasMigrated3DHorizontalDefault { get; set; } = true;
+        public AimAssist3DMode AimAssist3DMode { get; set; } = AimAssist3DMode.Off;
         public FontTheme FontTheme { get; set; } =
 #if ANDROID
             FontTheme.Readable;

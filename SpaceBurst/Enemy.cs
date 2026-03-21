@@ -18,6 +18,9 @@ namespace SpaceBurst
         protected readonly float movementFrequency;
         protected readonly MovePattern movePattern;
         protected readonly FirePattern firePattern;
+        protected float depthAnchor;
+        protected float depthAmplitude;
+        protected float depthFrequency;
 
         protected float ageSeconds;
         protected float flashTimer;
@@ -86,7 +89,7 @@ namespace SpaceBurst
 
         internal override float PresentationDepthBias
         {
-            get { return MathHelper.Clamp((targetY / Math.Max(1f, Game1.ScreenSize.Y) - 0.5f) * 1.2f, -0.6f, 0.6f); }
+            get { return MathHelper.Clamp(depthAnchor / 220f, -0.8f, 0.8f); }
         }
 
         public Enemy(
@@ -97,7 +100,11 @@ namespace SpaceBurst
             FirePattern firePattern,
             float speedMultiplier,
             float amplitude,
-            float frequency)
+            float frequency,
+            Vector3? combatSpawnPoint = null,
+            float? initialDepthAnchor = null,
+            float? initialDepthAmplitude = null,
+            float? initialDepthFrequency = null)
         {
             this.archetype = archetype;
             this.targetY = targetY;
@@ -107,13 +114,18 @@ namespace SpaceBurst
             movementAmplitude = amplitude;
             movementFrequency = frequency;
             damageMask = archetype.DamageMask;
-            Position = spawnPoint;
+            CombatPosition = combatSpawnPoint ?? new Vector3(spawnPoint.X, spawnPoint.Y, 0f);
             RenderScale = archetype.RenderScale;
             sprite = new ProceduralSpriteInstance(Game1.Instance.GraphicsDevice, archetype.Sprite);
             accentColor = ColorUtil.ParseHex(archetype.Sprite.AccentColor, Color.Orange);
             phaseOffset = spawnPoint.Y * 0.013f;
             DeterministicRngState gameplayRandom = Game1.Instance?.GameplayRandom ?? fallbackGameplayRandom;
             fireCooldown = archetype.FireIntervalSeconds * (0.6f + gameplayRandom.NextFloat(0f, 0.6f));
+            depthAnchor = initialDepthAnchor ?? gameplayRandom.NextFloat(-130f, 130f);
+            depthAmplitude = initialDepthAmplitude ?? (18f + gameplayRandom.NextFloat(0f, 42f));
+            depthFrequency = initialDepthFrequency ?? (0.45f + gameplayRandom.NextFloat(0f, 0.65f));
+            if (combatSpawnPoint.HasValue)
+                LateralDepth = combatSpawnPoint.Value.Z;
         }
 
         public override void Update()
@@ -131,9 +143,9 @@ namespace SpaceBurst
             UpdateMovement(deltaSeconds);
             TryFire(deltaSeconds);
 
-            Position += Velocity * deltaSeconds;
+            CombatPosition += CombatVelocity * deltaSeconds;
 
-            if (Position.X < -Size.X || Position.Y < -Size.Y || Position.Y > Game1.ScreenSize.Y + Size.Y || Position.X > Game1.ScreenSize.X + 400f)
+            if (Position.X < -Size.X || Position.Y < -Size.Y || Position.Y > Game1.ScreenSize.Y + Size.Y || Position.X > Game1.ScreenSize.X + 400f || MathF.Abs(LateralDepth) > 360f)
                 HandleLiveAreaExit();
         }
 
@@ -198,15 +210,21 @@ namespace SpaceBurst
         {
             return new EnemySnapshotData
             {
+                EntityId = EntityId,
                 ArchetypeId = archetype.Id,
                 Position = new Vector2Data(Position.X, Position.Y),
                 Velocity = new Vector2Data(Velocity.X, Velocity.Y),
+                CombatPosition = new Vector3Data(CombatPosition.X, CombatPosition.Y, CombatPosition.Z),
+                CombatVelocity = new Vector3Data(CombatVelocity.X, CombatVelocity.Y, CombatVelocity.Z),
                 TargetY = targetY,
                 MovePattern = movePattern,
                 FirePattern = firePattern,
                 SpeedMultiplier = speedMultiplier,
                 MovementAmplitude = movementAmplitude,
                 MovementFrequency = movementFrequency,
+                DepthAnchor = depthAnchor,
+                DepthAmplitude = depthAmplitude,
+                DepthFrequency = depthFrequency,
                 AgeSeconds = ageSeconds,
                 FlashTimer = flashTimer,
                 FireCooldown = fireCooldown,
@@ -225,6 +243,13 @@ namespace SpaceBurst
 
             Position = new Vector2(snapshot.Position.X, snapshot.Position.Y);
             Velocity = new Vector2(snapshot.Velocity.X, snapshot.Velocity.Y);
+            if (snapshot.CombatPosition != null)
+                CombatPosition = new Vector3(snapshot.CombatPosition.X, snapshot.CombatPosition.Y, snapshot.CombatPosition.Z);
+            if (snapshot.CombatVelocity != null)
+                CombatVelocity = new Vector3(snapshot.CombatVelocity.X, snapshot.CombatVelocity.Y, snapshot.CombatVelocity.Z);
+            depthAnchor = snapshot.DepthAnchor;
+            depthAmplitude = snapshot.DepthAmplitude;
+            depthFrequency = snapshot.DepthFrequency <= 0f ? 1f : snapshot.DepthFrequency;
             ageSeconds = snapshot.AgeSeconds;
             flashTimer = snapshot.FlashTimer;
             fireCooldown = snapshot.FireCooldown;
@@ -233,6 +258,7 @@ namespace SpaceBurst
             wasReentrySpawn = snapshot.WasReentrySpawn;
             sprite?.RestoreMaskSnapshot(snapshot.Mask);
             color = flashTimer > 0f ? Color.Lerp(Color.White, accentColor, 0.28f) : Color.White;
+            RestoreEntityId(snapshot.EntityId);
         }
 
         public static Enemy FromSnapshot(EnemyArchetypeDefinition archetype, EnemySnapshotData snapshot, BossDefinition bossDefinition = null)
@@ -241,7 +267,11 @@ namespace SpaceBurst
                 return null;
 
             Enemy enemy = snapshot.IsBoss
-                ? new BossEnemy(archetype, bossDefinition, new Vector2(snapshot.Position.X, snapshot.Position.Y))
+                ? new BossEnemy(
+                    archetype,
+                    bossDefinition,
+                    new Vector2(snapshot.Position.X, snapshot.Position.Y),
+                    snapshot.CombatPosition == null ? null : new Vector3(snapshot.CombatPosition.X, snapshot.CombatPosition.Y, snapshot.CombatPosition.Z))
                 : new Enemy(
                     archetype,
                     new Vector2(snapshot.Position.X, snapshot.Position.Y),
@@ -250,7 +280,11 @@ namespace SpaceBurst
                     snapshot.FirePattern,
                     snapshot.SpeedMultiplier,
                     snapshot.MovementAmplitude,
-                    snapshot.MovementFrequency);
+                    snapshot.MovementFrequency,
+                    snapshot.CombatPosition == null ? null : new Vector3(snapshot.CombatPosition.X, snapshot.CombatPosition.Y, snapshot.CombatPosition.Z),
+                    snapshot.DepthAnchor,
+                    snapshot.DepthAmplitude,
+                    snapshot.DepthFrequency);
 
             enemy.RestoreSnapshot(snapshot);
             if (enemy is BossEnemy boss)
@@ -262,6 +296,7 @@ namespace SpaceBurst
             EnemyArchetypeDefinition archetype,
             EnemySnapshotData snapshot,
             Vector2 spawnPoint,
+            Vector3? combatSpawnPoint,
             float targetY,
             float speedMultiplier)
         {
@@ -276,7 +311,11 @@ namespace SpaceBurst
                 snapshot.FirePattern,
                 speedMultiplier > 0f ? speedMultiplier : snapshot.SpeedMultiplier,
                 snapshot.MovementAmplitude,
-                snapshot.MovementFrequency);
+                snapshot.MovementFrequency,
+                combatSpawnPoint,
+                snapshot.DepthAnchor,
+                snapshot.DepthAmplitude,
+                snapshot.DepthFrequency);
 
             enemy.ageSeconds = 0f;
             enemy.flashTimer = snapshot.FlashTimer;
@@ -286,6 +325,13 @@ namespace SpaceBurst
             enemy.wasReentrySpawn = true;
             enemy.sprite?.RestoreMaskSnapshot(snapshot.Mask);
             enemy.color = enemy.flashTimer > 0f ? Color.Lerp(Color.White, enemy.accentColor, 0.28f) : Color.White;
+            enemy.CombatPosition = combatSpawnPoint ?? new Vector3(spawnPoint.X, spawnPoint.Y, snapshot.DepthAnchor);
+            if (snapshot.CombatVelocity != null)
+                enemy.CombatVelocity = new Vector3(snapshot.CombatVelocity.X, snapshot.CombatVelocity.Y, snapshot.CombatVelocity.Z);
+            enemy.depthAnchor = snapshot.DepthAnchor;
+            enemy.depthAmplitude = snapshot.DepthAmplitude;
+            enemy.depthFrequency = snapshot.DepthFrequency <= 0f ? 1f : snapshot.DepthFrequency;
+            enemy.RestoreEntityId(snapshot.EntityId);
             return enemy;
         }
 
@@ -318,7 +364,7 @@ namespace SpaceBurst
 
             float bonusChance = Game1.Instance != null ? Game1.Instance.CurrentPowerDropBonusChance : 0f;
             if (archetype.PowerupEligible && PlayerStatus.RunProgress.Powerups.ShouldDrop(Game1.Instance?.GameplayRandom, bonusChance, archetype.PowerupWeight, IsBoss))
-                EntityManager.Add(new PowerupPickup(Position, ResolvePowerupStyle()));
+                EntityManager.Add(new PowerupPickup(Position, ResolvePowerupStyle(), CombatPosition));
         }
 
         protected virtual void HandleLiveAreaExit()
@@ -392,7 +438,12 @@ namespace SpaceBurst
             }
 
             float yVelocity = (desiredY - Position.Y) * 3.5f;
-            Velocity = Vector2.Lerp(Velocity, new Vector2(desiredXVelocity, yVelocity), Math.Min(1f, 5.5f * deltaSeconds));
+            float desiredDepth = depthAnchor + MathF.Sin((ageSeconds + phaseOffset) * depthFrequency * MathF.Tau) * depthAmplitude;
+            if (movePattern == MovePattern.Dive && Player1.Instance != null)
+                desiredDepth = MathHelper.Lerp(desiredDepth, Player1.Instance.LateralDepth, 0.22f);
+
+            float zVelocity = (desiredDepth - LateralDepth) * 2.6f;
+            CombatVelocity = Vector3.Lerp(CombatVelocity, new Vector3(desiredXVelocity, yVelocity, zVelocity), Math.Min(1f, 5.5f * deltaSeconds));
         }
 
         protected virtual void TryFire(float deltaSeconds)
@@ -438,6 +489,7 @@ namespace SpaceBurst
                 direction.Normalize();
 
             Vector2 spawnPoint = Position + direction * (ApproximateRadius * 0.75f);
+            Vector3 combatDirection = Vector3.Normalize(new Vector3(direction.X, direction.Y, Player1.Instance != null ? MathHelper.Clamp((Player1.Instance.LateralDepth - LateralDepth) * 0.012f, -0.65f, 0.65f) : 0f));
             EntityManager.Add(new Bullet(
                 spawnPoint,
                 direction * 420f,
@@ -448,7 +500,15 @@ namespace SpaceBurst
                 0,
                 3.2f,
                 0f,
-                1f));
+                1f,
+                ProjectileBehavior.Bolt,
+                TrailFxStyle.None,
+                ImpactFxStyle.Standard,
+                0f,
+                0,
+                0f,
+                new Vector3(spawnPoint.X, spawnPoint.Y, LateralDepth),
+                combatDirection * 420f));
             Game1.Instance.Audio?.PlayEnemyShot(0.8f);
         }
 

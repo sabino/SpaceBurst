@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
 using SpaceBurst.RuntimeData;
 using System;
 using System.Collections.Generic;
@@ -38,6 +39,7 @@ namespace SpaceBurst
         private AudioDirector audioDirector;
         private FeedbackDirector feedbackDirector;
         private CameraRig cameraRig;
+        private ConsoleState developerConsole;
         private Texture2D uiPixel;
         private Texture2D radialTexture;
         private RenderTarget2D worldRenderTarget;
@@ -214,6 +216,21 @@ namespace SpaceBurst
             get { return campaignDirector != null ? campaignDirector.AudioQualityPreset : startupOptions.AudioQualityPreset; }
         }
 
+        internal bool Invert3DHorizontal
+        {
+            get { return campaignDirector != null ? campaignDirector.Invert3DHorizontal : startupOptions.Invert3DHorizontal; }
+        }
+
+        internal bool Invert3DVertical
+        {
+            get { return campaignDirector != null ? campaignDirector.Invert3DVertical : startupOptions.Invert3DVertical; }
+        }
+
+        internal AimAssist3DMode AimAssist3DMode
+        {
+            get { return campaignDirector != null ? campaignDirector.AimAssist3DMode : startupOptions.AimAssist3DMode; }
+        }
+
         internal FeedbackDirector Feedback
         {
             get { return feedbackDirector; }
@@ -267,6 +284,7 @@ namespace SpaceBurst
         {
 #if !ANDROID
             ConfigureDesktopDisplayMode(startupOptions.DisplayMode, true);
+            Window.TextInput += OnWindowTextInput;
 #endif
             UpdateVirtualResolution();
             RecalculateViewportMatrices();
@@ -297,6 +315,26 @@ namespace SpaceBurst
             if (!bootComplete)
             {
                 UpdateBootLoader((float)gameTime.ElapsedGameTime.TotalSeconds);
+                base.Update(gameTime);
+                return;
+            }
+
+            developerConsole?.Update();
+            if (developerConsole != null && developerConsole.IsOpen)
+            {
+                GameAudioState pausedAudioState = new GameAudioState(
+                    campaignDirector.CurrentState,
+                    campaignDirector.HasActiveBoss,
+                    campaignDirector.TransitionToBoss,
+                    campaignDirector.CurrentDifficultyFactor,
+                    campaignDirector.TransitionWarpStrength,
+                    campaignDirector.RewindVisualStrength,
+                    campaignDirector.CurrentScrollSpeed,
+                    campaignDirector.CurrentStageNumber,
+                    campaignDirector.TransitionTargetStageNumber,
+                    campaignDirector.CurrentSectionIndex,
+                    campaignDirector.CurrentSectionProgress);
+                audioDirector.Update(pausedAudioState, campaignDirector.MasterVolume, campaignDirector.MusicVolume, campaignDirector.SfxVolume, (float)gameTime.ElapsedGameTime.TotalSeconds);
                 base.Update(gameTime);
                 return;
             }
@@ -337,32 +375,60 @@ namespace SpaceBurst
 
             if (campaignDirector.ShouldDrawWorld)
             {
-                if (VisualPreset == VisualPreset.Low)
-                {
-                    bool chaseView = CurrentViewMode == ViewMode.Chase3D;
-                    Matrix worldMatrix = (chaseView ? Matrix.Identity : Matrix.CreateTranslation(CameraOffset.X, CameraOffset.Y, 0f)) * worldScaleMatrix;
-                    spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, worldMatrix);
-                    DrawBackground(spriteBatch, uiPixel);
-                    WorldPresentationRenderer.Draw(spriteBatch, uiPixel, radialTexture, EntityManager.AllEntities, CurrentPresentationTier, CurrentViewMode, campaignDirector != null ? campaignDirector.CurrentStageNumber : 1);
-                    spriteBatch.End();
-                }
-                else
+                bool useTrue3DChase = CurrentViewMode == ViewMode.Chase3D && CurrentPresentationTier == PresentationTier.Late3D;
+                if (useTrue3DChase)
                 {
                     EnsureRenderTargets();
                     GraphicsDevice.SetRenderTarget(worldRenderTarget);
                     GraphicsDevice.Clear(Color.Transparent);
 
-                    Matrix worldMatrix = CurrentViewMode == ViewMode.Chase3D
-                        ? Matrix.Identity
-                        : Matrix.CreateTranslation(CameraOffset.X, CameraOffset.Y, 0f);
-                    spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, worldMatrix);
-                    DrawBackground(spriteBatch, uiPixel);
-                    WorldPresentationRenderer.Draw(spriteBatch, uiPixel, radialTexture, EntityManager.AllEntities, CurrentPresentationTier, CurrentViewMode, campaignDirector != null ? campaignDirector.CurrentStageNumber : 1);
+                    spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
+                    Late3DRenderer.DrawBackdrop(spriteBatch, uiPixel, radialTexture, CurrentBackgroundMood, VisualPreset);
                     spriteBatch.End();
+
+                    Late3DRenderer.Draw(GraphicsDevice, EntityManager.AllEntities, CurrentBackgroundMood, VisualPreset);
 
                     GraphicsDevice.SetRenderTarget(null);
                     DrawWorldComposite();
                 }
+                else
+                {
+                    Late3DRenderer.ResetTransientState();
+                    if (VisualPreset == VisualPreset.Low)
+                    {
+                        bool chaseView = CurrentViewMode == ViewMode.Chase3D;
+                        Matrix worldMatrix = (chaseView ? Matrix.Identity : Matrix.CreateTranslation(CameraOffset.X, CameraOffset.Y, 0f)) * worldScaleMatrix;
+                        spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, worldMatrix);
+                        DrawBackground(spriteBatch, uiPixel);
+                        WorldPresentationRenderer.Draw(spriteBatch, uiPixel, radialTexture, EntityManager.AllEntities, CurrentPresentationTier, CurrentViewMode, campaignDirector != null ? campaignDirector.CurrentStageNumber : 1);
+                        spriteBatch.End();
+                    }
+                    else
+                    {
+                        EnsureRenderTargets();
+                        GraphicsDevice.SetRenderTarget(worldRenderTarget);
+                        GraphicsDevice.Clear(Color.Transparent);
+
+                        Matrix worldMatrix = CurrentViewMode == ViewMode.Chase3D
+                            ? Matrix.Identity
+                            : Matrix.CreateTranslation(CameraOffset.X, CameraOffset.Y, 0f);
+                        spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, worldMatrix);
+                        DrawBackground(spriteBatch, uiPixel);
+                        WorldPresentationRenderer.Draw(spriteBatch, uiPixel, radialTexture, EntityManager.AllEntities, CurrentPresentationTier, CurrentViewMode, campaignDirector != null ? campaignDirector.CurrentStageNumber : 1);
+                        spriteBatch.End();
+
+                        GraphicsDevice.SetRenderTarget(null);
+                        DrawWorldComposite();
+                    }
+                }
+            }
+
+            if (CurrentViewMode == ViewMode.Chase3D && CurrentPresentationTier == PresentationTier.Late3D)
+            {
+                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, uiScaleMatrix);
+                Late3DRenderer.DrawInsetHud(spriteBatch, uiPixel, EntityManager.AllEntities);
+                Late3DRenderer.DrawReticle(spriteBatch, uiPixel, radialTexture, ImpactPulse + HudPulse * 0.4f);
+                spriteBatch.End();
             }
 
             spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, uiScaleMatrix);
@@ -374,6 +440,22 @@ namespace SpaceBurst
             {
                 spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.LinearClamp);
                 Input.DrawTouchControls(spriteBatch, touchControlTexture);
+                spriteBatch.End();
+            }
+#endif
+
+            if (developerConsole != null && developerConsole.IsOpen)
+            {
+                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, uiScaleMatrix);
+                developerConsole.Draw(spriteBatch, uiPixel);
+                spriteBatch.End();
+            }
+
+#if !ANDROID
+            if ((campaignDirector != null && campaignDirector.ShouldDrawMenuCursor) || (developerConsole != null && developerConsole.IsOpen))
+            {
+                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, uiScaleMatrix);
+                DrawMenuCursor(spriteBatch, uiPixel, Input.PointerPosition);
                 spriteBatch.End();
             }
 #endif
@@ -395,6 +477,34 @@ namespace SpaceBurst
             float y = (screenPosition.Y - Instance.worldRenderViewport.Y) * VirtualHeight / Instance.worldRenderViewport.Height;
             return Vector2.Clamp(new Vector2(x, y), Vector2.Zero, ScreenSize);
         }
+
+#if !ANDROID
+        private static void DrawMenuCursor(SpriteBatch spriteBatch, Texture2D pixel, Vector2 position)
+        {
+            if (spriteBatch == null || pixel == null)
+                return;
+
+            int x = (int)MathF.Round(position.X);
+            int y = (int)MathF.Round(position.Y);
+            Color glow = Color.Black * 0.55f;
+            Color primary = Color.White;
+            Color accent = Color.Orange;
+
+            spriteBatch.Draw(pixel, new Rectangle(x, y, 2, 16), glow);
+            spriteBatch.Draw(pixel, new Rectangle(x, y, 12, 2), glow);
+            spriteBatch.Draw(pixel, new Rectangle(x + 2, y + 2, 2, 10), glow);
+            spriteBatch.Draw(pixel, new Rectangle(x + 4, y + 4, 2, 8), glow);
+            spriteBatch.Draw(pixel, new Rectangle(x + 6, y + 6, 2, 6), glow);
+            spriteBatch.Draw(pixel, new Rectangle(x + 8, y + 8, 2, 4), glow);
+
+            spriteBatch.Draw(pixel, new Rectangle(x, y, 2, 14), primary);
+            spriteBatch.Draw(pixel, new Rectangle(x, y, 10, 2), primary);
+            spriteBatch.Draw(pixel, new Rectangle(x + 2, y + 2, 2, 10), accent);
+            spriteBatch.Draw(pixel, new Rectangle(x + 4, y + 4, 2, 8), accent);
+            spriteBatch.Draw(pixel, new Rectangle(x + 6, y + 6, 2, 6), accent);
+            spriteBatch.Draw(pixel, new Rectangle(x + 8, y + 8, 2, 4), primary);
+        }
+#endif
 
         public static Vector2 ScreenToUi(Vector2 screenPosition)
         {
@@ -528,7 +638,7 @@ namespace SpaceBurst
             }
 
             if (worldRenderTarget == null)
-                worldRenderTarget = new RenderTarget2D(GraphicsDevice, virtualWidth, virtualHeight, false, SurfaceFormat.Color, DepthFormat.None, 0, RenderTargetUsage.DiscardContents);
+                worldRenderTarget = new RenderTarget2D(GraphicsDevice, virtualWidth, virtualHeight, false, SurfaceFormat.Color, DepthFormat.Depth24, 0, RenderTargetUsage.DiscardContents);
         }
 
         private void InitializeBootLoader()
@@ -595,6 +705,7 @@ namespace SpaceBurst
                 case BootPhase.FinalizeDirector:
                     bootStatus = "FINAL DIRECTOR HANDOFF";
                     campaignDirector.FinishBootToTitle();
+                    developerConsole = new ConsoleState(this, campaignDirector);
                     PrepareCaptureMode();
                     bootPhase = BootPhase.Complete;
                     bootReady = true;
@@ -660,6 +771,13 @@ namespace SpaceBurst
             BitmapFontRenderer.DrawCentered(spriteBatch, pixel, prompt, new Vector2(ScreenSize.X / 2f, VirtualHeight - UiLayoutScale * 96f), bootPromptColor * ((0.35f + promptPulse * 0.35f) * fade), 0.95f);
             spriteBatch.Draw(pixel, full, Color.Black * (1f - fade));
         }
+
+#if !ANDROID
+        private void OnWindowTextInput(object sender, TextInputEventArgs e)
+        {
+            developerConsole?.HandleTextInput(e.Character);
+        }
+#endif
 
         private void UpdateBootPixels(float deltaSeconds)
         {

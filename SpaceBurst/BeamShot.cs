@@ -11,8 +11,14 @@ namespace SpaceBurst
         private readonly HashSet<Enemy> hitThisTick = new HashSet<Enemy>();
         private float remainingLifetime;
         private float tickTimer;
+        private Vector3 combatDirection;
 
         public Vector2 Direction { get; private set; }
+        public Vector3 CombatDirection
+        {
+            get { return combatDirection; }
+            private set { combatDirection = value; }
+        }
         public float Length { get; private set; }
         public float Thickness { get; private set; }
         public int Damage { get; private set; }
@@ -36,10 +42,15 @@ namespace SpaceBurst
             bool friendly,
             ImpactProfileDefinition impactProfile,
             string primaryColorHex,
-            string accentColorHex)
+            string accentColorHex,
+            Vector3? combatOrigin = null,
+            Vector3? combatDirection = null)
         {
-            Position = origin;
+            CombatPosition = combatOrigin ?? new Vector3(origin.X, origin.Y, 0f);
             Direction = direction == Vector2.Zero ? Vector2.UnitX : Vector2.Normalize(direction);
+            CombatDirection = combatDirection.HasValue && combatDirection.Value != Vector3.Zero
+                ? Vector3.Normalize(combatDirection.Value)
+                : new Vector3(Direction.X, Direction.Y, 0f);
             Orientation = Direction.ToAngle();
             Length = Math.Max(24f, length);
             Thickness = Math.Max(2f, thickness);
@@ -76,8 +87,16 @@ namespace SpaceBurst
                 if (enemy.IsExpired || hitThisTick.Contains(enemy))
                     continue;
 
-                if (TryGetHitPoint(enemy, out Vector2 impactPoint))
+                Vector3 combatImpactPoint = default;
+                bool hit = CombatSpaceMath.IsDepthAwareViewActive
+                    ? TryGetCombatHitPoint(enemy, out combatImpactPoint)
+                    : TryGetHitPoint(enemy, out _);
+
+                if (hit)
                 {
+                    Vector2 impactPoint = CombatSpaceMath.IsDepthAwareViewActive
+                        ? new Vector2(combatImpactPoint.X, combatImpactPoint.Y)
+                        : GetFallbackImpactPoint(enemy);
                     enemy.ApplyBeamHit(impactPoint, Damage, ImpactProfile);
                     hitThisTick.Add(enemy);
                 }
@@ -134,8 +153,11 @@ namespace SpaceBurst
         {
             return new BeamSnapshotData
             {
+                EntityId = EntityId,
                 Origin = new Vector2Data(Position.X, Position.Y),
                 Direction = new Vector2Data(Direction.X, Direction.Y),
+                CombatOrigin = new Vector3Data(CombatPosition.X, CombatPosition.Y, CombatPosition.Z),
+                CombatDirection = new Vector3Data(CombatDirection.X, CombatDirection.Y, CombatDirection.Z),
                 Length = Length,
                 Thickness = Thickness,
                 RemainingLifetime = remainingLifetime,
@@ -163,8 +185,11 @@ namespace SpaceBurst
                 snapshot.Friendly,
                 snapshot.ImpactProfile,
                 snapshot.PrimaryColor,
-                snapshot.AccentColor);
+                snapshot.AccentColor,
+                snapshot.CombatOrigin == null ? null : new Vector3(snapshot.CombatOrigin.X, snapshot.CombatOrigin.Y, snapshot.CombatOrigin.Z),
+                snapshot.CombatDirection == null ? null : new Vector3(snapshot.CombatDirection.X, snapshot.CombatDirection.Y, snapshot.CombatDirection.Z));
             beam.tickTimer = snapshot.TickTimer;
+            beam.RestoreEntityId(snapshot.EntityId);
             return beam;
         }
 
@@ -184,6 +209,29 @@ namespace SpaceBurst
 
             impactPoint = Position + Direction * Length;
             return false;
+        }
+
+        private bool TryGetCombatHitPoint(Enemy enemy, out Vector3 impactPoint)
+        {
+            int sampleCount = Math.Max(18, (int)(Length / 20f));
+            for (int i = 1; i <= sampleCount; i++)
+            {
+                float t = i / (float)sampleCount;
+                Vector3 sample = CombatPosition + CombatDirection * (Length * t);
+                if (enemy.ContainsCombatPoint(sample))
+                {
+                    impactPoint = sample;
+                    return true;
+                }
+            }
+
+            impactPoint = CombatPosition + CombatDirection * Length;
+            return false;
+        }
+
+        private Vector2 GetFallbackImpactPoint(Enemy enemy)
+        {
+            return enemy == null ? Position + Direction * Length : enemy.Position;
         }
     }
 }
