@@ -161,7 +161,7 @@ namespace SpaceBurst
 
         private FontTheme CurrentFontTheme
         {
-            get { return FontTheme.Readable; }
+            get { return FontTheme.Compact; }
         }
 
         internal float UiLayoutScale

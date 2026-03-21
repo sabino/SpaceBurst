@@ -280,12 +280,17 @@ namespace SpaceBurst
             if (!IsOpen || spriteBatch == null || pixel == null)
                 return;
 
-            Rectangle bounds = new Rectangle(24, 20, Game1.VirtualWidth - 48, Math.Min(Game1.VirtualHeight - 40, 312));
-            Rectangle inputBounds = new Rectangle(bounds.X + 14, bounds.Bottom - 38, bounds.Width - 28, 24);
-            spriteBatch.Draw(pixel, bounds, Color.Black * 0.82f);
+            Rectangle screenBounds = new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight);
+            Rectangle bounds = new Rectangle(24, 28, Game1.VirtualWidth - 48, Math.Min(Game1.VirtualHeight - 56, 332));
+            Rectangle inputBounds = new Rectangle(bounds.X + 16, bounds.Bottom - 40, bounds.Width - 32, 24);
+            spriteBatch.Draw(pixel, screenBounds, Color.Black * 0.72f);
+            spriteBatch.Draw(pixel, bounds, Color.Black * 0.92f);
             spriteBatch.Draw(pixel, new Rectangle(bounds.X, bounds.Y, bounds.Width, 2), Color.Cyan * 0.48f);
             spriteBatch.Draw(pixel, new Rectangle(bounds.X, bounds.Bottom - 48, bounds.Width, 1), Color.White * 0.14f);
             BitmapFontRenderer.Draw(spriteBatch, pixel, "CONSOLE", new Vector2(bounds.X + 14, bounds.Y + 10), Color.White, 0.92f);
+            string helpText = "ENTER RUNS  ESC CLOSES  WHEEL/PGUP/PGDN SCROLL";
+            Vector2 helpSize = BitmapFontRenderer.Measure(helpText, 0.58f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, helpText, new Vector2(bounds.Right - helpSize.X - 14, bounds.Y + 10), Color.White * 0.55f, 0.58f);
 
             int availableLines = Math.Max(0, Math.Min(VisibleLogLines, logLines.Count));
             int startIndex = Math.Max(0, logLines.Count - availableLines - scrollOffset);
@@ -301,7 +306,6 @@ namespace SpaceBurst
             float pulse = 0.35f + 0.65f * MathF.Abs(MathF.Sin((float)Game1.GameTime.TotalGameTime.TotalSeconds * 4.2f));
             int caretX = inputBounds.X + Math.Max(2, (int)MathF.Round(8f * Truncate(prompt, 138).Length * 0.58f));
             spriteBatch.Draw(pixel, new Rectangle(caretX, inputBounds.Y - 1, 2, 14), Color.Cyan * pulse);
-            BitmapFontRenderer.Draw(spriteBatch, pixel, "ENTER RUNS  ESC CLOSES  PGUP/PGDN SCROLL", new Vector2(bounds.Right - 328, bounds.Y + 10), Color.White * 0.55f, 0.62f);
 #endif
         }
 
