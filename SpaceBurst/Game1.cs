@@ -290,11 +290,13 @@ namespace SpaceBurst
 
         protected override void Initialize()
         {
+#if !ANDROID
             if (PlatformServices.Capabilities.SupportsWindowedDisplayModes)
                 ConfigureDesktopDisplayMode(startupOptions.DisplayMode, true);
 
             if (PlatformServices.Capabilities.SupportsTextInput)
                 Window.TextInput += OnWindowTextInput;
+#endif
 
             UpdateVirtualResolution();
             RecalculateViewportMatrices();
@@ -973,8 +975,10 @@ namespace SpaceBurst
 
         public void ApplyDisplayMode(DesktopDisplayMode mode)
         {
+#if !ANDROID
             if (PlatformServices.Capabilities.SupportsWindowedDisplayModes)
                 ConfigureDesktopDisplayMode(mode, true);
+#endif
         }
 
         private bool TryInitializeAudio(AudioQualityPreset qualityPreset)
