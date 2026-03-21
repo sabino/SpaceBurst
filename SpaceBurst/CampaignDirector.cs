@@ -3089,9 +3089,11 @@ namespace SpaceBurst
 
             if (Input.WasUiPointerReleased())
             {
-                bool activated = hitIndex >= 0
-                    && Input.IsUiControlCaptured(controlIdBase + hitIndex)
-                    && !Input.IsUiPointerDragging();
+                int capturedIndex = Input.CapturedUiControlId - controlIdBase;
+                bool hasCapturedSelection = capturedIndex >= 0 && capturedIndex < bounds.Count;
+                bool activated = hasCapturedSelection
+                    && !Input.IsUiPointerDragging()
+                    && (hitIndex == capturedIndex || PlatformServices.Capabilities.SupportsTouch);
                 Input.ClearUiControlCapture();
                 return activated;
             }
