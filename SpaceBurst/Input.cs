@@ -37,7 +37,7 @@ namespace SpaceBurst
         private static int capturedUiControlId = -1;
 
         private const float MenuTapThreshold = 18f;
-#if ANDROID
+#if ANDROID || BLAZORGL
         private const float StickRadiusFactor = 0.11f;
         private static Vector2 touchMovementDirection;
         private static Vector2 touchAimDirection;
@@ -136,7 +136,7 @@ namespace SpaceBurst
             gamepadState = GamePad.GetState(PlayerIndex.One);
 
 #if ANDROID
-            UpdateTouchState();
+            UpdateTouchState(TouchPanel.GetState());
             mouseState = default(MouseState);
 #else
             mouseState = Mouse.GetState();
@@ -180,6 +180,9 @@ namespace SpaceBurst
 
             fireHeld = keyboardState.IsKeyDown(Keys.Space) || gamepadState.Triggers.Right > 0.25f;
             rewindHeld = keyboardState.IsKeyDown(Keys.R) || gamepadState.IsButtonDown(Buttons.LeftShoulder);
+#if BLAZORGL
+            UpdateBrowserTouchState();
+#endif
 #endif
         }
 
@@ -205,8 +208,17 @@ namespace SpaceBurst
 
         public static bool WasCancelPressed()
         {
+#if ANDROID || BLAZORGL
+            if (touchPausePressed)
+            {
 #if ANDROID
-            if (touchPausePressed || androidCancelPressed)
+                androidCancelPressed = false;
+#endif
+                return true;
+            }
+#endif
+#if ANDROID
+            if (androidCancelPressed)
             {
                 androidCancelPressed = false;
                 return true;
@@ -234,7 +246,7 @@ namespace SpaceBurst
 
         public static bool WasNextStylePressed()
         {
-#if ANDROID
+#if ANDROID || BLAZORGL
             if (touchStyleCyclePressed)
                 return true;
 #endif
@@ -252,11 +264,7 @@ namespace SpaceBurst
 
         public static bool WasConsoleTogglePressed()
         {
-#if ANDROID
-            return false;
-#else
-            return WasKeyPressed(Keys.OemTilde);
-#endif
+            return PlatformServices.Capabilities.SupportsTextInput && WasKeyPressed(Keys.OemTilde);
         }
 
         public static bool IsRewindHeld()
@@ -351,7 +359,7 @@ namespace SpaceBurst
 
         public static Vector2 GetMovementDirection(ViewMode viewMode)
         {
-#if ANDROID
+#if ANDROID || BLAZORGL
             if (touchMovementDirection != Vector2.Zero)
                 return touchMovementDirection;
 #endif
@@ -396,7 +404,7 @@ namespace SpaceBurst
 
         public static Vector2 GetAimDirection()
         {
-#if ANDROID
+#if ANDROID || BLAZORGL
             if (touchAimDirection != Vector2.Zero)
                 return touchAimDirection;
 #endif
@@ -500,10 +508,9 @@ namespace SpaceBurst
 #endif
         }
 
-#if ANDROID
-        private static void UpdateTouchState()
+#if ANDROID || BLAZORGL
+        private static void UpdateTouchState(TouchCollection touches)
         {
-            TouchCollection touches = TouchPanel.GetState();
             pointerPosition = Game1.ScreenSize / 2f;
             touchPausePressed = false;
             touchStyleCyclePressed = false;
@@ -668,6 +675,32 @@ namespace SpaceBurst
                 fireHeld = true;
             }
         }
+
+#if BLAZORGL
+        private static void UpdateBrowserTouchState()
+        {
+            if (!PlatformServices.Capabilities.SupportsTouch)
+                return;
+
+            TouchCollection touches = TouchPanel.GetState();
+            if (touches.Count > 0 || ShouldContinueBrowserTouchProcessing())
+                UpdateTouchState(touches);
+        }
+
+        private static bool ShouldContinueBrowserTouchProcessing()
+        {
+            return menuTouchId != -1
+                || menuTouchHeld
+                || movementTouchId != -1
+                || aimTouchId != -1
+                || rewindTouchId != -1
+                || touchTopButtonId != -1
+                || touchPausePressed
+                || touchStyleCyclePressed
+                || touchMovementDirection != Vector2.Zero
+                || touchAimDirection != Vector2.Zero;
+        }
+#endif
 
         public static void DrawTouchControls(SpriteBatch spriteBatch, Texture2D controlTexture)
         {

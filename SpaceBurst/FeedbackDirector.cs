@@ -46,11 +46,52 @@ namespace SpaceBurst
                 Handle(new FeedbackEvent(FeedbackEventType.RewindStop, Vector2.Zero));
 
             rewindLoopActive = rewindActive;
-            audio.SetRewindAmount(state.RewindStrength);
+            audio?.SetRewindAmount(state.RewindStrength);
         }
 
         public void Handle(FeedbackEvent feedbackEvent)
         {
+            if (audio == null)
+            {
+                switch (feedbackEvent.Type)
+                {
+                    case FeedbackEventType.PlayerShot:
+                        camera.AddKick(Vector2.UnitX, 1.4f + feedbackEvent.Intensity * 1.2f);
+                        break;
+                    case FeedbackEventType.EnemyHit:
+                        camera.AddShake(0.05f + feedbackEvent.Intensity * 0.08f);
+                        impactPulse = System.Math.Max(impactPulse, 0.18f + feedbackEvent.Intensity * 0.12f);
+                        break;
+                    case FeedbackEventType.EnemyDestroyed:
+                        camera.AddShake(0.12f + feedbackEvent.Intensity * 0.18f);
+                        impactPulse = System.Math.Max(impactPulse, 0.35f + feedbackEvent.Intensity * 0.16f);
+                        break;
+                    case FeedbackEventType.PlayerDamaged:
+                        camera.AddShake(0.24f + feedbackEvent.Intensity * 0.2f);
+                        hudPulse = System.Math.Max(hudPulse, 0.7f + feedbackEvent.Intensity * 0.2f);
+                        impactPulse = System.Math.Max(impactPulse, 0.3f);
+                        break;
+                    case FeedbackEventType.Pickup:
+                        pickupPulse = System.Math.Max(pickupPulse, 0.58f);
+                        camera.AddShake(0.08f);
+                        break;
+                    case FeedbackEventType.Upgrade:
+                        pickupPulse = System.Math.Max(pickupPulse, 0.82f);
+                        hudPulse = System.Math.Max(hudPulse, 0.22f);
+                        camera.AddShake(0.1f);
+                        break;
+                    case FeedbackEventType.BossEntry:
+                        camera.AddShake(0.18f);
+                        impactPulse = System.Math.Max(impactPulse, 0.42f);
+                        break;
+                    case FeedbackEventType.StageTransition:
+                        impactPulse = System.Math.Max(impactPulse, 0.3f);
+                        break;
+                }
+
+                return;
+            }
+
             switch (feedbackEvent.Type)
             {
                 case FeedbackEventType.PlayerShot:

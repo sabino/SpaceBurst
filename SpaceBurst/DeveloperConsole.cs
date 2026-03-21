@@ -446,8 +446,7 @@ namespace SpaceBurst
         internal bool TryExecFile(string fileName)
         {
             string normalizedName = NormalizeConfigFileName(fileName);
-            string path = PersistentStorage.GetConfigFilePath(normalizedName);
-            if (!File.Exists(path))
+            if (!PersistentStorage.ConfigFileExists(normalizedName))
                 return false;
 
             string[] lines = PersistentStorage.ReadConfigLines(normalizedName);

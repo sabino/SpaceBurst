@@ -72,6 +72,7 @@ function Resolve-LocalReleaseSigning {
 $root = $PSScriptRoot
 $gameProject = Join-Path $root "SpaceBurst\SpaceBurst.csproj"
 $levelToolProject = Join-Path $root "SpaceBurst.LevelTool\SpaceBurst.LevelTool.csproj"
+$webProject = Join-Path $root "SpaceBurst.Web\SpaceBurst.Web.csproj"
 $AndroidSdkDirectory = Resolve-AndroidSdkDirectory $AndroidSdkDirectory
 $env:ANDROID_SDK_ROOT = $AndroidSdkDirectory
 $env:ANDROID_HOME = $AndroidSdkDirectory
@@ -87,6 +88,7 @@ $artifactsRoot = Join-Path $root "artifacts\release\bundle-$($versionInfo.Artifa
 $latestRoot = Join-Path $root "artifacts\release\latest"
 $gameOutput = Join-Path $artifactsRoot "game-$WindowsRuntimeIdentifier"
 $levelToolOutput = Join-Path $artifactsRoot "leveltool-$WindowsRuntimeIdentifier"
+$webOutput = Join-Path $artifactsRoot "web"
 $androidOutput = Join-Path $artifactsRoot "android-apk"
 $contentBin = Join-Path $root "SpaceBurst\Content\bin"
 $contentObj = Join-Path $root "SpaceBurst\Content\obj"
@@ -166,6 +168,19 @@ Invoke-Step "Publishing Windows level editor single-file exe" {
 
     if ($LASTEXITCODE -ne 0) {
         throw "Level editor publish failed."
+    }
+}
+
+Invoke-Step "Publishing browser web bundle" {
+    dotnet publish $webProject `
+        -c $WindowsConfiguration `
+        -p:Version=$($versionInfo.BuildVersion) `
+        -p:FileVersion=$($versionInfo.FileVersion) `
+        -p:InformationalVersion=$($versionInfo.InformationalVersion) `
+        -o $webOutput
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Web publish failed."
     }
 }
 
@@ -287,6 +302,7 @@ $summary.Add("Game EXE: $(Join-Path $gameOutput 'SpaceBurst.exe')")
 $summary.Add("Versioned Game EXE: $versionedGameExe")
 $summary.Add("Level Tool EXE: $(Join-Path $levelToolOutput 'SpaceBurst.LevelTool.exe')")
 $summary.Add("Versioned Level Tool EXE: $versionedLevelToolExe")
+$summary.Add("Web Bundle: $webOutput")
 if (-not $SkipAndroid) {
     $apkCopied = Get-ChildItem $androidOutput -Filter "*.apk" | Sort-Object Name | Select-Object -First 1
     $summary.Add("Android APK: $($apkCopied.FullName)")
@@ -308,6 +324,7 @@ $latestSummary.Add("Game EXE: $(Join-Path $latestRoot "game-$WindowsRuntimeIdent
 $latestSummary.Add("Versioned Game EXE: $(Join-Path $latestRoot "SpaceBurst-$WindowsRuntimeIdentifier-$($versionInfo.ArtifactTag).exe")")
 $latestSummary.Add("Level Tool EXE: $(Join-Path $latestRoot "leveltool-$WindowsRuntimeIdentifier\SpaceBurst.LevelTool.exe")")
 $latestSummary.Add("Versioned Level Tool EXE: $(Join-Path $latestRoot "SpaceBurst.LevelTool-$WindowsRuntimeIdentifier-$($versionInfo.ArtifactTag).exe")")
+$latestSummary.Add("Web Bundle: $(Join-Path $latestRoot 'web')")
 if (-not $SkipAndroid) {
     $latestApk = Get-ChildItem (Join-Path $latestRoot "android-apk") -Filter "*.apk" | Select-Object -First 1
     if ($latestApk) {

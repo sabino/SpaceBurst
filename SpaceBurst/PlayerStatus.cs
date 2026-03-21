@@ -1,6 +1,5 @@
 using SpaceBurst.RuntimeData;
 using System;
-using System.IO;
 
 namespace SpaceBurst
 {
@@ -28,14 +27,9 @@ namespace SpaceBurst
         private static float multiplierTimeLeft;
         private static int scoreForExtraLife;
 
-        private static readonly string highScoreFilename = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "SpaceBurst",
-            "highscore.txt");
-
         static PlayerStatus()
         {
-            HighScore = LoadHighScore();
+            HighScore = PersistentStorage.LoadHighScore();
             BeginCampaign(null, GameDifficulty.Easy);
         }
 
@@ -132,7 +126,7 @@ namespace SpaceBurst
         public static void FinalizeRun()
         {
             if (Score > HighScore)
-                SaveHighScore(HighScore = Score);
+                PersistentStorage.SaveHighScore(HighScore = Score);
         }
 
         public static PlayerStatusSnapshotData CaptureSnapshot()
@@ -161,18 +155,6 @@ namespace SpaceBurst
             multiplierTimeLeft = snapshot.MultiplierTimeLeft;
             scoreForExtraLife = snapshot.ScoreForExtraLife > 0 ? snapshot.ScoreForExtraLife : extraLifeScoreStep;
             RunProgress.RestoreSnapshot(snapshot.RunProgress);
-        }
-
-        private static int LoadHighScore()
-        {
-            int score;
-            return File.Exists(highScoreFilename) && int.TryParse(File.ReadAllText(highScoreFilename), out score) ? score : 0;
-        }
-
-        private static void SaveHighScore(int score)
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(highScoreFilename));
-            File.WriteAllText(highScoreFilename, score.ToString());
         }
     }
 }

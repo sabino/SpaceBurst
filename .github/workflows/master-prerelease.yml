@@ -123,6 +123,39 @@ jobs:
           name: linux-game
           path: artifacts/ci/SpaceBurst-linux-x64-${{ needs.version.outputs.artifact_tag }}.tar.gz
 
+  web-build:
+    name: Browser Web Bundle
+    runs-on: ubuntu-latest
+    needs: version
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Publish browser bundle
+        run: >
+          dotnet publish SpaceBurst.Web/SpaceBurst.Web.csproj
+          -c Release
+          -p:Version=${{ needs.version.outputs.build_version }}
+          -p:FileVersion=${{ needs.version.outputs.file_version }}
+          -p:InformationalVersion=${{ needs.version.outputs.informational_version }}
+          -o artifacts/ci/web
+
+      - name: Package web artifact
+        run: |
+          mkdir -p artifacts/ci
+          (cd artifacts/ci/web && zip -r ../SpaceBurst-web-${{ needs.version.outputs.artifact_tag }}.zip .)
+
+      - name: Upload web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-game
+          path: artifacts/ci/SpaceBurst-web-${{ needs.version.outputs.artifact_tag }}.zip
+
   android-build:
     name: Android Signed APK
     runs-on: windows-latest
@@ -218,6 +251,7 @@ jobs:
       - version
       - windows-build
       - linux-build
+      - web-build
       - android-build
     steps:
       - name: Check out repository
@@ -234,6 +268,7 @@ jobs:
           mkdir -p artifacts/release
           cp "artifacts/downloads/windows-game/SpaceBurst-win-x64-${{ needs.version.outputs.artifact_tag }}.zip" artifacts/release/
           cp "artifacts/downloads/linux-game/SpaceBurst-linux-x64-${{ needs.version.outputs.artifact_tag }}.tar.gz" artifacts/release/
+          cp "artifacts/downloads/web-game/SpaceBurst-web-${{ needs.version.outputs.artifact_tag }}.zip" artifacts/release/
           cp "artifacts/downloads/android-game/SpaceBurst-android-${{ needs.version.outputs.artifact_tag }}.apk" artifacts/release/
           cp LICENSE artifacts/release/LICENSE.txt
           {
@@ -248,9 +283,10 @@ jobs:
             echo "Included assets:"
             echo "- SpaceBurst-win-x64-${{ needs.version.outputs.artifact_tag }}.zip"
             echo "- SpaceBurst-linux-x64-${{ needs.version.outputs.artifact_tag }}.tar.gz"
+            echo "- SpaceBurst-web-${{ needs.version.outputs.artifact_tag }}.zip"
             echo "- SpaceBurst-android-${{ needs.version.outputs.artifact_tag }}.apk"
           } > artifacts/release/RELEASE-NOTES.txt
-          (cd artifacts/release && sha256sum "SpaceBurst-win-x64-${{ needs.version.outputs.artifact_tag }}.zip" "SpaceBurst-linux-x64-${{ needs.version.outputs.artifact_tag }}.tar.gz" "SpaceBurst-android-${{ needs.version.outputs.artifact_tag }}.apk" LICENSE.txt RELEASE-NOTES.txt > SHA256SUMS.txt)
+          (cd artifacts/release && sha256sum "SpaceBurst-win-x64-${{ needs.version.outputs.artifact_tag }}.zip" "SpaceBurst-linux-x64-${{ needs.version.outputs.artifact_tag }}.tar.gz" "SpaceBurst-web-${{ needs.version.outputs.artifact_tag }}.zip" "SpaceBurst-android-${{ needs.version.outputs.artifact_tag }}.apk" LICENSE.txt RELEASE-NOTES.txt > SHA256SUMS.txt)
 
       - name: Create prerelease
         uses: softprops/action-gh-release@v2
@@ -262,6 +298,7 @@ jobs:
           files: |
             artifacts/release/SpaceBurst-win-x64-${{ needs.version.outputs.artifact_tag }}.zip
             artifacts/release/SpaceBurst-linux-x64-${{ needs.version.outputs.artifact_tag }}.tar.gz
+            artifacts/release/SpaceBurst-web-${{ needs.version.outputs.artifact_tag }}.zip
             artifacts/release/SpaceBurst-android-${{ needs.version.outputs.artifact_tag }}.apk
             artifacts/release/SHA256SUMS.txt
             artifacts/release/LICENSE.txt

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -8,20 +9,24 @@ namespace SpaceBurst
     static class PersistentStorage
     {
         private static readonly JsonSerializerOptions jsonOptions = CreateOptions();
-        private static readonly string documentsBaseDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            "SpaceBurst");
-        private static readonly string legacyBaseDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "SpaceBurst");
-        private static bool initialized;
+        private const string OptionsKey = "options.json";
+        private const string MedalsKey = "medals.json";
+        private const string HighScoreKey = "highscore.txt";
+        private static IStorageBackend Storage
+        {
+            get
+            {
+                PlatformServices.EnsureInitialized();
+                return PlatformServices.Storage;
+            }
+        }
 
         private static string BaseDirectory
         {
             get
             {
-                EnsureInitialized();
-                return documentsBaseDirectory;
+                PlatformServices.EnsureInitialized();
+                return Storage.GetDisplayPath(string.Empty);
             }
         }
 
@@ -34,38 +39,38 @@ namespace SpaceBurst
         {
             get
             {
-                string path = Path.Combine(BaseDirectory, "config");
-                Directory.CreateDirectory(path);
-                return path;
+                return Storage.GetDisplayPath("config");
             }
         }
 
-        private static string OptionsPath
+        private static string GetRunSlotKey(int slotIndex)
         {
-            get { return Path.Combine(BaseDirectory, "options.json"); }
-        }
-
-        private static string MedalsPath
-        {
-            get { return Path.Combine(BaseDirectory, "medals.json"); }
-        }
-
-        private static string GetRunSlotPath(int slotIndex)
-        {
-            return Path.Combine(BaseDirectory, string.Concat("slot-", Math.Clamp(slotIndex, 1, 3).ToString(), ".json"));
+            return string.Concat("slot-", Math.Clamp(slotIndex, 1, 3).ToString(), ".json");
         }
 
         public static string GetConfigFilePath(string fileName)
         {
-            return Path.Combine(ConfigDirectory, SanitizeRelativeFileName(fileName));
+            return Storage.GetDisplayPath(GetConfigKey(fileName));
+        }
+
+        public static bool ConfigFileExists(string fileName)
+        {
+            try
+            {
+                return Storage.Exists(GetConfigKey(fileName));
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         public static string ReadConfigText(string fileName)
         {
             try
             {
-                string path = GetConfigFilePath(fileName);
-                return File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+                string key = GetConfigKey(fileName);
+                return Storage.Exists(key) ? Storage.ReadAllText(key) : string.Empty;
             }
             catch
             {
@@ -77,8 +82,8 @@ namespace SpaceBurst
         {
             try
             {
-                string path = GetConfigFilePath(fileName);
-                return File.Exists(path) ? File.ReadAllLines(path) : Array.Empty<string>();
+                string text = ReadConfigText(fileName);
+                return text.Length == 0 ? Array.Empty<string>() : SplitLines(text);
             }
             catch
             {
@@ -88,33 +93,42 @@ namespace SpaceBurst
 
         public static void WriteConfigText(string fileName, string contents)
         {
-            string path = GetConfigFilePath(fileName);
-            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ConfigDirectory);
-            File.WriteAllText(path, contents ?? string.Empty);
+            Storage.WriteAllText(GetConfigKey(fileName), contents ?? string.Empty);
         }
 
         public static void WriteConfigLines(string fileName, string[] lines)
         {
-            string path = GetConfigFilePath(fileName);
-            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ConfigDirectory);
-            File.WriteAllLines(path, lines ?? Array.Empty<string>());
+            WriteConfigText(fileName, string.Join(Environment.NewLine, lines ?? Array.Empty<string>()));
         }
 
         public static void AppendConfigLine(string fileName, string line)
         {
-            string path = GetConfigFilePath(fileName);
-            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ConfigDirectory);
-            File.AppendAllText(path, string.Concat(line ?? string.Empty, Environment.NewLine));
+            string key = GetConfigKey(fileName);
+            string existing = string.Empty;
+            try
+            {
+                if (Storage.Exists(key))
+                    existing = Storage.ReadAllText(key);
+            }
+            catch
+            {
+                existing = string.Empty;
+            }
+
+            string combined = existing.Length == 0
+                ? string.Concat(line ?? string.Empty, Environment.NewLine)
+                : string.Concat(existing, line ?? string.Empty, Environment.NewLine);
+            Storage.WriteAllText(key, combined);
         }
 
         public static OptionsData LoadOptions()
         {
             try
             {
-                if (!File.Exists(OptionsPath))
+                if (!Storage.Exists(OptionsKey))
                     return new OptionsData();
 
-                string json = File.ReadAllText(OptionsPath);
+                string json = Storage.ReadAllText(OptionsKey);
                 OptionsData options = JsonSerializer.Deserialize<OptionsData>(json, jsonOptions) ?? new OptionsData();
 
                 using JsonDocument document = JsonDocument.Parse(json);
@@ -164,22 +178,22 @@ namespace SpaceBurst
 
             options.UiScalePercent = UiScaleHelper.ClampUiScalePercent(options.UiScalePercent);
             options.TouchControlsOpacity = UiScaleHelper.ClampTouchControlsOpacity(options.TouchControlsOpacity);
-            SaveFile(OptionsPath, options);
+            SaveFile(OptionsKey, options);
         }
 
         public static MedalProgress LoadMedals()
         {
-            return LoadFile(MedalsPath, new MedalProgress());
+            return LoadFile(MedalsKey, new MedalProgress());
         }
 
         public static void SaveMedals(MedalProgress medals)
         {
-            SaveFile(MedalsPath, medals);
+            SaveFile(MedalsKey, medals);
         }
 
         public static RunSaveData LoadRunSlot(int slotIndex)
         {
-            return LoadFile<RunSaveData>(GetRunSlotPath(slotIndex), null);
+            return LoadFile<RunSaveData>(GetRunSlotKey(slotIndex), null);
         }
 
         public static void SaveRunSlot(int slotIndex, RunSaveData data)
@@ -187,7 +201,7 @@ namespace SpaceBurst
             if (data == null)
                 return;
 
-            SaveFile(GetRunSlotPath(slotIndex), data);
+            SaveFile(GetRunSlotKey(slotIndex), data);
         }
 
         public static SaveSlotSummary[] LoadSaveSlotSummaries()
@@ -206,14 +220,34 @@ namespace SpaceBurst
             return summaries;
         }
 
-        private static T LoadFile<T>(string path, T fallback) where T : class
+        public static int LoadHighScore()
         {
             try
             {
-                if (!File.Exists(path))
+                if (!Storage.Exists(HighScoreKey))
+                    return 0;
+
+                return int.TryParse(Storage.ReadAllText(HighScoreKey), out int score) ? score : 0;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        public static void SaveHighScore(int score)
+        {
+            Storage.WriteAllText(HighScoreKey, score.ToString());
+        }
+
+        private static T LoadFile<T>(string logicalKey, T fallback) where T : class
+        {
+            try
+            {
+                if (!Storage.Exists(logicalKey))
                     return fallback;
 
-                string json = File.ReadAllText(path);
+                string json = Storage.ReadAllText(logicalKey);
                 return JsonSerializer.Deserialize<T>(json, jsonOptions) ?? fallback;
             }
             catch
@@ -222,51 +256,35 @@ namespace SpaceBurst
             }
         }
 
-        private static void SaveFile<T>(string path, T value)
+        private static void SaveFile<T>(string logicalKey, T value)
         {
-            Directory.CreateDirectory(BaseDirectory);
-            File.WriteAllText(path, JsonSerializer.Serialize(value, jsonOptions));
+            Storage.WriteAllText(logicalKey, JsonSerializer.Serialize(value, jsonOptions));
         }
 
-        private static void EnsureInitialized()
+        private static string GetConfigKey(string fileName)
         {
-            if (initialized)
-                return;
-
-            initialized = true;
-            Directory.CreateDirectory(documentsBaseDirectory);
-            Directory.CreateDirectory(Path.Combine(documentsBaseDirectory, "config"));
-
-            if (!Directory.Exists(legacyBaseDirectory))
-                return;
-
-            CopyMissingRecursive(legacyBaseDirectory, documentsBaseDirectory);
-        }
-
-        private static void CopyMissingRecursive(string sourceDirectory, string destinationDirectory)
-        {
-            Directory.CreateDirectory(destinationDirectory);
-
-            foreach (string sourceFile in Directory.GetFiles(sourceDirectory))
-            {
-                string destinationFile = Path.Combine(destinationDirectory, Path.GetFileName(sourceFile));
-                if (!File.Exists(destinationFile))
-                    File.Copy(sourceFile, destinationFile);
-            }
-
-            foreach (string sourceSubdirectory in Directory.GetDirectories(sourceDirectory))
-            {
-                string destinationSubdirectory = Path.Combine(destinationDirectory, Path.GetFileName(sourceSubdirectory));
-                CopyMissingRecursive(sourceSubdirectory, destinationSubdirectory);
-            }
+            return string.Concat("config/", SanitizeRelativeFileName(fileName));
         }
 
         private static string SanitizeRelativeFileName(string fileName)
         {
             string safe = string.IsNullOrWhiteSpace(fileName) ? "default.cfg" : fileName.Trim();
-            safe = safe.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
-            safe = safe.TrimStart(Path.DirectorySeparatorChar);
+            safe = safe.Replace('\\', '/');
+            while (safe.StartsWith("/", StringComparison.Ordinal))
+                safe = safe.Substring(1);
+
+            safe = string.Join("/", safe.Split('/', StringSplitOptions.RemoveEmptyEntries));
             return safe;
+        }
+
+        private static string[] SplitLines(string text)
+        {
+            var lines = new List<string>();
+            using var reader = new StringReader(text ?? string.Empty);
+            while (reader.ReadLine() is string line)
+                lines.Add(line);
+
+            return lines.ToArray();
         }
 
         private static JsonSerializerOptions CreateOptions()

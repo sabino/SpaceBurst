@@ -56,6 +56,29 @@ jobs:
           -p:InformationalVersion=${{ github.sha }}
           -o artifacts/ci/linux-x64
 
+  web-publish-smoke:
+    name: Web Publish Smoke
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore solution
+        run: dotnet restore SpaceBurst.sln
+
+      - name: Publish web bundle
+        run: >
+          dotnet publish SpaceBurst.Web/SpaceBurst.Web.csproj
+          -c Release
+          -p:Version=1.0.${{ github.run_number }}
+          -p:InformationalVersion=${{ github.sha }}
+          -o artifacts/ci/web
+
   android-smoke-build:
     name: Android Smoke Build
     runs-on: windows-latest

@@ -24,6 +24,11 @@ namespace SpaceBurst
 
 		internal static void RunGame()
 		{
+			PlatformServices.Initialize(
+				PlatformCapabilities.CreateDesktop(),
+				PlatformServices.CreateDefaultFileStorageBackend(),
+				PlatformServices.CreateDefaultTextAssetProvider(),
+				PlatformServices.CreateImmediateAudioStartGate());
 			game = new Game1();
 			game.Run();
 #if !__IOS__ && !__TVOS__

@@ -209,6 +209,29 @@ namespace SpaceBurst
             ThreeDGameplay,
         }
 
+        private enum OptionRowId
+        {
+            DisplayMode,
+            UiScale,
+            VisualPreset,
+            Bloom,
+            Shockwaves,
+            NeonOutlines,
+            ScreenShake,
+            AudioQuality,
+            MasterVolume,
+            MusicVolume,
+            SfxVolume,
+            TouchControlsOpacity,
+            AutoDraft,
+            HelpHints,
+            ThreeDGameplay,
+            Invert3DHorizontal,
+            Invert3DVertical,
+            AimAssist3D,
+            BackToGeneral,
+        }
+
         private enum OptionRowControlKind
         {
             Slider,
@@ -220,14 +243,16 @@ namespace SpaceBurst
 
         private readonly struct OptionRowDefinition
         {
-            public OptionRowDefinition(string label, string value, string description, OptionRowControlKind controlKind)
+            public OptionRowDefinition(OptionRowId id, string label, string value, string description, OptionRowControlKind controlKind)
             {
+                Id = id;
                 Label = label ?? string.Empty;
                 Value = value ?? string.Empty;
                 Description = description ?? string.Empty;
                 ControlKind = controlKind;
             }
 
+            public OptionRowId Id { get; }
             public string Label { get; }
             public string Value { get; }
             public string Description { get; }
@@ -273,7 +298,12 @@ namespace SpaceBurst
 
         public bool ShouldDrawTouchControls
         {
-            get { return (state == GameFlowState.Playing || state == GameFlowState.StageTransition || state == GameFlowState.Tutorial) && ShouldDrawWorld; }
+            get
+            {
+                return PlatformServices.Capabilities.SupportsTouch
+                    && (state == GameFlowState.Playing || state == GameFlowState.StageTransition || state == GameFlowState.Tutorial)
+                    && ShouldDrawWorld;
+            }
         }
 
         public float CurrentScrollSpeed
@@ -3200,9 +3230,8 @@ namespace SpaceBurst
 
         private void ApplyOptionsState()
         {
-#if !ANDROID
-            Game1.Instance?.ApplyDisplayMode(options.DisplayMode);
-#endif
+            if (PlatformServices.Capabilities.SupportsWindowedDisplayModes)
+                Game1.Instance?.ApplyDisplayMode(options.DisplayMode);
             if (Game1.Instance != null && Game1.Instance.AudioQualityPreset != options.AudioQualityPreset)
                 Game1.Instance.ApplyAudioQuality(options.AudioQualityPreset);
         }
@@ -3519,53 +3548,47 @@ namespace SpaceBurst
 
         private OptionRowDefinition[] GetOptionRows()
         {
-#if ANDROID
-            return new[]
-            {
-                new OptionRowDefinition("UI SCALE", string.Concat(options.UiScalePercent, "%"), "SETS MENU SIZE AND GENERAL UI READABILITY.", OptionRowControlKind.Slider),
-                new OptionRowDefinition("VISUAL PRESET", options.VisualPreset.ToString().ToUpperInvariant(), "CHANGES OVERALL EFFECT DENSITY, BLOOM, AND POST PROCESSING STYLE.", OptionRowControlKind.Cycle),
-                new OptionRowDefinition("BLOOM", options.EnableBloom ? "ON" : "OFF", "ADDS GLOW AROUND BRIGHT SHOTS, EXPLOSIONS, AND HIGHLIGHTS.", OptionRowControlKind.Toggle),
-                new OptionRowDefinition("SHOCKWAVES", options.EnableShockwaves ? "ON" : "OFF", "ENABLES RIPPLE AND IMPACT WAVE EFFECTS ON HEAVIER HITS.", OptionRowControlKind.Toggle),
-                new OptionRowDefinition("NEON OUTLINES", options.EnableNeonOutlines ? "ON" : "OFF", "OUTLINES HULLS AND FX WITH A SHARPER ARCADE SILHOUETTE.", OptionRowControlKind.Toggle),
-                new OptionRowDefinition("SCREEN SHAKE", options.ScreenShakeStrength.ToString().ToUpperInvariant(), "SETS HOW HARD THE CAMERA REACTS TO HITS, BOSSES, AND TRANSITIONS.", OptionRowControlKind.Cycle),
-                new OptionRowDefinition("AUDIO QUALITY", options.AudioQualityPreset.ToString().ToUpperInvariant(), "CHANGES PROCEDURAL AUDIO DENSITY. APPLYING IT REBUILDS THE AUDIO BANKS.", OptionRowControlKind.Cycle),
-                new OptionRowDefinition("MASTER VOLUME", string.Concat((int)(options.MasterVolume * 100f), "%"), "CONTROLS THE OVERALL MIX FOR MUSIC AND SOUND EFFECTS.", OptionRowControlKind.Slider),
-                new OptionRowDefinition("MUSIC VOLUME", string.Concat((int)(options.MusicVolume * 100f), "%"), "SETS THE LEVEL OF THE PROCEDURAL MUSIC STEM MIX.", OptionRowControlKind.Slider),
-                new OptionRowDefinition("SFX VOLUME", string.Concat((int)(options.SfxVolume * 100f), "%"), "SETS THE LEVEL OF SHOTS, HITS, WARNINGS, AND UI FEEDBACK.", OptionRowControlKind.Slider),
-                new OptionRowDefinition("TOUCH CONTROLS", string.Concat(options.TouchControlsOpacity, "%"), "SETS HOW VISIBLE THE ON-SCREEN STICK, AIM PAD, REWIND BUTTON, AND HUD CHIPS ARE.", OptionRowControlKind.Slider),
-                new OptionRowDefinition("AUTO DRAFT", options.AutoUpgradeDraft ? "ON" : "OFF", "IF A DRAFT TIMER EXPIRES, PICK A RANDOM OFFER AUTOMATICALLY.", OptionRowControlKind.Toggle),
-                new OptionRowDefinition("HELP HINTS", options.ShowHelpHints ? "ON" : "OFF", "SHOWS SHORT CONTROL AND SYSTEM REMINDERS DURING PLAY.", OptionRowControlKind.Toggle),
-            };
-#else
+#if !ANDROID
             if (optionsSection == OptionMenuSection.ThreeDGameplay)
             {
                 return new[]
                 {
-                    new OptionRowDefinition("INVERT 3D HORIZONTAL", options.Invert3DHorizontal ? "ON" : "OFF", "FLIPS LEFT AND RIGHT MOVEMENT IN CHASE VIEW.", OptionRowControlKind.Toggle),
-                    new OptionRowDefinition("INVERT 3D VERTICAL", options.Invert3DVertical ? "ON" : "OFF", "FLIPS UP AND DOWN MOVEMENT IN CHASE VIEW.", OptionRowControlKind.Toggle),
-                    new OptionRowDefinition("3D AIM ASSIST", options.AimAssist3DMode == AimAssist3DMode.SoftLock ? "SOFT LOCK" : "OFF", "SOFT LOCK NUDGES SHOTS TOWARD A NEARBY TARGET INSIDE A NARROW RETICLE CONE.", OptionRowControlKind.Cycle),
-                    new OptionRowDefinition("BACK TO GENERAL", string.Empty, "RETURNS TO THE MAIN OPTIONS LIST.", OptionRowControlKind.Action),
+                    new OptionRowDefinition(OptionRowId.Invert3DHorizontal, "INVERT 3D HORIZONTAL", options.Invert3DHorizontal ? "ON" : "OFF", "FLIPS LEFT AND RIGHT MOVEMENT IN CHASE VIEW.", OptionRowControlKind.Toggle),
+                    new OptionRowDefinition(OptionRowId.Invert3DVertical, "INVERT 3D VERTICAL", options.Invert3DVertical ? "ON" : "OFF", "FLIPS UP AND DOWN MOVEMENT IN CHASE VIEW.", OptionRowControlKind.Toggle),
+                    new OptionRowDefinition(OptionRowId.AimAssist3D, "3D AIM ASSIST", options.AimAssist3DMode == AimAssist3DMode.SoftLock ? "SOFT LOCK" : "OFF", "SOFT LOCK NUDGES SHOTS TOWARD A NEARBY TARGET INSIDE A NARROW RETICLE CONE.", OptionRowControlKind.Cycle),
+                    new OptionRowDefinition(OptionRowId.BackToGeneral, "BACK TO GENERAL", string.Empty, "RETURNS TO THE MAIN OPTIONS LIST.", OptionRowControlKind.Action),
                 };
             }
-
-            return new[]
-            {
-                new OptionRowDefinition("DISPLAY MODE", options.DisplayMode == DesktopDisplayMode.BorderlessFullscreen ? "BORDERLESS FULLSCREEN" : "WINDOWED", "SWITCHES BETWEEN WINDOWED PLAY AND BORDERLESS FULLSCREEN.", OptionRowControlKind.Cycle),
-                new OptionRowDefinition("UI SCALE", string.Concat(options.UiScalePercent, "%"), "SETS MENU SIZE AND GENERAL UI READABILITY.", OptionRowControlKind.Slider),
-                new OptionRowDefinition("VISUAL PRESET", options.VisualPreset.ToString().ToUpperInvariant(), "CHANGES OVERALL EFFECT DENSITY, BLOOM, AND POST PROCESSING STYLE.", OptionRowControlKind.Cycle),
-                new OptionRowDefinition("BLOOM", options.EnableBloom ? "ON" : "OFF", "ADDS GLOW AROUND BRIGHT SHOTS, EXPLOSIONS, AND HIGHLIGHTS.", OptionRowControlKind.Toggle),
-                new OptionRowDefinition("SHOCKWAVES", options.EnableShockwaves ? "ON" : "OFF", "ENABLES RIPPLE AND IMPACT WAVE EFFECTS ON HEAVIER HITS.", OptionRowControlKind.Toggle),
-                new OptionRowDefinition("NEON OUTLINES", options.EnableNeonOutlines ? "ON" : "OFF", "OUTLINES HULLS AND FX WITH A SHARPER ARCADE SILHOUETTE.", OptionRowControlKind.Toggle),
-                new OptionRowDefinition("SCREEN SHAKE", options.ScreenShakeStrength.ToString().ToUpperInvariant(), "SETS HOW HARD THE CAMERA REACTS TO HITS, BOSSES, AND TRANSITIONS.", OptionRowControlKind.Cycle),
-                new OptionRowDefinition("AUDIO QUALITY", options.AudioQualityPreset.ToString().ToUpperInvariant(), "CHANGES PROCEDURAL AUDIO DENSITY. APPLYING IT REBUILDS THE AUDIO BANKS.", OptionRowControlKind.Cycle),
-                new OptionRowDefinition("MASTER VOLUME", string.Concat((int)(options.MasterVolume * 100f), "%"), "CONTROLS THE OVERALL MIX FOR MUSIC AND SOUND EFFECTS.", OptionRowControlKind.Slider),
-                new OptionRowDefinition("MUSIC VOLUME", string.Concat((int)(options.MusicVolume * 100f), "%"), "SETS THE LEVEL OF THE PROCEDURAL MUSIC STEM MIX.", OptionRowControlKind.Slider),
-                new OptionRowDefinition("SFX VOLUME", string.Concat((int)(options.SfxVolume * 100f), "%"), "SETS THE LEVEL OF SHOTS, HITS, WARNINGS, AND UI FEEDBACK.", OptionRowControlKind.Slider),
-                new OptionRowDefinition("AUTO DRAFT", options.AutoUpgradeDraft ? "ON" : "OFF", "IF A DRAFT TIMER EXPIRES, PICK A RANDOM OFFER AUTOMATICALLY.", OptionRowControlKind.Toggle),
-                new OptionRowDefinition("HELP HINTS", options.ShowHelpHints ? "ON" : "OFF", "SHOWS SHORT CONTROL AND SYSTEM REMINDERS DURING PLAY.", OptionRowControlKind.Toggle),
-                new OptionRowDefinition("3D GAMEPLAY", "OPEN", "OPENS CHASE-VIEW CONTROLS AND AIM-ASSIST SETTINGS.", OptionRowControlKind.Submenu),
-            };
 #endif
+
+            var rows = new List<OptionRowDefinition>();
+            if (PlatformServices.Capabilities.SupportsWindowedDisplayModes)
+            {
+                rows.Add(new OptionRowDefinition(OptionRowId.DisplayMode, "DISPLAY MODE", options.DisplayMode == DesktopDisplayMode.BorderlessFullscreen ? "BORDERLESS FULLSCREEN" : "WINDOWED", "SWITCHES BETWEEN WINDOWED PLAY AND BORDERLESS FULLSCREEN.", OptionRowControlKind.Cycle));
+            }
+
+            rows.Add(new OptionRowDefinition(OptionRowId.UiScale, "UI SCALE", string.Concat(options.UiScalePercent, "%"), "SETS MENU SIZE AND GENERAL UI READABILITY.", OptionRowControlKind.Slider));
+            rows.Add(new OptionRowDefinition(OptionRowId.VisualPreset, "VISUAL PRESET", options.VisualPreset.ToString().ToUpperInvariant(), "CHANGES OVERALL EFFECT DENSITY, BLOOM, AND POST PROCESSING STYLE.", OptionRowControlKind.Cycle));
+            rows.Add(new OptionRowDefinition(OptionRowId.Bloom, "BLOOM", options.EnableBloom ? "ON" : "OFF", "ADDS GLOW AROUND BRIGHT SHOTS, EXPLOSIONS, AND HIGHLIGHTS.", OptionRowControlKind.Toggle));
+            rows.Add(new OptionRowDefinition(OptionRowId.Shockwaves, "SHOCKWAVES", options.EnableShockwaves ? "ON" : "OFF", "ENABLES RIPPLE AND IMPACT WAVE EFFECTS ON HEAVIER HITS.", OptionRowControlKind.Toggle));
+            rows.Add(new OptionRowDefinition(OptionRowId.NeonOutlines, "NEON OUTLINES", options.EnableNeonOutlines ? "ON" : "OFF", "OUTLINES HULLS AND FX WITH A SHARPER ARCADE SILHOUETTE.", OptionRowControlKind.Toggle));
+            rows.Add(new OptionRowDefinition(OptionRowId.ScreenShake, "SCREEN SHAKE", options.ScreenShakeStrength.ToString().ToUpperInvariant(), "SETS HOW HARD THE CAMERA REACTS TO HITS, BOSSES, AND TRANSITIONS.", OptionRowControlKind.Cycle));
+            rows.Add(new OptionRowDefinition(OptionRowId.AudioQuality, "AUDIO QUALITY", options.AudioQualityPreset.ToString().ToUpperInvariant(), "CHANGES PROCEDURAL AUDIO DENSITY. APPLYING IT REBUILDS THE AUDIO BANKS.", OptionRowControlKind.Cycle));
+            rows.Add(new OptionRowDefinition(OptionRowId.MasterVolume, "MASTER VOLUME", string.Concat((int)(options.MasterVolume * 100f), "%"), "CONTROLS THE OVERALL MIX FOR MUSIC AND SOUND EFFECTS.", OptionRowControlKind.Slider));
+            rows.Add(new OptionRowDefinition(OptionRowId.MusicVolume, "MUSIC VOLUME", string.Concat((int)(options.MusicVolume * 100f), "%"), "SETS THE LEVEL OF THE PROCEDURAL MUSIC STEM MIX.", OptionRowControlKind.Slider));
+            rows.Add(new OptionRowDefinition(OptionRowId.SfxVolume, "SFX VOLUME", string.Concat((int)(options.SfxVolume * 100f), "%"), "SETS THE LEVEL OF SHOTS, HITS, WARNINGS, AND UI FEEDBACK.", OptionRowControlKind.Slider));
+
+            if (PlatformServices.Capabilities.SupportsTouch)
+            {
+                rows.Add(new OptionRowDefinition(OptionRowId.TouchControlsOpacity, "TOUCH CONTROLS", string.Concat(options.TouchControlsOpacity, "%"), "SETS HOW VISIBLE THE ON-SCREEN STICK, AIM PAD, REWIND BUTTON, AND HUD CHIPS ARE.", OptionRowControlKind.Slider));
+            }
+
+            rows.Add(new OptionRowDefinition(OptionRowId.AutoDraft, "AUTO DRAFT", options.AutoUpgradeDraft ? "ON" : "OFF", "IF A DRAFT TIMER EXPIRES, PICK A RANDOM OFFER AUTOMATICALLY.", OptionRowControlKind.Toggle));
+            rows.Add(new OptionRowDefinition(OptionRowId.HelpHints, "HELP HINTS", options.ShowHelpHints ? "ON" : "OFF", "SHOWS SHORT CONTROL AND SYSTEM REMINDERS DURING PLAY.", OptionRowControlKind.Toggle));
+#if !ANDROID
+            rows.Add(new OptionRowDefinition(OptionRowId.ThreeDGameplay, "3D GAMEPLAY", "OPEN", "OPENS CHASE-VIEW CONTROLS AND AIM-ASSIST SETTINGS.", OptionRowControlKind.Submenu));
+#endif
+            return rows.ToArray();
         }
 
         private static AudioQualityPreset[] GetAudioQualityOptions()
@@ -3588,183 +3611,127 @@ namespace SpaceBurst
 
         private float GetSliderRatioForOption(int index)
         {
-            return index switch
+            OptionRowDefinition[] rows = GetOptionRows();
+            if (index < 0 || index >= rows.Length)
+                return 0f;
+
+            return rows[index].Id switch
             {
-                0 => (options.UiScalePercent - 70f) / 150f,
-#if ANDROID
-                7 => options.MasterVolume,
-                8 => options.MusicVolume,
-                9 => options.SfxVolume,
-                10 => (options.TouchControlsOpacity - 20f) / 80f,
-#else
-                _ when optionsSection == OptionMenuSection.ThreeDGameplay => 0f,
-                8 => options.MasterVolume,
-                9 => options.MusicVolume,
-                10 => options.SfxVolume,
-#endif
+                OptionRowId.UiScale => (options.UiScalePercent - 70f) / 150f,
+                OptionRowId.MasterVolume => options.MasterVolume,
+                OptionRowId.MusicVolume => options.MusicVolume,
+                OptionRowId.SfxVolume => options.SfxVolume,
+                OptionRowId.TouchControlsOpacity => (options.TouchControlsOpacity - 20f) / 80f,
                 _ => 0f,
             };
         }
 
         private void SetSliderOptionFromRatio(int index, float ratio)
         {
+            OptionRowDefinition[] rows = GetOptionRows();
+            if (index < 0 || index >= rows.Length)
+                return;
+
             float clamped = MathHelper.Clamp(ratio, 0f, 1f);
-            switch (index)
+            switch (rows[index].Id)
             {
-                case 0:
-                {
+                case OptionRowId.UiScale:
                     int uiPercent = 70 + (int)MathF.Round(clamped * 150f);
                     options.UiScalePercent = UiScaleHelper.ClampUiScalePercent(uiPercent);
                     break;
-                }
-#if ANDROID
-                case 7:
+                case OptionRowId.MasterVolume:
                     options.MasterVolume = MathF.Round(clamped * 20f) / 20f;
                     break;
-                case 8:
+                case OptionRowId.MusicVolume:
                     options.MusicVolume = MathF.Round(clamped * 20f) / 20f;
                     break;
-                case 9:
+                case OptionRowId.SfxVolume:
                     options.SfxVolume = MathF.Round(clamped * 20f) / 20f;
                     break;
-                case 10:
+                case OptionRowId.TouchControlsOpacity:
                     options.TouchControlsOpacity = UiScaleHelper.ClampTouchControlsOpacity(20 + (int)MathF.Round(clamped * 80f));
                     break;
-#else
-                case 8:
-                    options.MasterVolume = MathF.Round(clamped * 20f) / 20f;
-                    break;
-                case 9:
-                    options.MusicVolume = MathF.Round(clamped * 20f) / 20f;
-                    break;
-                case 10:
-                    options.SfxVolume = MathF.Round(clamped * 20f) / 20f;
-                    break;
-#endif
             }
         }
 
         private void AdjustOptionByStep(int index, int delta)
         {
-#if !ANDROID
-            if (optionsSection == OptionMenuSection.ThreeDGameplay)
-            {
-                switch (index)
-                {
-                    case 0:
-                        options.Invert3DHorizontal = !options.Invert3DHorizontal;
-                        break;
-                    case 1:
-                        options.Invert3DVertical = !options.Invert3DVertical;
-                        break;
-                    case 2:
-                        options.AimAssist3DMode = options.AimAssist3DMode == AimAssist3DMode.Off
-                            ? AimAssist3DMode.SoftLock
-                            : AimAssist3DMode.Off;
-                        break;
-                    case 3:
-                        optionsSection = OptionMenuSection.General;
-                        optionsSelection = GetOptionRows().Length - 1;
-                        optionsScrollOffset = GetOptionsMaxScroll();
-                        break;
-                }
-
+            OptionRowDefinition[] rows = GetOptionRows();
+            if (index < 0 || index >= rows.Length)
                 return;
-            }
-#endif
-            switch (index)
+
+            switch (rows[index].Id)
             {
-#if ANDROID
-                case 0:
-                    options.UiScalePercent = AdjustOptionPercent(options.UiScalePercent, delta, UiScaleOptions);
-                    break;
-                case 1:
-                    options.VisualPreset = (VisualPreset)(((int)options.VisualPreset + 3 + delta) % 3);
-                    break;
-                case 2:
-                    options.EnableBloom = !options.EnableBloom;
-                    break;
-                case 3:
-                    options.EnableShockwaves = !options.EnableShockwaves;
-                    break;
-                case 4:
-                    options.EnableNeonOutlines = !options.EnableNeonOutlines;
-                    break;
-                case 5:
-                    options.ScreenShakeStrength = (ScreenShakeStrength)(((int)options.ScreenShakeStrength + 3 + delta) % 3);
-                    break;
-                case 6:
-                    pendingAudioQualityPreset = CycleAudioQuality(delta, pendingAudioQualityPreset);
-                    audioQualityDialogOpen = true;
-                    break;
-                case 7:
-                    options.MasterVolume = AdjustVolume(options.MasterVolume, delta);
-                    break;
-                case 8:
-                    options.MusicVolume = AdjustVolume(options.MusicVolume, delta);
-                    break;
-                case 9:
-                    options.SfxVolume = AdjustVolume(options.SfxVolume, delta);
-                    break;
-                case 10:
-                    options.TouchControlsOpacity = UiScaleHelper.ClampTouchControlsOpacity(options.TouchControlsOpacity + delta * 5);
-                    break;
-                case 11:
-                    options.AutoUpgradeDraft = !options.AutoUpgradeDraft;
-                    break;
-                case 12:
-                    options.ShowHelpHints = !options.ShowHelpHints;
-                    break;
-#else
-                case 0:
+                case OptionRowId.DisplayMode:
+                    if (!PlatformServices.Capabilities.SupportsWindowedDisplayModes)
+                        break;
+
                     options.DisplayMode = options.DisplayMode == DesktopDisplayMode.BorderlessFullscreen
                         ? DesktopDisplayMode.Windowed
                         : DesktopDisplayMode.BorderlessFullscreen;
                     Game1.Instance?.ApplyDisplayMode(options.DisplayMode);
                     break;
-                case 1:
+                case OptionRowId.UiScale:
                     options.UiScalePercent = AdjustOptionPercent(options.UiScalePercent, delta, UiScaleOptions);
                     break;
-                case 2:
+                case OptionRowId.VisualPreset:
                     options.VisualPreset = (VisualPreset)(((int)options.VisualPreset + 3 + delta) % 3);
                     break;
-                case 3:
+                case OptionRowId.Bloom:
                     options.EnableBloom = !options.EnableBloom;
                     break;
-                case 4:
+                case OptionRowId.Shockwaves:
                     options.EnableShockwaves = !options.EnableShockwaves;
                     break;
-                case 5:
+                case OptionRowId.NeonOutlines:
                     options.EnableNeonOutlines = !options.EnableNeonOutlines;
                     break;
-                case 6:
+                case OptionRowId.ScreenShake:
                     options.ScreenShakeStrength = (ScreenShakeStrength)(((int)options.ScreenShakeStrength + 3 + delta) % 3);
                     break;
-                case 7:
+                case OptionRowId.AudioQuality:
                     pendingAudioQualityPreset = CycleAudioQuality(delta, pendingAudioQualityPreset);
                     audioQualityDialogOpen = true;
                     break;
-                case 8:
+                case OptionRowId.MasterVolume:
                     options.MasterVolume = AdjustVolume(options.MasterVolume, delta);
                     break;
-                case 9:
+                case OptionRowId.MusicVolume:
                     options.MusicVolume = AdjustVolume(options.MusicVolume, delta);
                     break;
-                case 10:
+                case OptionRowId.SfxVolume:
                     options.SfxVolume = AdjustVolume(options.SfxVolume, delta);
                     break;
-                case 11:
+                case OptionRowId.TouchControlsOpacity:
+                    options.TouchControlsOpacity = UiScaleHelper.ClampTouchControlsOpacity(options.TouchControlsOpacity + delta * 5);
+                    break;
+                case OptionRowId.AutoDraft:
                     options.AutoUpgradeDraft = !options.AutoUpgradeDraft;
                     break;
-                case 12:
+                case OptionRowId.HelpHints:
                     options.ShowHelpHints = !options.ShowHelpHints;
                     break;
-                case 13:
+                case OptionRowId.ThreeDGameplay:
                     optionsSection = OptionMenuSection.ThreeDGameplay;
                     optionsSelection = 0;
                     optionsScrollOffset = 0f;
                     break;
-#endif
+                case OptionRowId.Invert3DHorizontal:
+                    options.Invert3DHorizontal = !options.Invert3DHorizontal;
+                    break;
+                case OptionRowId.Invert3DVertical:
+                    options.Invert3DVertical = !options.Invert3DVertical;
+                    break;
+                case OptionRowId.AimAssist3D:
+                    options.AimAssist3DMode = options.AimAssist3DMode == AimAssist3DMode.Off
+                        ? AimAssist3DMode.SoftLock
+                        : AimAssist3DMode.Off;
+                    break;
+                case OptionRowId.BackToGeneral:
+                    optionsSection = OptionMenuSection.General;
+                    optionsSelection = GetOptionRows().Length - 1;
+                    optionsScrollOffset = GetOptionsMaxScroll();
+                    break;
             }
         }
 

@@ -23,6 +23,11 @@ namespace SpaceBurst
         {
             base.OnCreate(bundle);
 
+            PlatformServices.Initialize(
+                PlatformCapabilities.CreateAndroid(),
+                PlatformServices.CreateDefaultFileStorageBackend(),
+                PlatformServices.CreateDefaultTextAssetProvider(),
+                PlatformServices.CreateImmediateAudioStartGate());
             game = new Game1();
             view = (View)game.Services.GetService(typeof(View));
 
