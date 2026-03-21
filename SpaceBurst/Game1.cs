@@ -161,7 +161,7 @@ namespace SpaceBurst
 
         private FontTheme CurrentFontTheme
         {
-            get { return campaignDirector != null ? campaignDirector.FontTheme : startupOptions.FontTheme; }
+            get { return FontTheme.Readable; }
         }
 
         internal float UiLayoutScale

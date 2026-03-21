@@ -36,12 +36,12 @@ namespace SpaceBurst
         static PlayerStatus()
         {
             HighScore = LoadHighScore();
-            BeginCampaign(null);
+            BeginCampaign(null, GameDifficulty.Easy);
         }
 
-        public static void BeginCampaign(StageDefinition openingStage)
+        public static void BeginCampaign(StageDefinition openingStage, GameDifficulty difficulty)
         {
-            RunProgress.BeginCampaign(openingStage);
+            RunProgress.BeginCampaign(openingStage, difficulty);
             Score = 0;
             Multiplier = 1;
             Lives = RunProgress.StartingLives;

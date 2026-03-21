@@ -6,6 +6,7 @@ namespace SpaceBurst
         public bool TutorialCompleted { get; set; }
         public bool AutoUpgradeDraft { get; set; }
         public bool DeveloperToolsUnlocked { get; set; }
+        public GameDifficulty LastSelectedDifficulty { get; set; } = GameDifficulty.Easy;
         public DesktopDisplayMode DisplayMode { get; set; } = DesktopDisplayMode.BorderlessFullscreen;
         public int UiScalePercent { get; set; } =
 #if ANDROID
@@ -23,6 +24,7 @@ namespace SpaceBurst
         public bool Invert3DVertical { get; set; }
         public bool HasMigrated3DHorizontalDefault { get; set; } = true;
         public AimAssist3DMode AimAssist3DMode { get; set; } = AimAssist3DMode.Off;
+        // Kept for save migration only. Runtime now always uses the single readable font metrics.
         public FontTheme FontTheme { get; set; } =
 #if ANDROID
             FontTheme.Readable;

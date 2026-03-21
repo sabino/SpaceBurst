@@ -30,6 +30,7 @@ License: **The Unlicense**
 - `Space`: fire
 - `Q / E`: switch owned weapon styles
 - `R`: rewind
+- `A / S / D` on upgrade drafts: instantly pick left / middle / right
 - `Esc`: pause
 - `F1`: help
 
@@ -48,10 +49,12 @@ License: **The Unlicense**
 - Rewind stores up to 8 seconds of deterministic gameplay state.
 - `Ships` give in-place respawns.
 - `Lives` restart the current stage once ships are exhausted.
+- `HULL` shows current ship integrity.
 - Power cores feed between-stage upgrade drafts and long-run weapon growth.
 - The title screen can skip the tutorial immediately, and the tutorial pause menu can skip it mid-run.
-- Options include `UI Scale`, `World Scale`, `Font Theme`, plus display/FX/audio tuning.
-- Android defaults to the built-in `Readable` font theme and a larger UI baseline for touch readability.
+- Starting a new campaign now opens a difficulty picker with `Easy`, `Normal`, `Hard`, `Insane`, and `Realistic`.
+- Options include `UI Scale`, 3D gameplay controls, and display/FX/audio tuning.
+- The game now uses one single larger readable bitmap font across HUD, menus, help, and draft cards.
 
 ## Release Downloads
 

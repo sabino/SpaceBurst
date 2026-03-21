@@ -157,9 +157,7 @@ namespace SpaceBurst
 
         private static FontThemeMetrics ResolveMetrics()
         {
-            return CurrentTheme == FontTheme.Readable
-                ? new FontThemeMetrics(scaleMultiplier: 1.15f, lineHeight: 9f, characterSpacing: 2, drawOutline: true)
-                : new FontThemeMetrics(scaleMultiplier: 1f, lineHeight: 8f, characterSpacing: 1, drawOutline: false);
+            return new FontThemeMetrics(scaleMultiplier: 1.28f, lineHeight: 10f, characterSpacing: 2, drawOutline: true);
         }
 
         private readonly struct FontThemeMetrics

@@ -20,6 +20,7 @@ namespace SpaceBurst
 
     sealed class PlayerRunProgressSnapshotData
     {
+        public GameDifficulty Difficulty { get; set; } = GameDifficulty.Easy;
         public int StartingLives { get; set; } = 3;
         public int ShipsPerLife { get; set; } = 2;
         public bool MedalEligible { get; set; } = true;
@@ -66,6 +67,7 @@ namespace SpaceBurst
         public float FireCooldown { get; set; }
         public float DroneSupportTimer { get; set; }
         public bool HullDestroyedQueued { get; set; }
+        public float HullIntegrityRatio { get; set; } = 1f;
         public MaskSnapshotData HullMask { get; set; } = new MaskSnapshotData();
     }
 
@@ -218,6 +220,7 @@ namespace SpaceBurst
         public bool HasData { get; set; }
         public int StageNumber { get; set; }
         public string StageName { get; set; } = string.Empty;
+        public GameDifficulty Difficulty { get; set; } = GameDifficulty.Easy;
         public int Score { get; set; }
         public string SavedAtUtc { get; set; } = string.Empty;
         public string ActiveStyle { get; set; } = string.Empty;
@@ -228,6 +231,7 @@ namespace SpaceBurst
         public SaveSlotSummary Summary { get; set; } = new SaveSlotSummary();
         public int CurrentStageNumber { get; set; }
         public int CurrentSectionIndex { get; set; }
+        public GameDifficulty Difficulty { get; set; } = GameDifficulty.Easy;
         public ViewMode ViewMode { get; set; } = ViewMode.SideScroller;
         public PresentationTier PresentationTier { get; set; } = PresentationTier.Pixel2D;
         public GameFlowState State { get; set; } = GameFlowState.Paused;
