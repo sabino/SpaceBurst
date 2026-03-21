@@ -14,6 +14,7 @@ namespace SpaceBurst
             bool supportsMouseCursor,
             bool supportsTouch,
             bool supportsGamepad,
+            bool supportsApplicationExit,
             bool audioRequiresUserGesture,
             bool preferDepth16RenderTargets,
             bool supportsScreenCapture)
@@ -23,6 +24,7 @@ namespace SpaceBurst
             SupportsMouseCursor = supportsMouseCursor;
             SupportsTouch = supportsTouch;
             SupportsGamepad = supportsGamepad;
+            SupportsApplicationExit = supportsApplicationExit;
             AudioRequiresUserGesture = audioRequiresUserGesture;
             PreferDepth16RenderTargets = preferDepth16RenderTargets;
             SupportsScreenCapture = supportsScreenCapture;
@@ -33,6 +35,7 @@ namespace SpaceBurst
         public bool SupportsMouseCursor { get; }
         public bool SupportsTouch { get; }
         public bool SupportsGamepad { get; }
+        public bool SupportsApplicationExit { get; }
         public bool AudioRequiresUserGesture { get; }
         public bool PreferDepth16RenderTargets { get; }
         public bool SupportsScreenCapture { get; }
@@ -45,6 +48,7 @@ namespace SpaceBurst
                 supportsMouseCursor: true,
                 supportsTouch: false,
                 supportsGamepad: true,
+                supportsApplicationExit: true,
                 audioRequiresUserGesture: false,
                 preferDepth16RenderTargets: false,
                 supportsScreenCapture: true);
@@ -58,6 +62,7 @@ namespace SpaceBurst
                 supportsMouseCursor: false,
                 supportsTouch: true,
                 supportsGamepad: true,
+                supportsApplicationExit: true,
                 audioRequiresUserGesture: false,
                 preferDepth16RenderTargets: false,
                 supportsScreenCapture: true);

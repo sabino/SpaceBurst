@@ -35,6 +35,7 @@ namespace SpaceBurst.Web.Pages
                     supportsMouseCursor: true,
                     supportsTouch: supportsTouch,
                     supportsGamepad: true,
+                    supportsApplicationExit: false,
                     audioRequiresUserGesture: true,
                     preferDepth16RenderTargets: true,
                     supportsScreenCapture: false),

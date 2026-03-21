@@ -729,6 +729,7 @@ namespace SpaceBurst
                 return;
 
             List<UiButton> buttons = GetTitleButtons();
+            titleSelection = Math.Clamp(titleSelection, 0, buttons.Count - 1);
             UpdateVerticalSelection(ref titleSelection, buttons.Count);
             bool pointerActivated = HandlePointerSelection(buttons, ref titleSelection);
 
@@ -3020,7 +3021,8 @@ namespace SpaceBurst
                 return;
             }
 
-            Game1.Instance.Exit();
+            if (PlatformServices.Capabilities.SupportsApplicationExit)
+                Game1.Instance.Exit();
         }
 
         private Rectangle GetDifficultySelectPanelBounds()
@@ -3107,7 +3109,10 @@ namespace SpaceBurst
 
         private List<UiButton> GetTitleButtons()
         {
-            int total = options.TutorialCompleted ? 6 : 7;
+            bool includeQuit = PlatformServices.Capabilities.SupportsApplicationExit;
+            int total = options.TutorialCompleted
+                ? (includeQuit ? 6 : 5)
+                : (includeQuit ? 7 : 6);
             var buttons = new List<UiButton>
             {
                 CreateButton("START CAMPAIGN", 0, total),
@@ -3121,7 +3126,10 @@ namespace SpaceBurst
             buttons.Add(CreateButton("OPTIONS", nextIndex++, total));
             buttons.Add(CreateButton("HELP", nextIndex++, total));
             buttons.Add(CreateButton("ABOUT / LEGAL", nextIndex++, total));
-            buttons.Add(CreateButton("QUIT", nextIndex, total));
+
+            if (includeQuit)
+                buttons.Add(CreateButton("QUIT", nextIndex, total));
+
             return buttons;
         }
 

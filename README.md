@@ -1,6 +1,6 @@
 # SpaceBurst
 
-SpaceBurst is a procedural side-scrolling shooter built around deterministic rewind, authored campaign progression, style-specific weapon drafts, procedural visuals, and runtime-generated audio. The project targets Windows, Linux, and Android from a single repository.
+SpaceBurst is a procedural side-scrolling shooter built around deterministic rewind, authored campaign progression, style-specific weapon drafts, procedural visuals, and runtime-generated audio. The project targets Windows, Linux, Android, and modern browsers from a single repository.
 
 Developed by **Sabino Software**
 License: **The Unlicense**
@@ -18,8 +18,8 @@ License: **The Unlicense**
 - Ten weapon styles with style-specific power cores and progression.
 - Procedural art, feedback effects, chapter-aware music, and runtime-generated audio.
 - Sabino Software falling-pixel splash intro with randomized launch palette/background, fade-in, and skip interaction.
-- Desktop, Linux, and Android packaging paths.
-- GitHub Actions for PR checks, prereleases, and Pages docs.
+- Desktop, Linux, Android, and browser packaging paths.
+- GitHub Actions for PR checks, prereleases, and Pages deployment.
 
 ## Controls
 
@@ -60,6 +60,7 @@ License: **The Unlicense**
 
 - Releases: [github.com/sabino/SpaceBurst/releases](https://github.com/sabino/SpaceBurst/releases)
 - Documentation: [sabino.pro/SpaceBurst](http://sabino.pro/SpaceBurst/)
+- Play in browser: [sabino.pro/SpaceBurst/web](http://sabino.pro/SpaceBurst/web/)
 
 ## Local Build
 
@@ -77,6 +78,7 @@ The local aggregate build writes deterministic outputs to:
 - `artifacts/release/latest/game-win-x64/SpaceBurst.exe`
 - `artifacts/release/latest/leveltool-win-x64/SpaceBurst.LevelTool.exe`
 - `artifacts/release/latest/android-apk/com.sabino.spaceburst-Signed.apk`
+- `artifacts/release/latest/web/wwwroot/index.html`
 
 ## Android Build
 
