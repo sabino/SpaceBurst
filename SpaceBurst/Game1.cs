@@ -67,7 +67,7 @@ namespace SpaceBurst
         private Color bootSecondaryColor = Color.LightBlue;
         private Color bootPromptColor = Color.White;
 
-#if ANDROID
+#if ANDROID || BLAZORGL
         private Texture2D touchControlTexture;
 #endif
 
@@ -264,9 +264,14 @@ namespace SpaceBurst
         public Game1()
         {
             Instance = this;
+            PlatformServices.EnsureInitialized();
             startupOptions = PersistentStorage.LoadOptions();
-            capturePath = Environment.GetEnvironmentVariable("SPACEBURST_CAPTURE_PATH") ?? string.Empty;
-            captureMode = Environment.GetEnvironmentVariable("SPACEBURST_CAPTURE_MODE") ?? string.Empty;
+            capturePath = PlatformServices.Capabilities.SupportsScreenCapture
+                ? Environment.GetEnvironmentVariable("SPACEBURST_CAPTURE_PATH") ?? string.Empty
+                : string.Empty;
+            captureMode = PlatformServices.Capabilities.SupportsScreenCapture
+                ? Environment.GetEnvironmentVariable("SPACEBURST_CAPTURE_MODE") ?? string.Empty
+                : string.Empty;
             graphics = new GraphicsDeviceManager(this);
             Content.RootDirectory = "Content";
 
@@ -274,18 +279,23 @@ namespace SpaceBurst
             graphics.IsFullScreen = true;
             graphics.SupportedOrientations = DisplayOrientation.LandscapeLeft | DisplayOrientation.LandscapeRight;
 #else
-            graphics.HardwareModeSwitch = false;
-            Window.AllowUserResizing = true;
-            ConfigureDesktopDisplayMode(startupOptions.DisplayMode, false);
+            if (PlatformServices.Capabilities.SupportsWindowedDisplayModes)
+            {
+                graphics.HardwareModeSwitch = false;
+                Window.AllowUserResizing = true;
+                ConfigureDesktopDisplayMode(startupOptions.DisplayMode, false);
+            }
 #endif
         }
 
         protected override void Initialize()
         {
-#if !ANDROID
-            ConfigureDesktopDisplayMode(startupOptions.DisplayMode, true);
-            Window.TextInput += OnWindowTextInput;
-#endif
+            if (PlatformServices.Capabilities.SupportsWindowedDisplayModes)
+                ConfigureDesktopDisplayMode(startupOptions.DisplayMode, true);
+
+            if (PlatformServices.Capabilities.SupportsTextInput)
+                Window.TextInput += OnWindowTextInput;
+
             UpdateVirtualResolution();
             RecalculateViewportMatrices();
             base.Initialize();
@@ -298,8 +308,9 @@ namespace SpaceBurst
             uiPixel.SetData(new[] { Color.White });
             radialTexture = CreateRadialTexture(128);
 
-#if ANDROID
-            touchControlTexture = CreateControlTexture(128);
+#if ANDROID || BLAZORGL
+            if (PlatformServices.Capabilities.SupportsTouch)
+                touchControlTexture = CreateControlTexture(128);
 #endif
             InitializeBootLoader();
         }
@@ -334,7 +345,7 @@ namespace SpaceBurst
                     campaignDirector.TransitionTargetStageNumber,
                     campaignDirector.CurrentSectionIndex,
                     campaignDirector.CurrentSectionProgress);
-                audioDirector.Update(pausedAudioState, campaignDirector.MasterVolume, campaignDirector.MusicVolume, campaignDirector.SfxVolume, (float)gameTime.ElapsedGameTime.TotalSeconds);
+                audioDirector?.Update(pausedAudioState, campaignDirector.MasterVolume, campaignDirector.MusicVolume, campaignDirector.SfxVolume, (float)gameTime.ElapsedGameTime.TotalSeconds);
                 base.Update(gameTime);
                 return;
             }
@@ -352,8 +363,8 @@ namespace SpaceBurst
                 campaignDirector.TransitionTargetStageNumber,
                 campaignDirector.CurrentSectionIndex,
                 campaignDirector.CurrentSectionProgress);
-            feedbackDirector.Update((float)gameTime.ElapsedGameTime.TotalSeconds, audioState, ScreenShakeStrength);
-            audioDirector.Update(audioState, campaignDirector.MasterVolume, campaignDirector.MusicVolume, campaignDirector.SfxVolume, (float)gameTime.ElapsedGameTime.TotalSeconds);
+            feedbackDirector?.Update((float)gameTime.ElapsedGameTime.TotalSeconds, audioState, ScreenShakeStrength);
+            audioDirector?.Update(audioState, campaignDirector.MasterVolume, campaignDirector.MusicVolume, campaignDirector.SfxVolume, (float)gameTime.ElapsedGameTime.TotalSeconds);
 
             if (!captureCompleted && !string.IsNullOrWhiteSpace(capturePath))
                 captureDelaySeconds -= (float)gameTime.ElapsedGameTime.TotalSeconds;
@@ -435,8 +446,8 @@ namespace SpaceBurst
             campaignDirector.DrawUi(spriteBatch, uiPixel);
             spriteBatch.End();
 
-#if ANDROID
-            if (campaignDirector.ShouldDrawTouchControls)
+#if ANDROID || BLAZORGL
+            if (PlatformServices.Capabilities.SupportsTouch && campaignDirector.ShouldDrawTouchControls)
             {
                 spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.LinearClamp);
                 Input.DrawTouchControls(spriteBatch, touchControlTexture);
@@ -451,14 +462,13 @@ namespace SpaceBurst
                 spriteBatch.End();
             }
 
-#if !ANDROID
-            if ((campaignDirector != null && campaignDirector.ShouldDrawMenuCursor) || (developerConsole != null && developerConsole.IsOpen))
+            if (PlatformServices.Capabilities.SupportsMouseCursor
+                && ((campaignDirector != null && campaignDirector.ShouldDrawMenuCursor) || (developerConsole != null && developerConsole.IsOpen)))
             {
                 spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, uiScaleMatrix);
                 DrawMenuCursor(spriteBatch, uiPixel, Input.PointerPosition);
                 spriteBatch.End();
             }
-#endif
 
             if (!captureCompleted && !string.IsNullOrWhiteSpace(capturePath) && captureDelaySeconds <= 0f)
             {
@@ -478,7 +488,6 @@ namespace SpaceBurst
             return Vector2.Clamp(new Vector2(x, y), Vector2.Zero, ScreenSize);
         }
 
-#if !ANDROID
         private static void DrawMenuCursor(SpriteBatch spriteBatch, Texture2D pixel, Vector2 position)
         {
             if (spriteBatch == null || pixel == null)
@@ -504,7 +513,6 @@ namespace SpaceBurst
             spriteBatch.Draw(pixel, new Rectangle(x + 6, y + 6, 2, 6), accent);
             spriteBatch.Draw(pixel, new Rectangle(x + 8, y + 8, 2, 4), primary);
         }
-#endif
 
         public static Vector2 ScreenToUi(Vector2 screenPosition)
         {
@@ -638,7 +646,12 @@ namespace SpaceBurst
             }
 
             if (worldRenderTarget == null)
-                worldRenderTarget = new RenderTarget2D(GraphicsDevice, virtualWidth, virtualHeight, false, SurfaceFormat.Color, DepthFormat.Depth24, 0, RenderTargetUsage.DiscardContents);
+            {
+                DepthFormat depthFormat = PlatformServices.Capabilities.PreferDepth16RenderTargets
+                    ? DepthFormat.Depth16
+                    : DepthFormat.Depth24;
+                worldRenderTarget = new RenderTarget2D(GraphicsDevice, virtualWidth, virtualHeight, false, SurfaceFormat.Color, depthFormat, 0, RenderTargetUsage.DiscardContents);
+            }
         }
 
         private void InitializeBootLoader()
@@ -662,8 +675,12 @@ namespace SpaceBurst
 
             UpdateBootPixels(deltaSeconds);
 
-            if (Input.WasPrimaryActionPressed() && GetBootLogoBounds().Contains(Input.PointerPosition))
-                TriggerBootExplosion();
+            if (Input.WasPrimaryActionPressed())
+            {
+                PlatformServices.AudioStartGate.NotifyPrimaryGesture();
+                if (GetBootLogoBounds().Contains(Input.PointerPosition))
+                    TriggerBootExplosion();
+            }
 
             if (!bootReady)
             {
@@ -694,18 +711,25 @@ namespace SpaceBurst
                 case BootPhase.InitializeCameraFeedback:
                     bootStatus = "CAMERA AND FEEDBACK";
                     cameraRig = new CameraRig();
+                    feedbackDirector = new FeedbackDirector(cameraRig, audioDirector);
                     bootPhase = BootPhase.InitializeAudio;
                     break;
                 case BootPhase.InitializeAudio:
+                    if (PlatformServices.AudioStartGate.RequiresUserGesture && !PlatformServices.AudioStartGate.IsReady)
+                    {
+                        bootStatus = "WAITING FOR A TAP TO ARM AUDIO";
+                        return;
+                    }
+
                     bootStatus = "PROCEDURAL AUDIO SYNTHESIS";
-                    audioDirector = new AudioDirector(AudioQualityPreset);
-                    feedbackDirector = new FeedbackDirector(cameraRig, audioDirector);
+                    TryInitializeAudio(AudioQualityPreset);
                     bootPhase = BootPhase.FinalizeDirector;
                     break;
                 case BootPhase.FinalizeDirector:
                     bootStatus = "FINAL DIRECTOR HANDOFF";
                     campaignDirector.FinishBootToTitle();
-                    developerConsole = new ConsoleState(this, campaignDirector);
+                    if (PlatformServices.Capabilities.SupportsTextInput)
+                        developerConsole = new ConsoleState(this, campaignDirector);
                     PrepareCaptureMode();
                     bootPhase = BootPhase.Complete;
                     bootReady = true;
@@ -772,12 +796,11 @@ namespace SpaceBurst
             spriteBatch.Draw(pixel, full, Color.Black * (1f - fade));
         }
 
-#if !ANDROID
         private void OnWindowTextInput(object sender, TextInputEventArgs e)
         {
-            developerConsole?.HandleTextInput(e.Character);
+            if (PlatformServices.Capabilities.SupportsTextInput)
+                developerConsole?.HandleTextInput(e.Character);
         }
-#endif
 
         private void UpdateBootPixels(float deltaSeconds)
         {
@@ -900,7 +923,7 @@ namespace SpaceBurst
             worldRenderTarget?.Dispose();
             radialTexture?.Dispose();
             uiPixel?.Dispose();
-#if ANDROID
+#if ANDROID || BLAZORGL
             touchControlTexture?.Dispose();
 #endif
             base.UnloadContent();
@@ -908,14 +931,12 @@ namespace SpaceBurst
 
         internal void ApplyAudioQuality(AudioQualityPreset qualityPreset)
         {
-            audioDirector?.Dispose();
-            audioDirector = new AudioDirector(qualityPreset);
-            feedbackDirector = new FeedbackDirector(cameraRig, audioDirector);
+            TryInitializeAudio(qualityPreset);
         }
 
         private void PrepareCaptureMode()
         {
-            if (capturePrepared || string.IsNullOrWhiteSpace(capturePath))
+            if (!PlatformServices.Capabilities.SupportsScreenCapture || capturePrepared || string.IsNullOrWhiteSpace(capturePath))
                 return;
 
             capturePrepared = true;
@@ -934,6 +955,9 @@ namespace SpaceBurst
 
         private void CaptureFrameToPng(string path)
         {
+            if (!PlatformServices.Capabilities.SupportsScreenCapture)
+                return;
+
             Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
 
             int width = GraphicsDevice.PresentationParameters.BackBufferWidth;
@@ -949,9 +973,26 @@ namespace SpaceBurst
 
         public void ApplyDisplayMode(DesktopDisplayMode mode)
         {
-#if !ANDROID
-            ConfigureDesktopDisplayMode(mode, true);
-#endif
+            if (PlatformServices.Capabilities.SupportsWindowedDisplayModes)
+                ConfigureDesktopDisplayMode(mode, true);
+        }
+
+        private bool TryInitializeAudio(AudioQualityPreset qualityPreset)
+        {
+            audioDirector?.Dispose();
+            audioDirector = null;
+
+            try
+            {
+                audioDirector = new AudioDirector(qualityPreset);
+                feedbackDirector = new FeedbackDirector(cameraRig, audioDirector);
+                return true;
+            }
+            catch
+            {
+                feedbackDirector = new FeedbackDirector(cameraRig, null);
+                return false;
+            }
         }
 
 #if !ANDROID
@@ -978,7 +1019,7 @@ namespace SpaceBurst
         }
 #endif
 
-#if ANDROID
+#if ANDROID || BLAZORGL
         private Texture2D CreateRadialTexture(int size)
         {
             var texture = new Texture2D(GraphicsDevice, size, size);

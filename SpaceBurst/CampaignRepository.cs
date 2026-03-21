@@ -2,7 +2,6 @@ using Microsoft.Xna.Framework;
 using SpaceBurst.RuntimeData;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 
 namespace SpaceBurst
@@ -44,9 +43,8 @@ namespace SpaceBurst
 
         private static string ReadTextAsset(string relativePath)
         {
-            using (Stream stream = TitleContainer.OpenStream(relativePath.Replace('\\', '/')))
-            using (var reader = new StreamReader(stream))
-                return reader.ReadToEnd();
+            PlatformServices.EnsureInitialized();
+            return PlatformServices.TextAssets.ReadAllText(relativePath);
         }
     }
 }
