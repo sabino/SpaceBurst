@@ -546,7 +546,12 @@ namespace SpaceBurst
             if (Input.WasKeyPressed(Keys.PageDown))
             {
                 scrollOffset = Math.Max(0, scrollOffset - 3);
+                return;
             }
+
+            int wheelDelta = Input.ConsumeUiPointerScrollWheelDelta();
+            if (wheelDelta != 0)
+                scrollOffset = Math.Clamp(scrollOffset + Math.Sign(wheelDelta) * 3, 0, logLines.Count);
         }
 
         private void LoadStartupConfig()

@@ -139,6 +139,16 @@ namespace SpaceBurst
 #endif
                 }
 
+                bool migratedHorizontalDefault = false;
+                if (root.TryGetProperty(nameof(OptionsData.HasMigrated3DHorizontalDefault), out JsonElement horizontalMigration))
+                    migratedHorizontalDefault = horizontalMigration.ValueKind == JsonValueKind.True;
+
+                if (!migratedHorizontalDefault)
+                {
+                    options.Invert3DHorizontal = true;
+                    options.HasMigrated3DHorizontalDefault = true;
+                }
+
                 return options;
             }
             catch

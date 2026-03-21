@@ -21,6 +21,24 @@ namespace SpaceBurst
         private const float TitleIntroDurationSeconds = 4.8f;
         private const float TitleIntroSkipDurationSeconds = 1.05f;
         private const float DeveloperCodeTimeoutSeconds = 1.5f;
+        private const int PointerControlNone = -1;
+        private const int PointerControlOptionsViewport = 1000;
+        private const int PointerControlOptionsScrollbarUp = 1001;
+        private const int PointerControlOptionsScrollbarDown = 1002;
+        private const int PointerControlOptionsScrollbarTrack = 1003;
+        private const int PointerControlOptionsScrollbarThumb = 1004;
+        private const int PointerControlOptionsDiscard = 1005;
+        private const int PointerControlOptionsApply = 1006;
+        private const int PointerControlAudioDialogCancel = 1010;
+        private const int PointerControlAudioDialogApply = 1011;
+        private const int PointerControlHelpLeft = 1020;
+        private const int PointerControlHelpRight = 1021;
+        private const int PointerControlHelpTutorial = 1022;
+        private const int PointerControlOptionRowBase = 2000;
+        private const int PointerControlOptionStepperLeftBase = 3000;
+        private const int PointerControlOptionStepperRightBase = 4000;
+        private const int PointerControlOptionSliderBase = 5000;
+        private const int PointerControlAudioDialogPresetBase = 6000;
 
         private const string AboutHelpText =
             "ABOUT SPACEBURST\n" +
@@ -179,6 +197,31 @@ namespace SpaceBurst
         {
             General,
             ThreeDGameplay,
+        }
+
+        private enum OptionRowControlKind
+        {
+            Slider,
+            Toggle,
+            Cycle,
+            Submenu,
+            Action,
+        }
+
+        private readonly struct OptionRowDefinition
+        {
+            public OptionRowDefinition(string label, string value, string description, OptionRowControlKind controlKind)
+            {
+                Label = label ?? string.Empty;
+                Value = value ?? string.Empty;
+                Description = description ?? string.Empty;
+                ControlKind = controlKind;
+            }
+
+            public string Label { get; }
+            public string Value { get; }
+            public string Description { get; }
+            public OptionRowControlKind ControlKind { get; }
         }
 
         private enum PauseMenuAction
@@ -372,6 +415,19 @@ namespace SpaceBurst
         public GameFlowState CurrentState
         {
             get { return state; }
+        }
+
+        internal bool ShouldDrawMenuCursor
+        {
+            get
+            {
+                return state == GameFlowState.Title
+                    || state == GameFlowState.Help
+                    || state == GameFlowState.Paused
+                    || state == GameFlowState.Options
+                    || state == GameFlowState.SaveSlots
+                    || state == GameFlowState.LoadSlots;
+            }
         }
 
         public int CurrentStageNumber
@@ -770,8 +826,9 @@ namespace SpaceBurst
         private void UpdateOptions()
         {
             float deltaSeconds = (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
+            OptionRowDefinition[] rows = GetOptionRows();
             Rectangle viewport = GetOptionsListViewportBounds();
-            Rectangle[] optionBounds = GetOptionRowBounds(viewport, GetOptionRows().Length);
+            Rectangle[] optionBounds = GetOptionRowBounds(viewport, rows.Length);
             (Rectangle discardBounds, Rectangle applyBounds) = GetOptionActionBounds();
             Vector2 pointer = Input.PointerPosition;
 
@@ -802,7 +859,7 @@ namespace SpaceBurst
                 {
                     optionsSection = OptionMenuSection.General;
                     optionsSelection = GetOptionRows().Length - 1;
-                    optionsScrollOffset = 0f;
+                    optionsScrollOffset = GetOptionsMaxScroll();
                     return;
                 }
                 ConfirmOptionsAndClose();
@@ -810,35 +867,78 @@ namespace SpaceBurst
                 return;
             }
 
+            int previousSelection = optionsSelection;
             UpdateVerticalSelection(ref optionsSelection, optionBounds.Length);
+            if (optionsSelection != previousSelection)
+            {
+                EnsureOptionSelectionVisible(viewport, optionBounds);
+                optionBounds = GetOptionRowBounds(viewport, rows.Length);
+            }
+
+            int hoveredIndex = ResolveHoveredOptionIndex(optionBounds, pointer);
+            if (hoveredIndex >= 0 && (Input.DidUiPointerMove() || Input.IsMenuPointerHeld() || Input.WasUiPointerPressed()))
+                optionsSelection = hoveredIndex;
+
+            int wheelDelta = Input.ConsumeUiPointerScrollWheelDelta();
+            if (wheelDelta != 0 && (viewport.Contains(pointer) || GetOptionScrollbarBounds(viewport).Contains(pointer)))
+            {
+                optionsScrollOffset -= Math.Sign(wheelDelta) * UiPx(42);
+                ClampOptionsScroll();
+                optionBounds = GetOptionRowBounds(viewport, rows.Length);
+            }
+
+            if (Input.WasUiPointerPressed())
+            {
+                int controlId = ResolveOptionPointerControlId(rows, viewport, optionBounds, discardBounds, applyBounds, pointer);
+                if (controlId != PointerControlNone)
+                {
+                    Input.CaptureUiControl(controlId);
+                    if (IsOptionSliderControlId(controlId))
+                    {
+                        int sliderIndex = DecodeIndexedControlId(controlId, PointerControlOptionSliderBase);
+                        optionsSelection = sliderIndex;
+                        optionsSliderDragIndex = sliderIndex;
+                        ApplyOptionSliderPointerValue(sliderIndex, optionBounds, pointer);
+                    }
+                    else if (IsOptionRowControlId(controlId))
+                    {
+                        optionsSelection = DecodeIndexedControlId(controlId, PointerControlOptionRowBase);
+                    }
+                }
+                else
+                {
+                    Input.ClearUiControlCapture();
+                }
+            }
 
             Vector2 dragDelta = Input.ConsumeMenuDragDelta();
             if (Input.IsMenuPointerHeld())
             {
-                for (int i = 0; i < optionBounds.Length; i++)
+                int capturedControlId = Input.CapturedUiControlId;
+                if (IsOptionSliderControlId(capturedControlId))
                 {
-                    if (optionBounds[i].Contains(pointer))
-                    {
-                        optionsSelection = i;
-                        break;
-                    }
+                    int sliderIndex = DecodeIndexedControlId(capturedControlId, PointerControlOptionSliderBase);
+                    optionsSliderDragIndex = sliderIndex;
+                    ApplyOptionSliderPointerValue(sliderIndex, optionBounds, pointer);
                 }
-
-                if (optionsSliderDragIndex < 0 && optionsSelection >= 0 && optionsSelection < optionBounds.Length && IsSliderOptionRow(optionsSelection) && optionBounds[optionsSelection].Contains(pointer))
-                    optionsSliderDragIndex = optionsSelection;
-
-                if (optionsSliderDragIndex >= 0 && optionsSliderDragIndex < optionBounds.Length && optionBounds[optionsSliderDragIndex].Contains(pointer))
+                else if (capturedControlId == PointerControlOptionsScrollbarThumb)
                 {
-                    Rectangle trackBounds = GetOptionSliderTrackBounds(optionBounds[optionsSliderDragIndex]);
-                    float ratio = (pointer.X - trackBounds.X) / Math.Max(1f, trackBounds.Width);
-                    SetSliderOptionFromRatio(optionsSliderDragIndex, ratio);
+                    Rectangle trackBounds = GetOptionScrollbarTrackBounds(viewport);
+                    Rectangle thumbBounds = GetOptionScrollbarThumbBounds(viewport);
+                    float maxScroll = GetOptionsMaxScroll();
+                    float ratio = maxScroll <= 0f
+                        ? 0f
+                        : (pointer.Y - trackBounds.Y - thumbBounds.Height * 0.5f) / Math.Max(1f, trackBounds.Height - thumbBounds.Height);
+                    optionsScrollOffset = MathHelper.Clamp(ratio, 0f, 1f) * maxScroll;
+                    ClampOptionsScroll();
+                    optionBounds = GetOptionRowBounds(viewport, rows.Length);
                 }
-                else if (MathF.Abs(dragDelta.Y) > 0.1f)
+                else if ((capturedControlId == PointerControlOptionsViewport || IsOptionRowControlId(capturedControlId)) && MathF.Abs(dragDelta.Y) > 0.1f)
                 {
                     optionsSliderDragIndex = -1;
                     optionsScrollOffset -= dragDelta.Y;
                     ClampOptionsScroll();
-                    optionBounds = GetOptionRowBounds(viewport, GetOptionRows().Length);
+                    optionBounds = GetOptionRowBounds(viewport, rows.Length);
                 }
             }
             else
@@ -846,29 +946,65 @@ namespace SpaceBurst
                 optionsSliderDragIndex = -1;
             }
 
-            if (Input.WasPrimaryActionPressed())
+            if (Input.WasUiPointerReleased())
             {
-                if (discardBounds.Contains(pointer))
+                int capturedControlId = Input.CapturedUiControlId;
+                bool activateOnRelease = !Input.IsUiPointerDragging();
+
+                if (capturedControlId == PointerControlOptionsDiscard && discardBounds.Contains(pointer) && activateOnRelease)
                 {
+                    Input.ClearUiControlCapture();
                     DiscardOptionsAndClose();
                     return;
                 }
 
-                if (applyBounds.Contains(pointer))
+                if (capturedControlId == PointerControlOptionsApply && applyBounds.Contains(pointer) && activateOnRelease)
                 {
+                    Input.ClearUiControlCapture();
                     ConfirmOptionsAndClose();
                     return;
                 }
 
-                for (int i = 0; i < optionBounds.Length; i++)
+                if (capturedControlId == PointerControlOptionsScrollbarUp && GetOptionScrollbarButtonBounds(viewport, true).Contains(pointer) && activateOnRelease)
                 {
-                    if (optionBounds[i].Contains(pointer))
+                    optionsScrollOffset -= UiPx(96);
+                    ClampOptionsScroll();
+                }
+                else if (capturedControlId == PointerControlOptionsScrollbarDown && GetOptionScrollbarButtonBounds(viewport, false).Contains(pointer) && activateOnRelease)
+                {
+                    optionsScrollOffset += UiPx(96);
+                    ClampOptionsScroll();
+                }
+                else if (capturedControlId == PointerControlOptionsScrollbarTrack && GetOptionScrollbarTrackBounds(viewport).Contains(pointer) && activateOnRelease)
+                {
+                    Rectangle thumbBounds = GetOptionScrollbarThumbBounds(viewport);
+                    optionsScrollOffset += pointer.Y < thumbBounds.Y ? -viewport.Height * 0.7f : viewport.Height * 0.7f;
+                    ClampOptionsScroll();
+                }
+                else if (IsOptionStepperLeftControlId(capturedControlId))
+                {
+                    int index = DecodeIndexedControlId(capturedControlId, PointerControlOptionStepperLeftBase);
+                    if (index >= 0 && index < optionBounds.Length && GetOptionStepperLeftBounds(optionBounds[index]).Contains(pointer) && activateOnRelease)
+                        AdjustOptionByStep(index, -1);
+                }
+                else if (IsOptionStepperRightControlId(capturedControlId))
+                {
+                    int index = DecodeIndexedControlId(capturedControlId, PointerControlOptionStepperRightBase);
+                    if (index >= 0 && index < optionBounds.Length && GetOptionStepperRightBounds(optionBounds[index]).Contains(pointer) && activateOnRelease)
+                        AdjustOptionByStep(index, 1);
+                }
+                else if (IsOptionRowControlId(capturedControlId))
+                {
+                    int index = DecodeIndexedControlId(capturedControlId, PointerControlOptionRowBase);
+                    if (index >= 0 && index < optionBounds.Length && optionBounds[index].Contains(pointer) && activateOnRelease)
                     {
-                        optionsSelection = i;
-                        ActivateOptionFromPointer(i, optionBounds[i], pointer);
-                        return;
+                        optionsSelection = index;
+                        ActivateOptionFromPointer(index, optionBounds[index], pointer);
                     }
                 }
+
+                Input.ClearUiControlCapture();
+                optionBounds = GetOptionRowBounds(viewport, rows.Length);
             }
 
             if (Input.WasNavigateLeftPressed())
@@ -917,19 +1053,34 @@ namespace SpaceBurst
         private void UpdateHelp()
         {
             (Rectangle leftBounds, Rectangle rightBounds, Rectangle tutorialBounds) = GetHelpActionBounds();
-            bool pointerActivated = Input.WasPrimaryActionPressed();
-            if (pointerActivated)
+            Vector2 pointer = Input.PointerPosition;
+            if (Input.WasUiPointerPressed())
             {
-                Vector2 pointer = Input.PointerPosition;
                 if (leftBounds.Contains(pointer))
-                    helpPageIndex = (helpPageIndex + HelpPageCount - 1) % HelpPageCount;
+                    Input.CaptureUiControl(PointerControlHelpLeft);
                 else if (rightBounds.Contains(pointer))
-                    helpPageIndex = (helpPageIndex + 1) % HelpPageCount;
+                    Input.CaptureUiControl(PointerControlHelpRight);
                 else if (helpPageIndex == 0 && tutorialBounds.Contains(pointer))
+                    Input.CaptureUiControl(PointerControlHelpTutorial);
+                else
+                    Input.ClearUiControlCapture();
+            }
+
+            if (Input.WasUiPointerReleased())
+            {
+                bool activateOnRelease = !Input.IsUiPointerDragging();
+                if (Input.IsUiControlCaptured(PointerControlHelpLeft) && leftBounds.Contains(pointer) && activateOnRelease)
+                    helpPageIndex = (helpPageIndex + HelpPageCount - 1) % HelpPageCount;
+                else if (Input.IsUiControlCaptured(PointerControlHelpRight) && rightBounds.Contains(pointer) && activateOnRelease)
+                    helpPageIndex = (helpPageIndex + 1) % HelpPageCount;
+                else if (Input.IsUiControlCaptured(PointerControlHelpTutorial) && helpPageIndex == 0 && tutorialBounds.Contains(pointer) && activateOnRelease)
                 {
+                    Input.ClearUiControlCapture();
                     StartTutorial(true, helpReturnState);
                     return;
                 }
+
+                Input.ClearUiControlCapture();
             }
 
             if (Input.WasNavigateLeftPressed())
@@ -2664,15 +2815,15 @@ namespace SpaceBurst
 
         private bool HandlePointerSelection(List<UiButton> buttons, ref int selection)
         {
-            return HandlePointerSelectionCore(buttons.Select(button => button.Bounds).ToArray(), ref selection);
+            return HandlePointerSelectionCore(buttons.Select(button => button.Bounds).ToArray(), ref selection, 7000);
         }
 
         private bool HandlePointerSelection(IReadOnlyList<Rectangle> bounds, ref int selection)
         {
-            return HandlePointerSelectionCore(bounds, ref selection);
+            return HandlePointerSelectionCore(bounds, ref selection, 8000);
         }
 
-        private bool HandlePointerSelectionCore(IReadOnlyList<Rectangle> bounds, ref int selection)
+        private bool HandlePointerSelectionCore(IReadOnlyList<Rectangle> bounds, ref int selection, int controlIdBase)
         {
             Vector2 pointer = Input.PointerPosition;
             int hitIndex = -1;
@@ -2685,10 +2836,27 @@ namespace SpaceBurst
                 }
             }
 
-            if (hitIndex >= 0 && (Input.IsMenuPointerHeld() || Input.WasPrimaryActionPressed()))
+            if (hitIndex >= 0 && (Input.DidUiPointerMove() || Input.IsUiPointerHeld() || Input.WasUiPointerPressed()))
                 selection = hitIndex;
 
-            return hitIndex >= 0 && Input.WasPrimaryActionPressed();
+            if (Input.WasUiPointerPressed())
+            {
+                if (hitIndex >= 0)
+                    Input.CaptureUiControl(controlIdBase + hitIndex);
+                else
+                    Input.ClearUiControlCapture();
+            }
+
+            if (Input.WasUiPointerReleased())
+            {
+                bool activated = hitIndex >= 0
+                    && Input.IsUiControlCaptured(controlIdBase + hitIndex)
+                    && !Input.IsUiPointerDragging();
+                Input.ClearUiControlCapture();
+                return activated;
+            }
+
+            return false;
         }
 
         private void UpdateVerticalSelection(ref int selection, int count)
@@ -2779,6 +2947,7 @@ namespace SpaceBurst
                 TouchControlsOpacity = source.TouchControlsOpacity,
                 Invert3DHorizontal = source.Invert3DHorizontal,
                 Invert3DVertical = source.Invert3DVertical,
+                HasMigrated3DHorizontalDefault = source.HasMigrated3DHorizontalDefault,
                 AimAssist3DMode = source.AimAssist3DMode,
                 FontTheme = source.FontTheme,
                 VisualPreset = source.VisualPreset,
@@ -2804,6 +2973,7 @@ namespace SpaceBurst
             target.TouchControlsOpacity = source.TouchControlsOpacity;
             target.Invert3DHorizontal = source.Invert3DHorizontal;
             target.Invert3DVertical = source.Invert3DVertical;
+            target.HasMigrated3DHorizontalDefault = source.HasMigrated3DHorizontalDefault;
             target.AimAssist3DMode = source.AimAssist3DMode;
             target.FontTheme = source.FontTheme;
             target.VisualPreset = source.VisualPreset;
@@ -2839,6 +3009,7 @@ namespace SpaceBurst
             audioQualityDialogOpen = false;
             audioQualityApplyPending = false;
             audioQualityApplyDelay = 0f;
+            Input.ClearUiControlCapture();
             state = GameFlowState.Options;
         }
 
@@ -2846,6 +3017,7 @@ namespace SpaceBurst
         {
             optionsSnapshot = CloneOptions(options);
             PersistentStorage.SaveOptions(options);
+            Input.ClearUiControlCapture();
             state = slotReturnState;
         }
 
@@ -2857,6 +3029,7 @@ namespace SpaceBurst
                 ApplyOptionsState();
             }
 
+            Input.ClearUiControlCapture();
             state = slotReturnState;
         }
 
@@ -2876,7 +3049,7 @@ namespace SpaceBurst
         {
             Rectangle frame = GetOptionsFrameBounds();
             int headerHeight = UiPx(108);
-            int footerHeight = UiPx(118);
+            int footerHeight = UiPx(156);
             return new Rectangle(
                 frame.X + UiPx(18),
                 frame.Y + headerHeight,
@@ -2891,8 +3064,8 @@ namespace SpaceBurst
 
         private Rectangle[] GetOptionRowBounds(Rectangle viewport, int rowCount)
         {
-            int rowHeight = UiPx(42);
-            int rowStep = UiPx(52);
+            int rowHeight = UiPx(40);
+            int rowStep = UiPx(46);
             int rowWidth = viewport.Width - UiPx(18);
             int rowX = viewport.X;
             int top = viewport.Y + UiPx(8) - (int)MathF.Round(optionsScrollOffset);
@@ -2906,8 +3079,8 @@ namespace SpaceBurst
         private float GetOptionsMaxScroll()
         {
             Rectangle viewport = GetOptionsListViewportBounds();
-            int rowHeight = UiPx(42);
-            int rowStep = UiPx(52);
+            int rowHeight = UiPx(40);
+            int rowStep = UiPx(46);
             int rowCount = GetOptionRows().Length;
             int contentHeight = UiPx(16) + rowCount * rowStep - (rowStep - rowHeight);
             return MathF.Max(0f, contentHeight - viewport.Height);
@@ -2921,12 +3094,12 @@ namespace SpaceBurst
         private (Rectangle discardBounds, Rectangle applyBounds) GetOptionActionBounds()
         {
             Rectangle frame = GetOptionsFrameBounds();
-            int buttonWidth = UiPx(220);
-            int buttonHeight = UiPx(42);
-            int gap = UiPx(28);
+            int buttonWidth = UiPx(200);
+            int buttonHeight = UiPx(40);
+            int gap = UiPx(24);
             int totalWidth = buttonWidth * 2 + gap;
             int x = frame.Center.X - totalWidth / 2;
-            int y = frame.Bottom - UiPx(64);
+            int y = frame.Bottom - UiPx(54);
             return
             (
                 new Rectangle(x, y, buttonWidth, buttonHeight),
@@ -2936,25 +3109,67 @@ namespace SpaceBurst
 
         private Rectangle GetOptionScrollbarBounds(Rectangle viewport)
         {
-            return new Rectangle(viewport.Right + UiPx(6), viewport.Y, UiPx(10), viewport.Height);
+            return new Rectangle(viewport.Right + UiPx(8), viewport.Y, UiPx(16), viewport.Height);
+        }
+
+        private Rectangle GetOptionScrollbarButtonBounds(Rectangle viewport, bool isUp)
+        {
+            Rectangle scrollbar = GetOptionScrollbarBounds(viewport);
+            int buttonHeight = UiPx(24);
+            return isUp
+                ? new Rectangle(scrollbar.X, scrollbar.Y, scrollbar.Width, buttonHeight)
+                : new Rectangle(scrollbar.X, scrollbar.Bottom - buttonHeight, scrollbar.Width, buttonHeight);
+        }
+
+        private Rectangle GetOptionScrollbarTrackBounds(Rectangle viewport)
+        {
+            Rectangle scrollbar = GetOptionScrollbarBounds(viewport);
+            Rectangle upButton = GetOptionScrollbarButtonBounds(viewport, true);
+            Rectangle downButton = GetOptionScrollbarButtonBounds(viewport, false);
+            return new Rectangle(
+                scrollbar.X,
+                upButton.Bottom + UiPx(4),
+                scrollbar.Width,
+                Math.Max(UiPx(32), downButton.Y - upButton.Bottom - UiPx(8)));
+        }
+
+        private Rectangle GetOptionScrollbarThumbBounds(Rectangle viewport)
+        {
+            Rectangle trackBounds = GetOptionScrollbarTrackBounds(viewport);
+            float maxScroll = GetOptionsMaxScroll();
+            float thumbRatio = viewport.Height / Math.Max((float)viewport.Height, viewport.Height + maxScroll);
+            int thumbHeight = Math.Max(UiPx(42), (int)MathF.Round(trackBounds.Height * thumbRatio));
+            float scrollRatio = maxScroll <= 0f ? 0f : optionsScrollOffset / maxScroll;
+            int thumbY = trackBounds.Y + (int)MathF.Round((trackBounds.Height - thumbHeight) * scrollRatio);
+            return new Rectangle(trackBounds.X, thumbY, trackBounds.Width, thumbHeight);
+        }
+
+        private Rectangle GetOptionsDescriptionBounds()
+        {
+            Rectangle frame = GetOptionsFrameBounds();
+            return new Rectangle(frame.X + UiPx(18), frame.Bottom - UiPx(112), frame.Width - UiPx(36), UiPx(34));
+        }
+
+        private Rectangle GetOptionsControlsHintBounds()
+        {
+            Rectangle frame = GetOptionsFrameBounds();
+            return new Rectangle(frame.X + UiPx(18), frame.Bottom - UiPx(84), frame.Width - UiPx(36), UiPx(22));
         }
 
         private Rectangle GetOptionSliderTrackBounds(Rectangle rowBounds)
         {
-            int width = Math.Min(UiPx(260), rowBounds.Width / 3);
-            return new Rectangle(rowBounds.Right - width - UiPx(18), rowBounds.Y + UiPx(12), width, UiPx(16));
+            int width = Math.Min(UiPx(250), rowBounds.Width / 4);
+            return new Rectangle(rowBounds.Right - width - UiPx(18), rowBounds.Y + UiPx(13), width, UiPx(14));
         }
 
         private Rectangle GetOptionStepperLeftBounds(Rectangle rowBounds)
         {
-            Rectangle track = GetOptionSliderTrackBounds(rowBounds);
-            return new Rectangle(track.X, rowBounds.Y + UiPx(6), UiPx(34), rowBounds.Height - UiPx(12));
+            return new Rectangle(rowBounds.Right - UiPx(96), rowBounds.Y + UiPx(6), UiPx(38), rowBounds.Height - UiPx(12));
         }
 
         private Rectangle GetOptionStepperRightBounds(Rectangle rowBounds)
         {
-            Rectangle track = GetOptionSliderTrackBounds(rowBounds);
-            return new Rectangle(track.Right - UiPx(34), rowBounds.Y + UiPx(6), UiPx(34), rowBounds.Height - UiPx(12));
+            return new Rectangle(rowBounds.Right - UiPx(48), rowBounds.Y + UiPx(6), UiPx(38), rowBounds.Height - UiPx(12));
         }
 
         private (Rectangle leftBounds, Rectangle rightBounds, Rectangle tutorialBounds) GetHelpActionBounds()
@@ -3001,6 +3216,7 @@ namespace SpaceBurst
         {
             AudioQualityPreset[] presets = GetAudioQualityOptions();
             (Rectangle _, Rectangle[] presetBounds, Rectangle cancelBounds, Rectangle applyBounds) = GetAudioQualityDialogBounds();
+            Vector2 pointer = Input.PointerPosition;
 
             if (Input.WasCancelPressed())
             {
@@ -3014,33 +3230,61 @@ namespace SpaceBurst
             else if (Input.WasNavigateRightPressed())
                 pendingAudioQualityPreset = CycleAudioQuality(1, pendingAudioQualityPreset);
 
-            if (Input.WasPrimaryActionPressed())
+            if (Input.WasUiPointerPressed())
             {
-                Vector2 pointer = Input.PointerPosition;
+                int controlId = PointerControlNone;
                 for (int i = 0; i < presetBounds.Length; i++)
                 {
                     if (presetBounds[i].Contains(pointer))
                     {
+                        controlId = GetAudioDialogPresetControlId(i);
+                        break;
+                    }
+                }
+
+                if (controlId == PointerControlNone && cancelBounds.Contains(pointer))
+                    controlId = PointerControlAudioDialogCancel;
+                else if (controlId == PointerControlNone && applyBounds.Contains(pointer))
+                    controlId = PointerControlAudioDialogApply;
+
+                if (controlId != PointerControlNone)
+                    Input.CaptureUiControl(controlId);
+            }
+
+            if (Input.WasUiPointerReleased())
+            {
+                bool activateOnRelease = !Input.IsUiPointerDragging();
+                int capturedControlId = Input.CapturedUiControlId;
+
+                for (int i = 0; i < presetBounds.Length; i++)
+                {
+                    if (capturedControlId == GetAudioDialogPresetControlId(i) && presetBounds[i].Contains(pointer) && activateOnRelease)
+                    {
                         pendingAudioQualityPreset = presets[i];
+                        Input.ClearUiControlCapture();
                         return;
                     }
                 }
 
-                if (cancelBounds.Contains(pointer))
+                if (capturedControlId == PointerControlAudioDialogCancel && cancelBounds.Contains(pointer) && activateOnRelease)
                 {
                     audioQualityDialogOpen = false;
                     pendingAudioQualityPreset = options.AudioQualityPreset;
+                    Input.ClearUiControlCapture();
                     return;
                 }
 
-                if (applyBounds.Contains(pointer))
+                if (capturedControlId == PointerControlAudioDialogApply && applyBounds.Contains(pointer) && activateOnRelease)
                 {
                     options.AudioQualityPreset = pendingAudioQualityPreset;
                     audioQualityDialogOpen = false;
                     audioQualityApplyPending = true;
                     audioQualityApplyDelay = 0.12f;
+                    Input.ClearUiControlCapture();
                     return;
                 }
+
+                Input.ClearUiControlCapture();
             }
 
             if (Input.WasConfirmPressed())
@@ -3063,55 +3307,55 @@ namespace SpaceBurst
             return bounds;
         }
 
-        private string[] GetOptionRows()
+        private OptionRowDefinition[] GetOptionRows()
         {
 #if ANDROID
             return new[]
             {
-                string.Concat("UI SCALE  ", options.UiScalePercent.ToString(), "%"),
-                string.Concat("FONT THEME  ", options.FontTheme.ToString().ToUpperInvariant()),
-                string.Concat("VISUAL PRESET  ", options.VisualPreset.ToString().ToUpperInvariant()),
-                string.Concat("BLOOM  ", options.EnableBloom ? "ON" : "OFF"),
-                string.Concat("SHOCKWAVES  ", options.EnableShockwaves ? "ON" : "OFF"),
-                string.Concat("NEON OUTLINES  ", options.EnableNeonOutlines ? "ON" : "OFF"),
-                string.Concat("SCREEN SHAKE  ", options.ScreenShakeStrength.ToString().ToUpperInvariant()),
-                string.Concat("AUDIO QUALITY  ", options.AudioQualityPreset.ToString().ToUpperInvariant()),
-                string.Concat("MASTER VOLUME  ", (int)(options.MasterVolume * 100f), "%"),
-                string.Concat("MUSIC VOLUME  ", (int)(options.MusicVolume * 100f), "%"),
-                string.Concat("SFX VOLUME  ", (int)(options.SfxVolume * 100f), "%"),
-                string.Concat("TOUCH CONTROLS  ", options.TouchControlsOpacity.ToString(), "%"),
-                string.Concat("AUTO DRAFT  ", options.AutoUpgradeDraft ? "ON" : "OFF"),
-                string.Concat("HELP HINTS  ", options.ShowHelpHints ? "ON" : "OFF"),
+                new OptionRowDefinition("UI SCALE", string.Concat(options.UiScalePercent, "%"), "SETS MENU SIZE AND GENERAL UI READABILITY.", OptionRowControlKind.Slider),
+                new OptionRowDefinition("FONT THEME", options.FontTheme.ToString().ToUpperInvariant(), "SWAPS BETWEEN THE COMPACT AND READABLE PIXEL FONT SETS.", OptionRowControlKind.Cycle),
+                new OptionRowDefinition("VISUAL PRESET", options.VisualPreset.ToString().ToUpperInvariant(), "CHANGES OVERALL EFFECT DENSITY, BLOOM, AND POST PROCESSING STYLE.", OptionRowControlKind.Cycle),
+                new OptionRowDefinition("BLOOM", options.EnableBloom ? "ON" : "OFF", "ADDS GLOW AROUND BRIGHT SHOTS, EXPLOSIONS, AND HIGHLIGHTS.", OptionRowControlKind.Toggle),
+                new OptionRowDefinition("SHOCKWAVES", options.EnableShockwaves ? "ON" : "OFF", "ENABLES RIPPLE AND IMPACT WAVE EFFECTS ON HEAVIER HITS.", OptionRowControlKind.Toggle),
+                new OptionRowDefinition("NEON OUTLINES", options.EnableNeonOutlines ? "ON" : "OFF", "OUTLINES HULLS AND FX WITH A SHARPER ARCADE SILHOUETTE.", OptionRowControlKind.Toggle),
+                new OptionRowDefinition("SCREEN SHAKE", options.ScreenShakeStrength.ToString().ToUpperInvariant(), "SETS HOW HARD THE CAMERA REACTS TO HITS, BOSSES, AND TRANSITIONS.", OptionRowControlKind.Cycle),
+                new OptionRowDefinition("AUDIO QUALITY", options.AudioQualityPreset.ToString().ToUpperInvariant(), "CHANGES PROCEDURAL AUDIO DENSITY. APPLYING IT REBUILDS THE AUDIO BANKS.", OptionRowControlKind.Cycle),
+                new OptionRowDefinition("MASTER VOLUME", string.Concat((int)(options.MasterVolume * 100f), "%"), "CONTROLS THE OVERALL MIX FOR MUSIC AND SOUND EFFECTS.", OptionRowControlKind.Slider),
+                new OptionRowDefinition("MUSIC VOLUME", string.Concat((int)(options.MusicVolume * 100f), "%"), "SETS THE LEVEL OF THE PROCEDURAL MUSIC STEM MIX.", OptionRowControlKind.Slider),
+                new OptionRowDefinition("SFX VOLUME", string.Concat((int)(options.SfxVolume * 100f), "%"), "SETS THE LEVEL OF SHOTS, HITS, WARNINGS, AND UI FEEDBACK.", OptionRowControlKind.Slider),
+                new OptionRowDefinition("TOUCH CONTROLS", string.Concat(options.TouchControlsOpacity, "%"), "SETS HOW VISIBLE THE ON-SCREEN STICK, AIM PAD, REWIND BUTTON, AND HUD CHIPS ARE.", OptionRowControlKind.Slider),
+                new OptionRowDefinition("AUTO DRAFT", options.AutoUpgradeDraft ? "ON" : "OFF", "IF A DRAFT TIMER EXPIRES, PICK A RANDOM OFFER AUTOMATICALLY.", OptionRowControlKind.Toggle),
+                new OptionRowDefinition("HELP HINTS", options.ShowHelpHints ? "ON" : "OFF", "SHOWS SHORT CONTROL AND SYSTEM REMINDERS DURING PLAY.", OptionRowControlKind.Toggle),
             };
 #else
             if (optionsSection == OptionMenuSection.ThreeDGameplay)
             {
                 return new[]
                 {
-                    string.Concat("INVERT 3D HORIZONTAL  ", options.Invert3DHorizontal ? "ON" : "OFF"),
-                    string.Concat("INVERT 3D VERTICAL  ", options.Invert3DVertical ? "ON" : "OFF"),
-                    string.Concat("3D AIM ASSIST  ", options.AimAssist3DMode == AimAssist3DMode.SoftLock ? "SOFT LOCK" : "OFF"),
-                    "BACK TO GENERAL",
+                    new OptionRowDefinition("INVERT 3D HORIZONTAL", options.Invert3DHorizontal ? "ON" : "OFF", "FLIPS LEFT AND RIGHT MOVEMENT IN CHASE VIEW.", OptionRowControlKind.Toggle),
+                    new OptionRowDefinition("INVERT 3D VERTICAL", options.Invert3DVertical ? "ON" : "OFF", "FLIPS UP AND DOWN MOVEMENT IN CHASE VIEW.", OptionRowControlKind.Toggle),
+                    new OptionRowDefinition("3D AIM ASSIST", options.AimAssist3DMode == AimAssist3DMode.SoftLock ? "SOFT LOCK" : "OFF", "SOFT LOCK NUDGES SHOTS TOWARD A NEARBY TARGET INSIDE A NARROW RETICLE CONE.", OptionRowControlKind.Cycle),
+                    new OptionRowDefinition("BACK TO GENERAL", string.Empty, "RETURNS TO THE MAIN OPTIONS LIST.", OptionRowControlKind.Action),
                 };
             }
 
             return new[]
             {
-                string.Concat("DISPLAY MODE  ", options.DisplayMode == DesktopDisplayMode.BorderlessFullscreen ? "BORDERLESS FULLSCREEN" : "WINDOWED"),
-                string.Concat("UI SCALE  ", options.UiScalePercent.ToString(), "%"),
-                string.Concat("FONT THEME  ", options.FontTheme.ToString().ToUpperInvariant()),
-                string.Concat("VISUAL PRESET  ", options.VisualPreset.ToString().ToUpperInvariant()),
-                string.Concat("BLOOM  ", options.EnableBloom ? "ON" : "OFF"),
-                string.Concat("SHOCKWAVES  ", options.EnableShockwaves ? "ON" : "OFF"),
-                string.Concat("NEON OUTLINES  ", options.EnableNeonOutlines ? "ON" : "OFF"),
-                string.Concat("SCREEN SHAKE  ", options.ScreenShakeStrength.ToString().ToUpperInvariant()),
-                string.Concat("AUDIO QUALITY  ", options.AudioQualityPreset.ToString().ToUpperInvariant()),
-                string.Concat("MASTER VOLUME  ", (int)(options.MasterVolume * 100f), "%"),
-                string.Concat("MUSIC VOLUME  ", (int)(options.MusicVolume * 100f), "%"),
-                string.Concat("SFX VOLUME  ", (int)(options.SfxVolume * 100f), "%"),
-                string.Concat("AUTO DRAFT  ", options.AutoUpgradeDraft ? "ON" : "OFF"),
-                string.Concat("HELP HINTS  ", options.ShowHelpHints ? "ON" : "OFF"),
-                "3D GAMEPLAY",
+                new OptionRowDefinition("DISPLAY MODE", options.DisplayMode == DesktopDisplayMode.BorderlessFullscreen ? "BORDERLESS FULLSCREEN" : "WINDOWED", "SWITCHES BETWEEN WINDOWED PLAY AND BORDERLESS FULLSCREEN.", OptionRowControlKind.Cycle),
+                new OptionRowDefinition("UI SCALE", string.Concat(options.UiScalePercent, "%"), "SETS MENU SIZE AND GENERAL UI READABILITY.", OptionRowControlKind.Slider),
+                new OptionRowDefinition("FONT THEME", options.FontTheme.ToString().ToUpperInvariant(), "SWAPS BETWEEN THE COMPACT AND READABLE PIXEL FONT SETS.", OptionRowControlKind.Cycle),
+                new OptionRowDefinition("VISUAL PRESET", options.VisualPreset.ToString().ToUpperInvariant(), "CHANGES OVERALL EFFECT DENSITY, BLOOM, AND POST PROCESSING STYLE.", OptionRowControlKind.Cycle),
+                new OptionRowDefinition("BLOOM", options.EnableBloom ? "ON" : "OFF", "ADDS GLOW AROUND BRIGHT SHOTS, EXPLOSIONS, AND HIGHLIGHTS.", OptionRowControlKind.Toggle),
+                new OptionRowDefinition("SHOCKWAVES", options.EnableShockwaves ? "ON" : "OFF", "ENABLES RIPPLE AND IMPACT WAVE EFFECTS ON HEAVIER HITS.", OptionRowControlKind.Toggle),
+                new OptionRowDefinition("NEON OUTLINES", options.EnableNeonOutlines ? "ON" : "OFF", "OUTLINES HULLS AND FX WITH A SHARPER ARCADE SILHOUETTE.", OptionRowControlKind.Toggle),
+                new OptionRowDefinition("SCREEN SHAKE", options.ScreenShakeStrength.ToString().ToUpperInvariant(), "SETS HOW HARD THE CAMERA REACTS TO HITS, BOSSES, AND TRANSITIONS.", OptionRowControlKind.Cycle),
+                new OptionRowDefinition("AUDIO QUALITY", options.AudioQualityPreset.ToString().ToUpperInvariant(), "CHANGES PROCEDURAL AUDIO DENSITY. APPLYING IT REBUILDS THE AUDIO BANKS.", OptionRowControlKind.Cycle),
+                new OptionRowDefinition("MASTER VOLUME", string.Concat((int)(options.MasterVolume * 100f), "%"), "CONTROLS THE OVERALL MIX FOR MUSIC AND SOUND EFFECTS.", OptionRowControlKind.Slider),
+                new OptionRowDefinition("MUSIC VOLUME", string.Concat((int)(options.MusicVolume * 100f), "%"), "SETS THE LEVEL OF THE PROCEDURAL MUSIC STEM MIX.", OptionRowControlKind.Slider),
+                new OptionRowDefinition("SFX VOLUME", string.Concat((int)(options.SfxVolume * 100f), "%"), "SETS THE LEVEL OF SHOTS, HITS, WARNINGS, AND UI FEEDBACK.", OptionRowControlKind.Slider),
+                new OptionRowDefinition("AUTO DRAFT", options.AutoUpgradeDraft ? "ON" : "OFF", "IF A DRAFT TIMER EXPIRES, PICK A RANDOM OFFER AUTOMATICALLY.", OptionRowControlKind.Toggle),
+                new OptionRowDefinition("HELP HINTS", options.ShowHelpHints ? "ON" : "OFF", "SHOWS SHORT CONTROL AND SYSTEM REMINDERS DURING PLAY.", OptionRowControlKind.Toggle),
+                new OptionRowDefinition("3D GAMEPLAY", "OPEN", "OPENS CHASE-VIEW CONTROLS AND AIM-ASSIST SETTINGS.", OptionRowControlKind.Submenu),
             };
 #endif
         }
@@ -3128,13 +3372,10 @@ namespace SpaceBurst
 
         private bool IsSliderOptionRow(int index)
         {
-#if ANDROID
-            return index == 0 || index == 8 || index == 9 || index == 10 || index == 11;
-#else
-            if (optionsSection == OptionMenuSection.ThreeDGameplay)
-                return false;
-            return index == 1 || index == 9 || index == 10 || index == 11;
-#endif
+            OptionRowDefinition[] rows = GetOptionRows();
+            return index >= 0
+                && index < rows.Length
+                && rows[index].ControlKind == OptionRowControlKind.Slider;
         }
 
         private float GetSliderRatioForOption(int index)
@@ -3216,7 +3457,7 @@ namespace SpaceBurst
                     case 3:
                         optionsSection = OptionMenuSection.General;
                         optionsSelection = GetOptionRows().Length - 1;
-                        optionsScrollOffset = 0f;
+                        optionsScrollOffset = GetOptionsMaxScroll();
                         break;
                 }
 
@@ -3327,6 +3568,11 @@ namespace SpaceBurst
 
         private void ActivateOptionFromPointer(int index, Rectangle rowBounds, Vector2 pointer)
         {
+            OptionRowDefinition[] rows = GetOptionRows();
+            OptionRowControlKind controlKind = index >= 0 && index < rows.Length
+                ? rows[index].ControlKind
+                : OptionRowControlKind.Cycle;
+
             if (IsSliderOptionRow(index))
             {
                 Rectangle trackBounds = GetOptionSliderTrackBounds(rowBounds);
@@ -3337,7 +3583,7 @@ namespace SpaceBurst
 
             Rectangle leftBounds = GetOptionStepperLeftBounds(rowBounds);
             Rectangle rightBounds = GetOptionStepperRightBounds(rowBounds);
-            if (leftBounds.Contains(pointer))
+            if (leftBounds.Contains(pointer) && controlKind != OptionRowControlKind.Submenu && controlKind != OptionRowControlKind.Action)
             {
                 AdjustOptionByStep(index, -1);
                 return;
@@ -3385,6 +3631,144 @@ namespace SpaceBurst
 
             int nextIndex = Math.Clamp(nearestIndex + delta, 0, options.Length - 1);
             return options[nextIndex];
+        }
+
+        private static int GetOptionRowControlId(int index)
+        {
+            return PointerControlOptionRowBase + index;
+        }
+
+        private static int GetOptionStepperLeftControlId(int index)
+        {
+            return PointerControlOptionStepperLeftBase + index;
+        }
+
+        private static int GetOptionStepperRightControlId(int index)
+        {
+            return PointerControlOptionStepperRightBase + index;
+        }
+
+        private static int GetOptionSliderControlId(int index)
+        {
+            return PointerControlOptionSliderBase + index;
+        }
+
+        private static int GetAudioDialogPresetControlId(int index)
+        {
+            return PointerControlAudioDialogPresetBase + index;
+        }
+
+        private static bool IsOptionRowControlId(int controlId)
+        {
+            return controlId >= PointerControlOptionRowBase && controlId < PointerControlOptionStepperLeftBase;
+        }
+
+        private static bool IsOptionStepperLeftControlId(int controlId)
+        {
+            return controlId >= PointerControlOptionStepperLeftBase && controlId < PointerControlOptionStepperRightBase;
+        }
+
+        private static bool IsOptionStepperRightControlId(int controlId)
+        {
+            return controlId >= PointerControlOptionStepperRightBase && controlId < PointerControlOptionSliderBase;
+        }
+
+        private static bool IsOptionSliderControlId(int controlId)
+        {
+            return controlId >= PointerControlOptionSliderBase && controlId < PointerControlAudioDialogPresetBase;
+        }
+
+        private static int DecodeIndexedControlId(int controlId, int baseControlId)
+        {
+            return controlId - baseControlId;
+        }
+
+        private void EnsureOptionSelectionVisible(Rectangle viewport, Rectangle[] optionBounds)
+        {
+            if (optionsSelection < 0 || optionsSelection >= optionBounds.Length)
+                return;
+
+            Rectangle selectedBounds = optionBounds[optionsSelection];
+            int margin = UiPx(6);
+            int visibleTop = viewport.Y + margin;
+            int visibleBottom = viewport.Bottom - margin;
+
+            if (selectedBounds.Y < visibleTop)
+                optionsScrollOffset -= visibleTop - selectedBounds.Y;
+            else if (selectedBounds.Bottom > visibleBottom)
+                optionsScrollOffset += selectedBounds.Bottom - visibleBottom;
+
+            ClampOptionsScroll();
+        }
+
+        private int ResolveHoveredOptionIndex(IReadOnlyList<Rectangle> optionBounds, Vector2 pointer)
+        {
+            for (int i = 0; i < optionBounds.Count; i++)
+            {
+                if (optionBounds[i].Contains(pointer))
+                    return i;
+            }
+
+            return -1;
+        }
+
+        private int ResolveOptionPointerControlId(OptionRowDefinition[] rows, Rectangle viewport, Rectangle[] optionBounds, Rectangle discardBounds, Rectangle applyBounds, Vector2 pointer)
+        {
+            if (discardBounds.Contains(pointer))
+                return PointerControlOptionsDiscard;
+
+            if (applyBounds.Contains(pointer))
+                return PointerControlOptionsApply;
+
+            if (GetOptionsMaxScroll() > 0f)
+            {
+                Rectangle upBounds = GetOptionScrollbarButtonBounds(viewport, true);
+                Rectangle downBounds = GetOptionScrollbarButtonBounds(viewport, false);
+                Rectangle thumbBounds = GetOptionScrollbarThumbBounds(viewport);
+                Rectangle trackBounds = GetOptionScrollbarTrackBounds(viewport);
+                if (upBounds.Contains(pointer))
+                    return PointerControlOptionsScrollbarUp;
+                if (downBounds.Contains(pointer))
+                    return PointerControlOptionsScrollbarDown;
+                if (thumbBounds.Contains(pointer))
+                    return PointerControlOptionsScrollbarThumb;
+                if (trackBounds.Contains(pointer))
+                    return PointerControlOptionsScrollbarTrack;
+            }
+
+            for (int i = 0; i < optionBounds.Length; i++)
+            {
+                Rectangle rowBounds = optionBounds[i];
+                if (!rowBounds.Contains(pointer))
+                    continue;
+
+                if (rows[i].ControlKind == OptionRowControlKind.Slider)
+                    return GetOptionSliderControlId(i);
+
+                Rectangle leftBounds = GetOptionStepperLeftBounds(rowBounds);
+                Rectangle rightBounds = GetOptionStepperRightBounds(rowBounds);
+                if (leftBounds.Contains(pointer))
+                    return GetOptionStepperLeftControlId(i);
+                if (rightBounds.Contains(pointer))
+                    return GetOptionStepperRightControlId(i);
+
+                return GetOptionRowControlId(i);
+            }
+
+            if (viewport.Contains(pointer))
+                return PointerControlOptionsViewport;
+
+            return PointerControlNone;
+        }
+
+        private void ApplyOptionSliderPointerValue(int index, Rectangle[] optionBounds, Vector2 pointer)
+        {
+            if (index < 0 || index >= optionBounds.Length)
+                return;
+
+            Rectangle trackBounds = GetOptionSliderTrackBounds(optionBounds[index]);
+            float ratio = (pointer.X - trackBounds.X) / Math.Max(1f, trackBounds.Width);
+            SetSliderOptionFromRatio(index, ratio);
         }
 
         private void RandomizeTitleIntroPalette()
@@ -3557,6 +3941,8 @@ namespace SpaceBurst
         {
             Rectangle frameBounds = GetOptionsFrameBounds();
             Rectangle viewport = GetOptionsListViewportBounds();
+            Rectangle descriptionBounds = GetOptionsDescriptionBounds();
+            Rectangle hintBounds = GetOptionsControlsHintBounds();
             if (slotReturnState == GameFlowState.Title)
                 DrawBackdrop(spriteBatch, pixel, 0.8f, "CONFIGURE VISUALS AND DISPLAY");
             else
@@ -3565,7 +3951,7 @@ namespace SpaceBurst
             spriteBatch.Draw(pixel, frameBounds, Color.Black * 0.78f);
             string headerText = optionsSection == OptionMenuSection.ThreeDGameplay ? "OPTIONS / 3D GAMEPLAY" : "OPTIONS";
             DrawCenteredText(spriteBatch, pixel, headerText, frameBounds.Center.X, frameBounds.Y + UiPx(22), Color.White, optionsSection == OptionMenuSection.ThreeDGameplay ? 2.35f : 3f);
-            string[] rows = GetOptionRows();
+            OptionRowDefinition[] rows = GetOptionRows();
             Rectangle[] rowBounds = GetOptionRowBounds(viewport, rows.Length);
             for (int i = 0; i < rows.Length; i++)
             {
@@ -3573,8 +3959,14 @@ namespace SpaceBurst
                 if (row.Bottom < viewport.Y || row.Y > viewport.Bottom)
                     continue;
 
-                DrawPanel(spriteBatch, pixel, row, i == optionsSelection ? Color.White * 0.12f : Color.White * 0.05f, i == optionsSelection ? Color.Orange : Color.White * 0.2f);
-                BitmapFontRenderer.Draw(spriteBatch, pixel, rows[i], new Vector2(row.X + UiPx(18), row.Y + UiPx(7)), Color.White, 1.05f);
+                bool selected = i == optionsSelection;
+                DrawPanel(spriteBatch, pixel, row, selected ? Color.White * 0.1f : Color.White * 0.04f, selected ? Color.Orange : Color.White * 0.16f);
+
+                Rectangle labelBounds = new Rectangle(row.X + UiPx(14), row.Y + UiPx(6), row.Width - UiPx(360), row.Height - UiPx(12));
+                Rectangle valueBounds = new Rectangle(row.Right - UiPx(280), row.Y + UiPx(6), UiPx(160), row.Height - UiPx(12));
+                float labelScale = ScaleTextToFit(rows[i].Label, labelBounds.Width, 1.02f, 0.76f);
+                float valueScale = ScaleTextToFit(rows[i].Value, valueBounds.Width, 0.98f, 0.72f);
+                BitmapFontRenderer.Draw(spriteBatch, pixel, rows[i].Label, new Vector2(labelBounds.X, labelBounds.Y + UiPx(2)), Color.White, labelScale);
 
                 if (IsSliderOptionRow(i))
                 {
@@ -3586,46 +3978,75 @@ namespace SpaceBurst
 
                     Rectangle knob = new Rectangle(trackBounds.X + Math.Max(0, fillWidth - UiPx(6)), trackBounds.Y - UiPx(3), UiPx(12), trackBounds.Height + UiPx(6));
                     spriteBatch.Draw(pixel, knob, Color.White);
+                    if (!string.IsNullOrEmpty(rows[i].Value))
+                        BitmapFontRenderer.Draw(spriteBatch, pixel, rows[i].Value, new Vector2(valueBounds.X, valueBounds.Y + UiPx(2)), Color.White * 0.9f, valueScale);
                 }
                 else
                 {
                     Rectangle leftBounds = GetOptionStepperLeftBounds(row);
                     Rectangle rightBounds = GetOptionStepperRightBounds(row);
+                    if (!string.IsNullOrEmpty(rows[i].Value))
+                        BitmapFontRenderer.Draw(spriteBatch, pixel, rows[i].Value, new Vector2(valueBounds.X, valueBounds.Y + UiPx(2)), Color.White * 0.9f, valueScale);
+
+                    string leftText = rows[i].ControlKind == OptionRowControlKind.Submenu || rows[i].ControlKind == OptionRowControlKind.Action ? string.Empty : "-";
+                    string rightText = rows[i].ControlKind switch
+                    {
+                        OptionRowControlKind.Submenu => "OPEN",
+                        OptionRowControlKind.Action => "GO",
+                        _ => "+",
+                    };
+
                     DrawPanel(spriteBatch, pixel, leftBounds, Color.Black * 0.18f, Color.White * 0.12f);
                     DrawPanel(spriteBatch, pixel, rightBounds, Color.Black * 0.18f, Color.White * 0.12f);
-                    DrawCenteredText(spriteBatch, pixel, "<", leftBounds.Center.X, leftBounds.Y + UiPx(2), Color.White * 0.78f, 1.1f);
-                    DrawCenteredText(spriteBatch, pixel, ">", rightBounds.Center.X, rightBounds.Y + UiPx(2), Color.White * 0.78f, 1.1f);
+                    if (!string.IsNullOrEmpty(leftText))
+                        DrawCenteredText(spriteBatch, pixel, leftText, leftBounds.Center.X, leftBounds.Y + UiPx(3), Color.White * 0.78f, 0.95f);
+                    DrawCenteredText(spriteBatch, pixel, rightText, rightBounds.Center.X, rightBounds.Y + UiPx(3), Color.White * 0.78f, rightText.Length > 1 ? 0.7f : 0.95f);
                 }
             }
 
             if (GetOptionsMaxScroll() > 0f)
             {
                 Rectangle scrollbarBounds = GetOptionScrollbarBounds(viewport);
-                spriteBatch.Draw(pixel, scrollbarBounds, Color.White * 0.08f);
-                float thumbRatio = viewport.Height / Math.Max((float)viewport.Height, viewport.Height + GetOptionsMaxScroll());
-                int thumbHeight = Math.Max(UiPx(36), (int)MathF.Round(scrollbarBounds.Height * thumbRatio));
-                float scrollRatio = GetOptionsMaxScroll() <= 0f ? 0f : optionsScrollOffset / GetOptionsMaxScroll();
-                int thumbY = scrollbarBounds.Y + (int)MathF.Round((scrollbarBounds.Height - thumbHeight) * scrollRatio);
-                spriteBatch.Draw(pixel, new Rectangle(scrollbarBounds.X, thumbY, scrollbarBounds.Width, thumbHeight), Color.White * 0.52f);
+                Rectangle upBounds = GetOptionScrollbarButtonBounds(viewport, true);
+                Rectangle downBounds = GetOptionScrollbarButtonBounds(viewport, false);
+                Rectangle trackBounds = GetOptionScrollbarTrackBounds(viewport);
+                Rectangle thumbBounds = GetOptionScrollbarThumbBounds(viewport);
+                DrawPanel(spriteBatch, pixel, scrollbarBounds, Color.Black * 0.16f, Color.White * 0.12f);
+                DrawPanel(spriteBatch, pixel, upBounds, Color.Black * 0.22f, Color.White * 0.18f);
+                DrawPanel(spriteBatch, pixel, downBounds, Color.Black * 0.22f, Color.White * 0.18f);
+                spriteBatch.Draw(pixel, trackBounds, Color.White * 0.08f);
+                spriteBatch.Draw(pixel, thumbBounds, Color.White * 0.52f);
+                DrawCenteredText(spriteBatch, pixel, "^", upBounds.Center.X, upBounds.Y + UiPx(2), Color.White * 0.8f, 0.9f);
+                DrawCenteredText(spriteBatch, pixel, "v", downBounds.Center.X, downBounds.Y + UiPx(2), Color.White * 0.8f, 0.9f);
             }
+
+            DrawPanel(spriteBatch, pixel, descriptionBounds, Color.Black * 0.24f, Color.White * 0.14f);
+            string selectedDescription = rows.Length > 0 && optionsSelection >= 0 && optionsSelection < rows.Length
+                ? rows[optionsSelection].Description
+                : "ADJUST OPTIONS FOR THE CURRENT PLATFORM.";
+            float descriptionScale = ScaleTextToFit(selectedDescription, descriptionBounds.Width - UiPx(18), 0.84f, 0.64f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, selectedDescription, new Vector2(descriptionBounds.X + UiPx(10), descriptionBounds.Y + UiPx(8)), Color.White * 0.74f, descriptionScale);
+
+            string hintText =
+#if ANDROID
+                "DRAG THE LIST OR SCROLLBAR. DRAG SLIDERS. RELEASE ON A CONTROL TO APPLY IT. ANDROID BACK DISCARDS.";
+#else
+                "ARROWS NAVIGATE. WHEEL OR DRAG SCROLLS. CLICK-RELEASE ACTIVATES. ENTER ADJUSTS THE SELECTED ROW.";
+#endif
+            float hintScale = ScaleTextToFit(hintText, hintBounds.Width, 0.76f, 0.58f);
+            DrawCenteredText(spriteBatch, pixel, hintText, hintBounds.Center.X, hintBounds.Y + UiPx(2), Color.White * 0.62f, hintScale);
 
             (Rectangle discardBounds, Rectangle applyBounds) = GetOptionActionBounds();
             DrawPanel(spriteBatch, pixel, discardBounds, Color.Black * 0.22f, Color.Orange * 0.85f);
             DrawPanel(spriteBatch, pixel, applyBounds, Color.Black * 0.18f, Color.LimeGreen * 0.78f);
             DrawCenteredText(spriteBatch, pixel, "X DISCARD", discardBounds.Center.X, discardBounds.Y + UiPx(8), Color.White, 1.02f);
             DrawCenteredText(spriteBatch, pixel, "V APPLY", applyBounds.Center.X, applyBounds.Y + UiPx(8), Color.White, 1.02f);
-            DrawCenteredText(spriteBatch, pixel, "DRAG THE LIST TO SCROLL  DRAG SLIDERS OR TAP < >", frameBounds.Center.X, frameBounds.Bottom - UiPx(50), Color.White * 0.75f, 0.96f);
-            DrawCenteredText(spriteBatch, pixel, "TAP V TO SAVE  TAP X OR USE ANDROID BACK TO DISCARD", frameBounds.Center.X, frameBounds.Bottom - UiPx(22), Color.White * 0.62f, 0.98f);
 #if ANDROID
             if (audioQualityDialogOpen)
                 DrawAudioQualityDialog(spriteBatch, pixel);
             else if (audioQualityApplyPending)
                 DrawAudioRebuildOverlay(spriteBatch, pixel);
 #else
-            string footerText = optionsSection == OptionMenuSection.ThreeDGameplay
-                ? "LEFT RIGHT OR ENTER TO CHANGE  ESC RETURNS TO GENERAL"
-                : "LEFT RIGHT OR ENTER TO CHANGE  ESC TO CLOSE";
-            DrawCenteredText(spriteBatch, pixel, footerText, frameBounds.Center.X, frameBounds.Bottom - UiPx(32), Color.White * 0.75f, 1.1f);
             if (audioQualityDialogOpen)
                 DrawAudioQualityDialog(spriteBatch, pixel);
             else if (audioQualityApplyPending)
@@ -4222,6 +4643,19 @@ namespace SpaceBurst
             Vector2 textSize = BitmapFontRenderer.Measure(button.Text, 1.8f);
             Vector2 textPosition = new Vector2(button.Bounds.Center.X - textSize.X / 2f, button.Bounds.Center.Y - textSize.Y / 2f);
             BitmapFontRenderer.Draw(spriteBatch, pixel, button.Text, textPosition, Color.White, 1.8f);
+        }
+
+        private static float ScaleTextToFit(string text, float maxWidth, float preferredScale, float minimumScale)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return preferredScale;
+
+            float measuredWidth = BitmapFontRenderer.Measure(text, preferredScale).X;
+            if (measuredWidth <= maxWidth || measuredWidth <= 0f)
+                return preferredScale;
+
+            float ratio = maxWidth / measuredWidth;
+            return MathHelper.Clamp(preferredScale * ratio, minimumScale, preferredScale);
         }
 
         private void DrawCenteredText(SpriteBatch spriteBatch, Texture2D pixel, string text, float x, float y, Color color, float scale)

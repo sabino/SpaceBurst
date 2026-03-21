@@ -25,11 +25,20 @@ namespace SpaceBurst
         private static bool fireHeld;
         private static bool rewindHeld;
         private static Vector2 pointerPosition;
+        private static bool uiPointerPressed;
+        private static bool uiPointerReleased;
+        private static bool uiPointerHeld;
+        private static bool uiPointerDragging;
+        private static Vector2 uiPointerPressPosition;
+        private static Vector2 uiPointerReleasePosition;
+        private static Vector2 uiPointerDelta;
+        private static Vector2 uiPointerDragDelta;
+        private static int uiPointerScrollWheelDelta;
+        private static int capturedUiControlId = -1;
 
-#if ANDROID
         private const float MenuTapThreshold = 18f;
+#if ANDROID
         private const float StickRadiusFactor = 0.11f;
-        private static Vector2 menuDragDelta;
         private static Vector2 touchMovementDirection;
         private static Vector2 touchAimDirection;
         private static int menuTouchId = -1;
@@ -63,6 +72,46 @@ namespace SpaceBurst
             get { return pointerPosition; }
         }
 
+        public static Vector2 UiPointerPressPosition
+        {
+            get { return uiPointerPressPosition; }
+        }
+
+        public static Vector2 UiPointerReleasePosition
+        {
+            get { return uiPointerReleasePosition; }
+        }
+
+        public static bool WasUiPointerPressed()
+        {
+            return uiPointerPressed;
+        }
+
+        public static bool WasUiPointerReleased()
+        {
+            return uiPointerReleased;
+        }
+
+        public static bool IsUiPointerHeld()
+        {
+            return uiPointerHeld;
+        }
+
+        public static bool IsUiPointerDragging()
+        {
+            return uiPointerDragging;
+        }
+
+        public static bool DidUiPointerMove()
+        {
+            return uiPointerDelta.LengthSquared() > 0.01f;
+        }
+
+        public static int CapturedUiControlId
+        {
+            get { return capturedUiControlId; }
+        }
+
         public static void Update()
         {
             lastKeyboardState = keyboardState;
@@ -71,11 +120,17 @@ namespace SpaceBurst
             primaryActionPressed = false;
             fireHeld = false;
             rewindHeld = false;
+            uiPointerPressed = false;
+            uiPointerReleased = false;
+            uiPointerDelta = Vector2.Zero;
+            uiPointerDragDelta = Vector2.Zero;
+            uiPointerScrollWheelDelta = 0;
+            if (!uiPointerHeld)
+            {
+                uiPointerDragging = false;
+                capturedUiControlId = -1;
+            }
             consumedKeys.Clear();
-#if ANDROID
-            menuDragDelta = Vector2.Zero;
-            menuTouchHeld = false;
-#endif
 
             keyboardState = Keyboard.GetState();
             gamepadState = GamePad.GetState(PlayerIndex.One);
@@ -85,8 +140,44 @@ namespace SpaceBurst
             mouseState = default(MouseState);
 #else
             mouseState = Mouse.GetState();
+            Vector2 previousPointer = pointerPosition;
             pointerPosition = Game1.ScreenToUi(new Vector2(mouseState.X, mouseState.Y));
-            primaryActionPressed = lastMouseState.LeftButton == ButtonState.Released && mouseState.LeftButton == ButtonState.Pressed;
+            uiPointerDelta = pointerPosition - previousPointer;
+            uiPointerScrollWheelDelta = mouseState.ScrollWheelValue - lastMouseState.ScrollWheelValue;
+
+            bool wasPrimaryDown = lastMouseState.LeftButton == ButtonState.Pressed;
+            bool isPrimaryDown = mouseState.LeftButton == ButtonState.Pressed;
+            if (!wasPrimaryDown && isPrimaryDown)
+            {
+                primaryActionPressed = true;
+                uiPointerPressed = true;
+                uiPointerHeld = true;
+                uiPointerDragging = false;
+                uiPointerPressPosition = pointerPosition;
+            }
+            else if (wasPrimaryDown && isPrimaryDown)
+            {
+                uiPointerHeld = true;
+                if (!uiPointerDragging)
+                {
+                    Vector2 totalDelta = pointerPosition - uiPointerPressPosition;
+                    uiPointerDragging = totalDelta.LengthSquared() > MenuTapThreshold * MenuTapThreshold;
+                }
+
+                if (uiPointerDragging)
+                    uiPointerDragDelta += uiPointerDelta;
+            }
+            else if (wasPrimaryDown && !isPrimaryDown)
+            {
+                uiPointerReleased = true;
+                uiPointerReleasePosition = pointerPosition;
+                uiPointerHeld = false;
+            }
+            else
+            {
+                uiPointerHeld = false;
+            }
+
             fireHeld = keyboardState.IsKeyDown(Keys.Space) || gamepadState.Triggers.Right > 0.25f;
             rewindHeld = keyboardState.IsKeyDown(Keys.R) || gamepadState.IsButtonDown(Buttons.LeftShoulder);
 #endif
@@ -109,11 +200,7 @@ namespace SpaceBurst
 
         public static bool WasConfirmPressed()
         {
-#if ANDROID
             return WasKeyPressed(Keys.Enter) || WasKeyPressed(Keys.Space) || WasButtonPressed(Buttons.A);
-#else
-            return WasPrimaryActionPressed() || WasKeyPressed(Keys.Enter) || WasKeyPressed(Keys.Space) || WasButtonPressed(Buttons.A);
-#endif
         }
 
         public static bool WasCancelPressed()
@@ -179,31 +266,41 @@ namespace SpaceBurst
 
         public static Vector2 ConsumeMenuDragDelta()
         {
-#if ANDROID
-            Vector2 delta = menuDragDelta;
-            menuDragDelta = Vector2.Zero;
+            Vector2 delta = uiPointerDragDelta;
+            uiPointerDragDelta = Vector2.Zero;
             return delta;
-#else
-            return Vector2.Zero;
-#endif
         }
 
         public static bool IsMenuPointerHeld()
         {
-#if ANDROID
-            return menuTouchHeld;
-#else
-            return false;
-#endif
+            return uiPointerHeld;
         }
 
         public static bool IsMenuPointerDragging()
         {
-#if ANDROID
-            return menuTouchDragging;
-#else
-            return false;
-#endif
+            return uiPointerDragging;
+        }
+
+        public static int ConsumeUiPointerScrollWheelDelta()
+        {
+            int delta = uiPointerScrollWheelDelta;
+            uiPointerScrollWheelDelta = 0;
+            return delta;
+        }
+
+        public static void CaptureUiControl(int controlId)
+        {
+            capturedUiControlId = controlId;
+        }
+
+        public static bool IsUiControlCaptured(int controlId)
+        {
+            return capturedUiControlId == controlId;
+        }
+
+        public static void ClearUiControlCapture()
+        {
+            capturedUiControlId = -1;
         }
 
         public static bool WasNavigateUpPressed()
@@ -660,16 +757,21 @@ namespace SpaceBurst
                 {
                     trackedMenuTouchFound = touch.State != TouchLocationState.Released && touch.State != TouchLocationState.Invalid;
                     menuTouchHeld = trackedMenuTouchFound;
+                    uiPointerHeld = trackedMenuTouchFound;
                     if (touch.State == TouchLocationState.Moved)
                     {
                         Vector2 delta = uiPosition - menuTouchLastPosition;
-                        menuDragDelta += delta;
+                        uiPointerDelta = delta;
                         menuTouchLastPosition = uiPosition;
                         if (!menuTouchDragging)
                         {
                             Vector2 totalDelta = uiPosition - menuTouchStartPosition;
                             menuTouchDragging = totalDelta.LengthSquared() > MenuTapThreshold * MenuTapThreshold;
+                            uiPointerDragging = menuTouchDragging;
                         }
+
+                        if (menuTouchDragging)
+                            uiPointerDragDelta += delta;
                     }
                     else if (touch.State == TouchLocationState.Pressed)
                     {
@@ -677,6 +779,10 @@ namespace SpaceBurst
                         menuTouchLastPosition = uiPosition;
                         menuTouchDragging = false;
                         menuTouchHeld = true;
+                        uiPointerPressed = true;
+                        uiPointerHeld = true;
+                        uiPointerDragging = false;
+                        uiPointerPressPosition = uiPosition;
                     }
                     else if (touch.State == TouchLocationState.Released)
                     {
@@ -684,11 +790,14 @@ namespace SpaceBurst
                         if (!menuTouchDragging && totalDelta.LengthSquared() <= MenuTapThreshold * MenuTapThreshold)
                             primaryActionPressed = true;
 
+                        uiPointerReleased = true;
+                        uiPointerReleasePosition = uiPosition;
                         menuTouchId = -1;
                         menuTouchStartPosition = Vector2.Zero;
                         menuTouchLastPosition = Vector2.Zero;
                         menuTouchDragging = false;
                         menuTouchHeld = false;
+                        uiPointerHeld = false;
                         trackedMenuTouchFound = false;
                     }
 
@@ -702,6 +811,10 @@ namespace SpaceBurst
                     menuTouchLastPosition = uiPosition;
                     menuTouchHeld = true;
                     menuTouchDragging = false;
+                    uiPointerPressed = true;
+                    uiPointerHeld = true;
+                    uiPointerDragging = false;
+                    uiPointerPressPosition = uiPosition;
                     trackedMenuTouchFound = true;
                 }
             }
@@ -711,6 +824,7 @@ namespace SpaceBurst
                 menuTouchId = -1;
                 menuTouchHeld = false;
                 menuTouchDragging = false;
+                uiPointerHeld = false;
             }
         }
 
@@ -721,7 +835,6 @@ namespace SpaceBurst
             menuTouchLastPosition = Vector2.Zero;
             menuTouchHeld = false;
             menuTouchDragging = false;
-            menuDragDelta = Vector2.Zero;
             movementTouchId = -1;
             aimTouchId = -1;
             rewindTouchId = -1;

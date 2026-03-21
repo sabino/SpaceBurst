@@ -451,6 +451,15 @@ namespace SpaceBurst
                 spriteBatch.End();
             }
 
+#if !ANDROID
+            if ((campaignDirector != null && campaignDirector.ShouldDrawMenuCursor) || (developerConsole != null && developerConsole.IsOpen))
+            {
+                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, uiScaleMatrix);
+                DrawMenuCursor(spriteBatch, uiPixel, Input.PointerPosition);
+                spriteBatch.End();
+            }
+#endif
+
             if (!captureCompleted && !string.IsNullOrWhiteSpace(capturePath) && captureDelaySeconds <= 0f)
             {
                 CaptureFrameToPng(capturePath);
@@ -468,6 +477,34 @@ namespace SpaceBurst
             float y = (screenPosition.Y - Instance.worldRenderViewport.Y) * VirtualHeight / Instance.worldRenderViewport.Height;
             return Vector2.Clamp(new Vector2(x, y), Vector2.Zero, ScreenSize);
         }
+
+#if !ANDROID
+        private static void DrawMenuCursor(SpriteBatch spriteBatch, Texture2D pixel, Vector2 position)
+        {
+            if (spriteBatch == null || pixel == null)
+                return;
+
+            int x = (int)MathF.Round(position.X);
+            int y = (int)MathF.Round(position.Y);
+            Color glow = Color.Black * 0.55f;
+            Color primary = Color.White;
+            Color accent = Color.Orange;
+
+            spriteBatch.Draw(pixel, new Rectangle(x, y, 2, 16), glow);
+            spriteBatch.Draw(pixel, new Rectangle(x, y, 12, 2), glow);
+            spriteBatch.Draw(pixel, new Rectangle(x + 2, y + 2, 2, 10), glow);
+            spriteBatch.Draw(pixel, new Rectangle(x + 4, y + 4, 2, 8), glow);
+            spriteBatch.Draw(pixel, new Rectangle(x + 6, y + 6, 2, 6), glow);
+            spriteBatch.Draw(pixel, new Rectangle(x + 8, y + 8, 2, 4), glow);
+
+            spriteBatch.Draw(pixel, new Rectangle(x, y, 2, 14), primary);
+            spriteBatch.Draw(pixel, new Rectangle(x, y, 10, 2), primary);
+            spriteBatch.Draw(pixel, new Rectangle(x + 2, y + 2, 2, 10), accent);
+            spriteBatch.Draw(pixel, new Rectangle(x + 4, y + 4, 2, 8), accent);
+            spriteBatch.Draw(pixel, new Rectangle(x + 6, y + 6, 2, 6), accent);
+            spriteBatch.Draw(pixel, new Rectangle(x + 8, y + 8, 2, 4), primary);
+        }
+#endif
 
         public static Vector2 ScreenToUi(Vector2 screenPosition)
         {
