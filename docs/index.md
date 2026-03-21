@@ -1,6 +1,6 @@
 # SpaceBurst
 
-SpaceBurst is a procedural side-scrolling shooter with deterministic rewind, weapon draft transitions, chapter-based music, cross-platform packaging, and a 50-stage campaign that targets Windows, Linux, and Android.
+SpaceBurst is a procedural side-scrolling shooter with deterministic rewind, weapon draft transitions, chapter-based music, cross-platform packaging, and a 50-stage campaign that targets Windows, Linux, Android, and modern browsers.
 
 ![Title screen](media/title-screen.png)
 
@@ -20,11 +20,13 @@ SpaceBurst is a procedural side-scrolling shooter with deterministic rewind, wea
 - [Build and release workflow](articles/build-release.md)
 - [Project architecture](articles/architecture.md)
 - [License and credits](articles/license-credits.md)
+- [Play in browser](http://sabino.pro/SpaceBurst/web/)
 
 ## Downloads
 
 - Releases: [github.com/sabino/SpaceBurst/releases](https://github.com/sabino/SpaceBurst/releases)
 - Source: [github.com/sabino/SpaceBurst](https://github.com/sabino/SpaceBurst)
+- Browser build: [sabino.pro/SpaceBurst/web](http://sabino.pro/SpaceBurst/web/)
 
 ## Public Product Identity
 
