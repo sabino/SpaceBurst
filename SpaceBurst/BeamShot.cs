@@ -82,7 +82,8 @@ namespace SpaceBurst
             if (!Friendly)
                 return;
 
-            foreach (Enemy enemy in EntityManager.Enemies)
+            Vector2 searchCenter = Position + Direction * (Length * 0.5f);
+            foreach (Enemy enemy in EntityManager.QueryNearbyEnemies(searchCenter, Length * 0.6f + 80f))
             {
                 if (enemy.IsExpired || hitThisTick.Contains(enemy))
                     continue;

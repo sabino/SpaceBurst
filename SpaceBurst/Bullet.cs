@@ -284,10 +284,7 @@ namespace SpaceBurst
 
         private Vector3? GetEnemySeekDirection()
         {
-            Enemy target = EntityManager.Enemies
-                .Where(enemy => !enemy.IsExpired)
-                .OrderBy(enemy => Vector3.DistanceSquared(enemy.CombatPosition, CombatPosition))
-                .FirstOrDefault();
+            Enemy target = EntityManager.FindNearestEnemy(CombatPosition, 340f);
             if (target == null)
                 return null;
 

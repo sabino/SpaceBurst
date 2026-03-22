@@ -36,6 +36,129 @@ namespace SpaceBurst.Runtime.Tests
         }
 
         [Fact]
+        public void OverdriveSliceStagesCarryContinuousChapterPacing()
+        {
+            string repoRoot = FindRepositoryRoot();
+            string levelsDirectory = Path.Combine(repoRoot, "Levels");
+            List<StageDefinition> sliceStages = new();
+
+            for (int stageNumber = 1; stageNumber <= 10; stageNumber++)
+                sliceStages.Add(LevelSerializer.LoadLevelFromFile(Path.Combine(levelsDirectory, $"level-{stageNumber:00}.json")));
+
+            Assert.All(sliceStages, stage =>
+            {
+                Assert.Equal("Chapter 1: Overdrive", stage.SliceChapterName);
+                Assert.Equal(720f, stage.SliceTargetDurationSeconds);
+                Assert.True(stage.HordePackets.Count >= (stage.StageNumber == 10 ? 7 : 5));
+                Assert.True(stage.KillChainEvents.Count >= 3);
+                Assert.True(stage.PresentationCues.Count >= 1);
+            });
+
+            float authoredDuration = sliceStages.Sum(stage => stage.Sections.Max(section => section.StartSeconds + section.DurationSeconds));
+            Assert.True(authoredDuration >= 715f);
+            Assert.Contains(sliceStages[3].PresentationCues, cue => cue.Label == "4 MINUTE ESCALATION");
+            Assert.Contains(sliceStages[6].PresentationCues, cue => cue.Label == "8 MINUTE REDLINE");
+            Assert.Contains(sliceStages[8].EliteBursts, burst => burst.WarningText == "PURSUIT DREADNOUGHT");
+            Assert.NotNull(sliceStages[9].Boss);
+            Assert.Equal("Pursuit Dreadnought", sliceStages[9].Boss.DisplayName);
+        }
+
+        [Fact]
+        public void LevelSerializer_RoundTripsOverdriveSliceFields()
+        {
+            var definition = new StageDefinition
+            {
+                StageNumber = 1,
+                Name = "Overdrive Launch",
+                Theme = "Nebula",
+                SliceChapterName = "Chapter 1: Overdrive",
+                SliceTargetDurationSeconds = 720,
+                Sections =
+                {
+                    new SectionDefinition
+                    {
+                        Label = "Overdrive 1",
+                        StartSeconds = 0.75f,
+                        DurationSeconds = 34.2f,
+                        Groups =
+                        {
+                            new SpawnGroupDefinition
+                            {
+                                ArchetypeId = "Walker",
+                                StartSeconds = 0f,
+                                Count = 1,
+                            }
+                        }
+                    }
+                },
+                HordePackets =
+                {
+                    new HordePacketDefinition
+                    {
+                        ArchetypeId = "Interceptor",
+                        StartSeconds = 4f,
+                        BurstCount = 3,
+                        CountPerBurst = 5,
+                        SpawnIntervalSeconds = 0.1f,
+                    }
+                },
+                EliteBursts =
+                {
+                    new EliteBurstEventDefinition
+                    {
+                        WarningText = "FRACTURE CONVOY",
+                        StartSeconds = 52f,
+                        ArchetypeId = "Destroyer",
+                        EliteCount = 2,
+                        ScrapReward = 1,
+                        RewindRefillPercent = 0.16f,
+                    }
+                },
+                KillChainEvents =
+                {
+                    new KillChainEventDefinition
+                    {
+                        TriggerMultiplier = 16,
+                        Label = "OVERDRIVE",
+                        BonusXp = 6.5f,
+                        BonusScrap = 2,
+                        BonusRewindPercent = 0.1f,
+                    }
+                },
+                PresentationCues =
+                {
+                    new PresentationCueDefinition
+                    {
+                        Kind = PresentationCueKind.ChapterBeat,
+                        StartSeconds = 1f,
+                        DurationSeconds = 2.2f,
+                        Label = "CHAPTER 1: OVERDRIVE",
+                        AccentColor = "#56F0FF",
+                        Intensity = 1.1f,
+                    }
+                }
+            };
+
+            string json = LevelSerializer.SerializeLevel(definition);
+            StageDefinition roundTripped = LevelSerializer.DeserializeLevel(json);
+
+            Assert.Equal("Chapter 1: Overdrive", roundTripped.SliceChapterName);
+            Assert.Equal(720f, roundTripped.SliceTargetDurationSeconds);
+            Assert.Single(roundTripped.HordePackets);
+            Assert.Equal("Interceptor", roundTripped.HordePackets[0].ArchetypeId);
+            Assert.Equal(3, roundTripped.HordePackets[0].BurstCount);
+            Assert.Single(roundTripped.EliteBursts);
+            Assert.Equal("FRACTURE CONVOY", roundTripped.EliteBursts[0].WarningText);
+            Assert.Equal(0.16f, roundTripped.EliteBursts[0].RewindRefillPercent);
+            Assert.Single(roundTripped.KillChainEvents);
+            Assert.Equal(16, roundTripped.KillChainEvents[0].TriggerMultiplier);
+            Assert.Equal(0.1f, roundTripped.KillChainEvents[0].BonusRewindPercent);
+            Assert.Single(roundTripped.PresentationCues);
+            Assert.Equal(PresentationCueKind.ChapterBeat, roundTripped.PresentationCues[0].Kind);
+            Assert.Equal("CHAPTER 1: OVERDRIVE", roundTripped.PresentationCues[0].Label);
+        }
+
+        [Fact]
         public void DamageMaskRemovesCellsAndDestroysOnCoreBreach()
         {
             var sprite = new ProceduralSpriteDefinition

@@ -15,6 +15,7 @@ namespace SpaceBurst
         private static List<BeamShot> beams = new List<BeamShot>();
         private static List<PowerupPickup> powerups = new List<PowerupPickup>();
         private static List<Entity> addedEntities = new List<Entity>();
+        private static readonly EntitySpatialGrid<Enemy> enemyGrid = new EntitySpatialGrid<Enemy>(160f);
 
         private static bool isUpdating;
         private static bool queuedPlayerHullDestruction;
@@ -66,6 +67,7 @@ namespace SpaceBurst
             addedEntities.Clear();
             isUpdating = false;
             queuedPlayerHullDestruction = false;
+            enemyGrid.Clear();
         }
 
         public static void ClearHostiles()
@@ -94,6 +96,7 @@ namespace SpaceBurst
                     entities[i].Update();
             }
 
+            RebuildSpatialIndex();
             HandleCollisions();
 
             isUpdating = false;
@@ -195,6 +198,32 @@ namespace SpaceBurst
                 Add(PowerupPickup.FromSnapshot(snapshot));
         }
 
+        public static IEnumerable<Enemy> QueryNearbyEnemies(Vector2 position, float radius)
+        {
+            return enemyGrid.Query(position, radius);
+        }
+
+        public static Enemy FindNearestEnemy(Vector3 position, float radius = 260f)
+        {
+            Enemy best = null;
+            float bestDistanceSquared = radius * radius;
+            foreach (Enemy enemy in enemyGrid.Query(new Vector2(position.X, position.Y), radius))
+            {
+                if (enemy == null || enemy.IsExpired)
+                    continue;
+
+                Vector3 delta = enemy.CombatPosition - position;
+                float distanceSquared = delta.LengthSquared();
+                if (distanceSquared >= bestDistanceSquared)
+                    continue;
+
+                bestDistanceSquared = distanceSquared;
+                best = enemy;
+            }
+
+            return best;
+        }
+
         private static void AddEntity(Entity entity)
         {
             if (entities.Contains(entity))
@@ -209,6 +238,17 @@ namespace SpaceBurst
                 beams.Add(beam);
             else if (entity is PowerupPickup powerup)
                 powerups.Add(powerup);
+        }
+
+        private static void RebuildSpatialIndex()
+        {
+            enemyGrid.Clear();
+            for (int i = 0; i < enemies.Count; i++)
+            {
+                Enemy enemy = enemies[i];
+                if (!enemy.IsExpired)
+                    enemyGrid.Add(enemy.Position, enemy);
+            }
         }
 
         private static void HandleCollisions()
@@ -269,9 +309,9 @@ namespace SpaceBurst
         private static void HandleFriendlyBullet(Bullet bullet)
         {
             bool depthAware = CombatSpaceMath.IsDepthAwareViewActive;
-            for (int enemyIndex = 0; enemyIndex < enemies.Count; enemyIndex++)
+            float searchRadius = Math.Max(160f, bullet.Velocity.Length() * 0.05f + bullet.ApproximateRadius * 2f);
+            foreach (Enemy enemy in enemyGrid.Query(bullet.Position, searchRadius))
             {
-                Enemy enemy = enemies[enemyIndex];
                 if (enemy.IsExpired || !MayOverlap(enemy, bullet))
                     continue;
 
@@ -340,7 +380,7 @@ namespace SpaceBurst
 
                 if (powerup.OverlapsPlayer())
                 {
-                    Player1.Instance.CollectPowerup(powerup.StyleId);
+                    Player1.Instance.CollectPowerup(powerup);
                     powerup.IsExpired = true;
                 }
             }
@@ -381,9 +421,8 @@ namespace SpaceBurst
             int splashDamage = System.Math.Max(1, (int)System.MathF.Round(bullet.Damage * 0.6f));
             SpawnShockwave(impactPoint, ColorUtil.ParseHex(bullet.SpriteDefinition?.AccentColor, Color.OrangeRed) * 0.22f, 10f, bullet.ExplosionRadius, 0.18f);
 
-            for (int i = 0; i < enemies.Count; i++)
+            foreach (Enemy enemy in enemyGrid.Query(impactPoint, bullet.ExplosionRadius + 42f))
             {
-                Enemy enemy = enemies[i];
                 if (enemy.IsExpired || ReferenceEquals(enemy, primaryTarget))
                     continue;
 
@@ -412,8 +451,8 @@ namespace SpaceBurst
                 return;
 
             bool depthAware = CombatSpaceMath.IsDepthAwareViewActive;
-            Enemy[] chainTargets = enemies
-                .Where(enemy => !enemy.IsExpired && !ReferenceEquals(enemy, primaryTarget))
+            Enemy[] chainTargets = enemyGrid.Query(impactPoint, 520f)
+                .Where(enemy => enemy != null && !enemy.IsExpired && !ReferenceEquals(enemy, primaryTarget))
                 .OrderBy(enemy =>
                 {
                     if (depthAware)

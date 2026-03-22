@@ -17,10 +17,22 @@ namespace SpaceBurst
         public float MoveSpeedMultiplier { get; private set; } = 1f;
         public float RewindEfficiency { get; private set; }
         public float DropBonusChance { get; private set; }
+        public float RunXp { get; private set; }
+        public int RunLevel { get; private set; } = 1;
+        public int Scrap { get; private set; }
+        public int PendingLevelUps { get; private set; }
+        public int PassiveSlots { get; private set; } = 1;
+        public int KillChainTier { get; private set; }
+        public float FocusFireSeconds { get; private set; }
 
         public int StoredUpgradeCharges
         {
             get { return Weapons.StoredUpgradeCharges; }
+        }
+
+        public bool HasPendingLevelUp
+        {
+            get { return PendingLevelUps > 0; }
         }
 
         public WeaponStyleId PriorityChargeStyle
@@ -34,7 +46,11 @@ namespace SpaceBurst
             {
                 return Weapons.HighestRank
                     + Math.Max(0, Weapons.UnlockedStyleCount - 1) * 1.2f
-                    + NonWeaponUpgradeCount * 0.75f;
+                    + NonWeaponUpgradeCount * 0.75f
+                    + Weapons.SupportWeapons.Count * 0.4f
+                    + Weapons.PassiveReactors.Count * 0.5f
+                    + Weapons.Evolutions.Count * 0.9f
+                    + (RunLevel - 1) * 0.18f;
             }
         }
 
@@ -50,6 +66,13 @@ namespace SpaceBurst
             MoveSpeedMultiplier = 1f;
             RewindEfficiency = 0f;
             DropBonusChance = 0f;
+            RunXp = 0f;
+            RunLevel = 1;
+            Scrap = 0;
+            PendingLevelUps = 0;
+            PassiveSlots = 1;
+            KillChainTier = 0;
+            FocusFireSeconds = 0f;
         }
 
         public void ApplyStageDefaults(StageDefinition stage)
@@ -89,6 +112,210 @@ namespace SpaceBurst
         public WeaponUpgradeOutcome ApplyWeaponUpgrade(WeaponStyleId style, bool activateStyle = false)
         {
             return Weapons.ApplyWeaponUpgrade(style, activateStyle);
+        }
+
+        public bool TryEquipSupportWeapon(WeaponStyleId style)
+        {
+            if (!Weapons.TryEquipSupportWeapon(style))
+                return false;
+
+            NonWeaponUpgradeCount++;
+            return true;
+        }
+
+        public bool TryEquipPassive(PassiveReactorId passive)
+        {
+            if (!Weapons.TryEquipPassive(passive, PassiveSlots))
+                return false;
+
+            switch (passive)
+            {
+                case PassiveReactorId.Overclock:
+                    MoveSpeedMultiplier = MathF.Min(1.4f, MoveSpeedMultiplier + 0.04f);
+                    break;
+                case PassiveReactorId.MagnetCore:
+                    DropBonusChance = MathF.Min(0.28f, DropBonusChance + 0.02f);
+                    break;
+                case PassiveReactorId.ArmorPlating:
+                    ShipsPerLife = Math.Min(7, ShipsPerLife + 1);
+                    break;
+                case PassiveReactorId.TimeBattery:
+                    RewindEfficiency = MathF.Min(0.65f, RewindEfficiency + 0.16f);
+                    break;
+                case PassiveReactorId.SalvageNode:
+                    DropBonusChance = MathF.Min(0.3f, DropBonusChance + 0.04f);
+                    break;
+                case PassiveReactorId.ChainReactor:
+                    MoveSpeedMultiplier = MathF.Min(1.5f, MoveSpeedMultiplier + 0.05f);
+                    break;
+            }
+
+            NonWeaponUpgradeCount++;
+            return true;
+        }
+
+        public bool TryAddEvolution(EvolutionId evolution)
+        {
+            return Weapons.TryAddEvolution(evolution);
+        }
+
+        public bool HasPassive(PassiveReactorId passive)
+        {
+            return Weapons.HasPassiveReactor(passive);
+        }
+
+        public bool HasEvolution(EvolutionId evolution)
+        {
+            return Weapons.HasEvolution(evolution);
+        }
+
+        public void AddXp(float amount)
+        {
+            if (amount <= 0f)
+                return;
+
+            RunXp += amount;
+            while (RunXp >= GetXpRequiredForNextLevel())
+            {
+                RunXp -= GetXpRequiredForNextLevel();
+                RunLevel++;
+                PendingLevelUps++;
+                if (RunLevel == 4 || RunLevel == 7)
+                    PassiveSlots = Math.Min(3, PassiveSlots + 1);
+            }
+        }
+
+        public bool TryConsumeLevelUp()
+        {
+            if (PendingLevelUps <= 0)
+                return false;
+
+            PendingLevelUps--;
+            return true;
+        }
+
+        public float GetXpRatio()
+        {
+            float next = GetXpRequiredForNextLevel();
+            if (next <= 0f)
+                return 1f;
+
+            return MathHelper.Clamp(RunXp / next, 0f, 1f);
+        }
+
+        public float GetXpRequiredForNextLevel()
+        {
+            return 5f + (RunLevel - 1) * 3f + Math.Max(0, RunLevel - 5) * 2f;
+        }
+
+        public void AddScrap(int amount)
+        {
+            if (amount > 0)
+                Scrap += amount;
+        }
+
+        public void UpdateFocusFire(bool focusHeld, float deltaSeconds)
+        {
+            if (focusHeld)
+                FocusFireSeconds = MathF.Min(4f, FocusFireSeconds + deltaSeconds);
+            else
+                FocusFireSeconds = MathF.Max(0f, FocusFireSeconds - deltaSeconds * 2.2f);
+        }
+
+        public float GetFocusFireIntensity()
+        {
+            return MathHelper.Clamp(FocusFireSeconds / 1.2f, 0f, 1f);
+        }
+
+        public float GetFireIntervalScale(bool focusHeld)
+        {
+            float scale = 1f;
+            if (focusHeld)
+                scale *= MathHelper.Lerp(0.9f, 0.76f, GetFocusFireIntensity());
+            if (HasPassive(PassiveReactorId.Overclock))
+                scale *= 0.9f;
+            if (HasEvolution(EvolutionId.SingularityRail))
+                scale *= 0.94f;
+
+            return MathF.Max(0.34f, scale);
+        }
+
+        public float GetProjectileSpeedScale(bool focusHeld)
+        {
+            float scale = 1f;
+            if (focusHeld)
+                scale *= 1f + GetFocusFireIntensity() * 0.18f;
+            if (HasPassive(PassiveReactorId.ChainReactor))
+                scale *= 1.06f;
+            return scale;
+        }
+
+        public float GetHomingBonus(bool focusHeld)
+        {
+            float bonus = 0f;
+            if (focusHeld)
+                bonus += 0.25f + GetFocusFireIntensity() * 0.25f;
+            if (HasPassive(PassiveReactorId.ChainReactor))
+                bonus += 0.12f;
+            return bonus;
+        }
+
+        public float GetMagnetStrength()
+        {
+            float baseStrength = 0f;
+            if (HasPassive(PassiveReactorId.MagnetCore))
+                baseStrength += 160f;
+            if (HasPassive(PassiveReactorId.TimeBattery))
+                baseStrength += 60f;
+            return baseStrength;
+        }
+
+        public int GetChainBonus()
+        {
+            int bonus = 0;
+            if (HasPassive(PassiveReactorId.ChainReactor))
+                bonus++;
+            if (HasEvolution(EvolutionId.EchoHive))
+                bonus++;
+            return bonus;
+        }
+
+        public int GetDroneBonus()
+        {
+            return HasEvolution(EvolutionId.EchoHive) ? 2 : 0;
+        }
+
+        public int GetProjectileDamageBonus(WeaponStyleId style)
+        {
+            int bonus = 0;
+            if (HasPassive(PassiveReactorId.Overclock))
+                bonus++;
+            if (style == WeaponStyleId.Missile && HasEvolution(EvolutionId.CataclysmRack))
+                bonus += 2;
+            if (style == WeaponStyleId.Pulse && HasEvolution(EvolutionId.SingularityRail))
+                bonus += 2;
+            if (style == WeaponStyleId.Drone && HasEvolution(EvolutionId.EchoHive))
+                bonus += 1;
+            return bonus;
+        }
+
+        public float GetExplosionRadiusBonus(WeaponStyleId style)
+        {
+            if (style == WeaponStyleId.Missile && HasEvolution(EvolutionId.CataclysmRack))
+                return 24f;
+
+            return 0f;
+        }
+
+        public void UpdateKillChain(int multiplier)
+        {
+            KillChainTier = multiplier switch
+            {
+                >= 12 => 3,
+                >= 8 => 2,
+                >= 4 => 1,
+                _ => 0,
+            };
         }
 
         public void ApplyMobilityUpgrade()
@@ -227,6 +454,13 @@ namespace SpaceBurst
                 MoveSpeedMultiplier = MoveSpeedMultiplier,
                 RewindEfficiency = RewindEfficiency,
                 DropBonusChance = DropBonusChance,
+                RunXp = RunXp,
+                RunLevel = RunLevel,
+                Scrap = Scrap,
+                PendingLevelUps = PendingLevelUps,
+                PassiveSlots = PassiveSlots,
+                KillChainTier = KillChainTier,
+                FocusFireSeconds = FocusFireSeconds,
                 Weapons = Weapons.CaptureSnapshot(),
                 Powerups = Powerups.CaptureSnapshot(),
             };
@@ -245,6 +479,13 @@ namespace SpaceBurst
             MoveSpeedMultiplier = snapshot.MoveSpeedMultiplier > 0f ? snapshot.MoveSpeedMultiplier : 1f;
             RewindEfficiency = MathF.Max(0f, snapshot.RewindEfficiency);
             DropBonusChance = MathF.Max(0f, snapshot.DropBonusChance);
+            RunXp = MathF.Max(0f, snapshot.RunXp);
+            RunLevel = Math.Max(1, snapshot.RunLevel);
+            Scrap = Math.Max(0, snapshot.Scrap);
+            PendingLevelUps = Math.Max(0, snapshot.PendingLevelUps);
+            PassiveSlots = Math.Clamp(snapshot.PassiveSlots, 1, 3);
+            KillChainTier = Math.Max(0, snapshot.KillChainTier);
+            FocusFireSeconds = MathF.Max(0f, snapshot.FocusFireSeconds);
             Weapons.RestoreSnapshot(snapshot.Weapons);
             Powerups.RestoreSnapshot(snapshot.Powerups);
         }

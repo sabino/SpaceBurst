@@ -63,6 +63,8 @@ namespace SpaceBurst
                     ResetMultiplier();
                 }
             }
+
+            RunProgress.UpdateKillChain(Multiplier);
         }
 
         public static void AddPoints(int basePoints)
@@ -86,11 +88,13 @@ namespace SpaceBurst
             multiplierTimeLeft = multiplierExpiryTime;
             if (Multiplier < maxMultiplier)
                 Multiplier++;
+            RunProgress.UpdateKillChain(Multiplier);
         }
 
         public static void ResetMultiplier()
         {
             Multiplier = 1;
+            RunProgress.UpdateKillChain(Multiplier);
         }
 
         public static void GrantShips(int count)

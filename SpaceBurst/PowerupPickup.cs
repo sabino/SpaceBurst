@@ -8,7 +8,7 @@ namespace SpaceBurst
 {
     sealed class PowerupPickup : Entity
     {
-        private static readonly List<string> glyphRows = new List<string>
+        private static readonly List<string> weaponGlyphRows = new List<string>
         {
             "..###..",
             ".#...#.",
@@ -19,36 +19,98 @@ namespace SpaceBurst
             "..###..",
         };
 
+        private static readonly List<string> xpGlyphRows = new List<string>
+        {
+            "...#...",
+            "..###..",
+            ".#####.",
+            "#######",
+            ".#####.",
+            "..###..",
+            "...#...",
+        };
+
+        private static readonly List<string> scrapGlyphRows = new List<string>
+        {
+            ".##.##.",
+            "#######",
+            "##...##",
+            "##.#.##",
+            "##...##",
+            "#######",
+            ".##.##.",
+        };
+
         private readonly float bobSeed;
         private readonly Color primaryColor;
         private readonly Color secondaryColor;
         private readonly Color accentColor;
         private readonly List<string> iconRows;
+        private readonly List<string> glyphRows;
         private float ageSeconds;
 
         public WeaponStyleId StyleId { get; }
+        public PickupKind PickupKind { get; }
+        public int Amount { get; }
 
         public PowerupPickup(Vector2 position, WeaponStyleId styleId, Vector3? combatPosition = null)
+            : this(position, PickupKind.WeaponCore, styleId, 1, combatPosition)
+        {
+        }
+
+        private PowerupPickup(Vector2 position, PickupKind pickupKind, WeaponStyleId styleId, int amount, Vector3? combatPosition = null)
         {
             CombatPosition = combatPosition ?? new Vector3(position.X, position.Y, 0f);
             CombatVelocity = new Vector3(-40f, 0f, 0f);
             bobSeed = position.X * 0.013f + position.Y * 0.009f;
             StyleId = styleId;
+            PickupKind = pickupKind;
+            Amount = Math.Max(1, amount);
 
-            WeaponStyleDefinition style = WeaponCatalog.GetStyle(styleId);
-            primaryColor = ColorUtil.ParseHex(style.PrimaryColor, new Color(255, 244, 202));
-            secondaryColor = ColorUtil.ParseHex(style.SecondaryColor, new Color(255, 179, 71));
-            accentColor = ColorUtil.ParseHex(style.AccentColor, new Color(255, 122, 89));
-            iconRows = style.IconRows;
-            sprite = new ProceduralSpriteInstance(Game1.Instance.GraphicsDevice, new ProceduralSpriteDefinition
+            if (pickupKind == PickupKind.WeaponCore)
             {
-                Id = string.Concat("Powerup_", styleId.ToString()),
-                PixelScale = 4,
-                PrimaryColor = style.PrimaryColor,
-                SecondaryColor = style.SecondaryColor,
-                AccentColor = style.AccentColor,
-                Rows = new List<string>(glyphRows),
-            });
+                WeaponStyleDefinition style = WeaponCatalog.GetStyle(styleId);
+                primaryColor = ColorUtil.ParseHex(style.PrimaryColor, new Color(255, 244, 202));
+                secondaryColor = ColorUtil.ParseHex(style.SecondaryColor, new Color(255, 179, 71));
+                accentColor = ColorUtil.ParseHex(style.AccentColor, new Color(255, 122, 89));
+                iconRows = style.IconRows;
+                glyphRows = weaponGlyphRows;
+                sprite = new ProceduralSpriteInstance(Game1.Instance.GraphicsDevice, new ProceduralSpriteDefinition
+                {
+                    Id = string.Concat("Powerup_", styleId.ToString()),
+                    PixelScale = 4,
+                    PrimaryColor = style.PrimaryColor,
+                    SecondaryColor = style.SecondaryColor,
+                    AccentColor = style.AccentColor,
+                    Rows = new List<string>(glyphRows),
+                });
+            }
+            else if (pickupKind == PickupKind.XpShard)
+            {
+                primaryColor = new Color(215, 245, 255);
+                secondaryColor = new Color(110, 193, 255);
+                accentColor = new Color(86, 240, 255);
+                iconRows = xpGlyphRows;
+                glyphRows = xpGlyphRows;
+            }
+            else
+            {
+                primaryColor = new Color(255, 225, 160);
+                secondaryColor = new Color(255, 176, 87);
+                accentColor = new Color(255, 122, 89);
+                iconRows = scrapGlyphRows;
+                glyphRows = scrapGlyphRows;
+            }
+        }
+
+        public static PowerupPickup CreateXpShard(Vector2 position, int amount = 1, Vector3? combatPosition = null)
+        {
+            return new PowerupPickup(position, PickupKind.XpShard, WeaponStyleId.Pulse, amount, combatPosition);
+        }
+
+        public static PowerupPickup CreateScrapCache(Vector2 position, int amount = 1, Vector3? combatPosition = null)
+        {
+            return new PowerupPickup(position, PickupKind.ScrapCache, WeaponStyleId.Missile, amount, combatPosition);
         }
 
         public override void Update()
@@ -79,7 +141,10 @@ namespace SpaceBurst
         {
             float pulse = 1f + MathF.Sin(ageSeconds * 6f) * 0.08f;
             PixelArtRenderer.DrawRows(spriteBatch, Game1.UiPixel, glyphRows, Position, 4f * pulse, primaryColor, secondaryColor, accentColor, true);
-            PixelArtRenderer.DrawRows(spriteBatch, Game1.UiPixel, iconRows, Position + new Vector2(0f, 3f), 1.8f * pulse, primaryColor, secondaryColor, accentColor, true);
+            if (PickupKind == PickupKind.WeaponCore)
+                PixelArtRenderer.DrawRows(spriteBatch, Game1.UiPixel, iconRows, Position + new Vector2(0f, 3f), 1.8f * pulse, primaryColor, secondaryColor, accentColor, true);
+            else if (Amount > 1)
+                BitmapFontRenderer.Draw(spriteBatch, Game1.UiPixel, Amount.ToString(), Position + new Vector2(12f, -16f), Color.White, 0.9f);
         }
 
         public bool OverlapsPlayer()
@@ -105,6 +170,8 @@ namespace SpaceBurst
                 CombatVelocity = new Vector3Data(CombatVelocity.X, CombatVelocity.Y, CombatVelocity.Z),
                 AgeSeconds = ageSeconds,
                 StyleId = StyleId,
+                PickupKind = PickupKind,
+                Amount = Amount,
             };
         }
 
@@ -113,10 +180,16 @@ namespace SpaceBurst
             if (snapshot == null)
                 return null;
 
-            var pickup = new PowerupPickup(
-                new Vector2(snapshot.Position.X, snapshot.Position.Y),
-                snapshot.StyleId,
-                snapshot.CombatPosition == null ? null : new Vector3(snapshot.CombatPosition.X, snapshot.CombatPosition.Y, snapshot.CombatPosition.Z));
+            PowerupPickup pickup = snapshot.PickupKind switch
+            {
+                PickupKind.XpShard => CreateXpShard(new Vector2(snapshot.Position.X, snapshot.Position.Y), snapshot.Amount,
+                    snapshot.CombatPosition == null ? null : new Vector3(snapshot.CombatPosition.X, snapshot.CombatPosition.Y, snapshot.CombatPosition.Z)),
+                PickupKind.ScrapCache => CreateScrapCache(new Vector2(snapshot.Position.X, snapshot.Position.Y), snapshot.Amount,
+                    snapshot.CombatPosition == null ? null : new Vector3(snapshot.CombatPosition.X, snapshot.CombatPosition.Y, snapshot.CombatPosition.Z)),
+                _ => new PowerupPickup(new Vector2(snapshot.Position.X, snapshot.Position.Y), snapshot.StyleId,
+                    snapshot.CombatPosition == null ? null : new Vector3(snapshot.CombatPosition.X, snapshot.CombatPosition.Y, snapshot.CombatPosition.Z)),
+            };
+
             if (snapshot.CombatPosition != null)
                 pickup.CombatPosition = new Vector3(snapshot.CombatPosition.X, snapshot.CombatPosition.Y, snapshot.CombatPosition.Z);
             if (snapshot.CombatVelocity != null)
