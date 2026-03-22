@@ -10,6 +10,9 @@ namespace SpaceBurst
         public Dictionary<WeaponStyleId, int> StyleLevels { get; set; } = new Dictionary<WeaponStyleId, int>();
         public Dictionary<WeaponStyleId, int> StyleRanks { get; set; } = new Dictionary<WeaponStyleId, int>();
         public Dictionary<WeaponStyleId, int> StyleCharges { get; set; } = new Dictionary<WeaponStyleId, int>();
+        public List<WeaponStyleId> SupportWeapons { get; set; } = new List<WeaponStyleId>();
+        public List<PassiveReactorId> PassiveReactors { get; set; } = new List<PassiveReactorId>();
+        public List<EvolutionId> Evolutions { get; set; } = new List<EvolutionId>();
         public int StoredUpgradeCharges { get; set; }
     }
 
@@ -28,6 +31,13 @@ namespace SpaceBurst
         public float MoveSpeedMultiplier { get; set; } = 1f;
         public float RewindEfficiency { get; set; }
         public float DropBonusChance { get; set; }
+        public float RunXp { get; set; }
+        public int RunLevel { get; set; } = 1;
+        public int Scrap { get; set; }
+        public int PendingLevelUps { get; set; }
+        public int PassiveSlots { get; set; } = 1;
+        public int KillChainTier { get; set; }
+        public float FocusFireSeconds { get; set; }
         public WeaponInventorySnapshotData Weapons { get; set; } = new WeaponInventorySnapshotData();
         public PowerupDropSnapshotData Powerups { get; set; } = new PowerupDropSnapshotData();
     }
@@ -66,6 +76,7 @@ namespace SpaceBurst
         public float InvulnerabilityTimer { get; set; }
         public float FireCooldown { get; set; }
         public float DroneSupportTimer { get; set; }
+        public Dictionary<WeaponStyleId, float> SupportFireCooldowns { get; set; } = new Dictionary<WeaponStyleId, float>();
         public bool HullDestroyedQueued { get; set; }
         public float HullIntegrityRatio { get; set; } = 1f;
         public MaskSnapshotData HullMask { get; set; } = new MaskSnapshotData();
@@ -98,6 +109,8 @@ namespace SpaceBurst
         public float BossFireCooldown { get; set; }
         public bool ReentryRollConsumed { get; set; }
         public bool WasReentrySpawn { get; set; }
+        public int EliteRewardScrap { get; set; }
+        public float EliteRewardRewindPercent { get; set; }
         public List<SpawnGroupDefinition> PendingSupportGroups { get; set; } = new List<SpawnGroupDefinition>();
         public MaskSnapshotData Mask { get; set; } = new MaskSnapshotData();
     }
@@ -174,6 +187,29 @@ namespace SpaceBurst
         public Vector3Data CombatVelocity { get; set; } = new Vector3Data();
         public float AgeSeconds { get; set; }
         public WeaponStyleId StyleId { get; set; } = WeaponStyleId.Pulse;
+        public PickupKind PickupKind { get; set; } = PickupKind.WeaponCore;
+        public int Amount { get; set; } = 1;
+    }
+
+    sealed class PendingHordePacketBurstSnapshotData
+    {
+        public int PacketIndex { get; set; }
+        public int NextBurstNumber { get; set; }
+        public float NextBurstAtSeconds { get; set; }
+    }
+
+    sealed class SpawnDirectorSnapshotData
+    {
+        public int NextHordePacketIndex { get; set; }
+        public int NextEliteBurstIndex { get; set; }
+        public int NextPresentationCueIndex { get; set; }
+        public float WarningTimerSeconds { get; set; }
+        public string WarningText { get; set; } = string.Empty;
+        public string WarningAccentColor { get; set; } = "#FFB347";
+        public float WarningIntensity { get; set; } = 1f;
+        public PresentationCueKind WarningKind { get; set; } = PresentationCueKind.Warning;
+        public List<int> TriggeredKillChainIndices { get; set; } = new List<int>();
+        public List<PendingHordePacketBurstSnapshotData> PendingHordeBursts { get; set; } = new List<PendingHordePacketBurstSnapshotData>();
     }
 
     sealed class ScheduledSpawnSnapshotData
@@ -276,6 +312,7 @@ namespace SpaceBurst
         public List<ScheduledSpawnSnapshotData> ScheduledSpawns { get; set; } = new List<ScheduledSpawnSnapshotData>();
         public List<ScheduledEventSnapshotData> ScheduledEvents { get; set; } = new List<ScheduledEventSnapshotData>();
         public List<ReentryTicketSnapshotData> ReentryTickets { get; set; } = new List<ReentryTicketSnapshotData>();
+        public SpawnDirectorSnapshotData SpawnDirector { get; set; } = new SpawnDirectorSnapshotData();
         public uint GameplayRngState { get; set; } = 1;
     }
 

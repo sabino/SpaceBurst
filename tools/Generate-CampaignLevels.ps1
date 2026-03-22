@@ -163,6 +163,126 @@ function New-Section
     }
 }
 
+function New-HordePacket
+{
+    param(
+        [string]$ArchetypeId,
+        [double]$StartSeconds,
+        [int]$Lane,
+        [int]$BurstCount,
+        [int]$CountPerBurst,
+        [double]$SpawnLeadDistance,
+        [double]$BurstIntervalSeconds,
+        [double]$SpawnIntervalSeconds,
+        [double]$SpacingX,
+        [double]$SpeedMultiplier,
+        [string]$MovePatternOverride,
+        [string]$FirePatternOverride,
+        [double]$Amplitude,
+        [double]$Frequency,
+        [double]$TargetY = -1,
+        [bool]$IgnoreHostileCap = $false
+    )
+
+    $packet = [ordered]@{
+        ArchetypeId = $ArchetypeId
+        StartSeconds = [math]::Round($StartSeconds, 2)
+        Lane = $Lane
+        BurstCount = $BurstCount
+        CountPerBurst = $CountPerBurst
+        SpawnLeadDistance = [math]::Round($SpawnLeadDistance, 2)
+        BurstIntervalSeconds = [math]::Round($BurstIntervalSeconds, 2)
+        SpawnIntervalSeconds = [math]::Round($SpawnIntervalSeconds, 2)
+        SpacingX = [math]::Round($SpacingX, 2)
+        SpeedMultiplier = [math]::Round($SpeedMultiplier, 2)
+        MovePatternOverride = $MovePatternOverride
+        FirePatternOverride = $FirePatternOverride
+        Amplitude = [math]::Round($Amplitude, 2)
+        Frequency = [math]::Round($Frequency, 2)
+        IgnoreHostileCap = $IgnoreHostileCap
+    }
+
+    if ($TargetY -ge 0)
+    {
+        $packet.TargetY = [math]::Round($TargetY, 2)
+    }
+
+    return $packet
+}
+
+function New-EliteBurst
+{
+    param(
+        [string]$WarningText,
+        [double]$StartSeconds,
+        [string]$ArchetypeId,
+        [int]$EliteCount,
+        [double]$TargetY,
+        [double]$SpawnLeadDistance,
+        [double]$SpeedMultiplier,
+        [string]$MovePatternOverride,
+        [string]$FirePatternOverride,
+        [int]$ScrapReward = 1,
+        [double]$RewindRefillPercent = 0.18
+    )
+
+    return [ordered]@{
+        WarningText = $WarningText
+        StartSeconds = [math]::Round($StartSeconds, 2)
+        ArchetypeId = $ArchetypeId
+        EliteCount = $EliteCount
+        TargetY = [math]::Round($TargetY, 2)
+        SpawnLeadDistance = [math]::Round($SpawnLeadDistance, 2)
+        SpeedMultiplier = [math]::Round($SpeedMultiplier, 2)
+        MovePatternOverride = $MovePatternOverride
+        FirePatternOverride = $FirePatternOverride
+        ScrapReward = $ScrapReward
+        RewindRefillPercent = [math]::Round($RewindRefillPercent, 2)
+    }
+}
+
+function New-KillChainEvent
+{
+    param(
+        [int]$TriggerMultiplier,
+        [string]$Label,
+        [double]$BonusXp,
+        [int]$BonusScrap,
+        [double]$BonusRewindPercent,
+        [string]$AccentColor = "#FFB347"
+    )
+
+    return [ordered]@{
+        TriggerMultiplier = $TriggerMultiplier
+        Label = $Label
+        BonusXp = [math]::Round($BonusXp, 2)
+        BonusScrap = $BonusScrap
+        BonusRewindPercent = [math]::Round($BonusRewindPercent, 2)
+        AccentColor = $AccentColor
+    }
+}
+
+function New-PresentationCue
+{
+    param(
+        [string]$Kind,
+        [double]$StartSeconds,
+        [double]$DurationSeconds,
+        [string]$Label,
+        [string]$AccentColor,
+        [double]$Intensity = 1
+    )
+
+    return [ordered]@{
+        Kind = $Kind
+        StartSeconds = [math]::Round($StartSeconds, 2)
+        DurationSeconds = [math]::Round($DurationSeconds, 2)
+        Label = $Label
+        AccentColor = $AccentColor
+        Intensity = [math]::Round($Intensity, 2)
+    }
+}
+
 function Get-StageName
 {
     param([int]$Stage)
@@ -307,9 +427,12 @@ function Get-ThemeMood
 
     $mood.StarDensity = [math]::Round([math]::Min(1.45, $mood.StarDensity + $progress * 0.10 + $band * 0.04), 2)
     $mood.DustDensity = [math]::Round([math]::Min(1.35, $mood.DustDensity + $progress * 0.08 + $band * 0.03), 2)
-    $mood.LightIntensity = [math]::Round([math]::Min(1.18, $mood.LightIntensity + $progress * 0.12 + ($Boss ? 0.10 : 0)), 2)
-    $mood.PlanetPresence = [math]::Round([math]::Max(0.16, $mood.PlanetPresence - $progress * 0.08 + ($Boss ? 0.06 : 0)), 2)
-    $mood.Contrast = [math]::Round([math]::Min(1.18, $mood.Contrast + $band * 0.04 + ($Boss ? 0.06 : 0)), 2)
+    $bossLightBonus = if ($Boss) { 0.10 } else { 0 }
+    $bossPlanetBonus = if ($Boss) { 0.06 } else { 0 }
+    $bossContrastBonus = if ($Boss) { 0.06 } else { 0 }
+    $mood.LightIntensity = [math]::Round([math]::Min(1.18, $mood.LightIntensity + $progress * 0.12 + $bossLightBonus), 2)
+    $mood.PlanetPresence = [math]::Round([math]::Max(0.16, $mood.PlanetPresence - $progress * 0.08 + $bossPlanetBonus), 2)
+    $mood.Contrast = [math]::Round([math]::Min(1.18, $mood.Contrast + $band * 0.04 + $bossContrastBonus), 2)
     return $mood
 }
 
@@ -386,6 +509,180 @@ for ($stage = 1; $stage -le 50; $stage++)
     $checkpointMarkers = @()
     $baseScrollSpeed = Get-StageBaseScrollSpeed -Stage $stage
     $stageMood = Get-ThemeMood -Theme $theme -Stage $stage -SectionIndex 0 -SectionCount 5 -Boss:$isBossStage
+
+    if ($stage -le 10)
+    {
+        $overdriveNames = @(
+            "Overdrive Launch",
+            "Interceptor Swarm",
+            "Mine Bloom",
+            "Fracture Convoy",
+            "Carrier Cloud",
+            "Salvage Storm",
+            "Chain Reactor",
+            "Redline Break",
+            "Pursuit Dreadnought",
+            "Overdrive Apex"
+        )
+
+        $name = $overdriveNames[$stage - 1]
+        $stageMood = Get-ThemeMood -Theme $theme -Stage $stage -SectionIndex 0 -SectionCount 2 -Boss:$isBossStage
+        $sections = @()
+        $checkpointMarkers = @()
+        $sectionCount = 2
+        $sectionSpacing = if ($stage -eq 10) { 45.0 } else { 35.0 }
+        $sectionDuration = if ($stage -eq 10) { 43.6 } else { 34.2 }
+
+        for ($sectionIndex = 0; $sectionIndex -lt $sectionCount; $sectionIndex++)
+        {
+            $startSeconds = 0.75 + $sectionIndex * $sectionSpacing
+            $checkpoint = ($sectionIndex -eq 1)
+            $sectionMood = Get-ThemeMood -Theme $theme -Stage $stage -SectionIndex $sectionIndex -SectionCount $sectionCount -Boss:$isBossStage
+            $laneBase = ($stage + $sectionIndex * 2) % 5
+            $groups = @(
+                (New-Group -ArchetypeId ($(if ($sectionIndex -eq 0) { "Walker" } else { if ($stage -ge 6) { "Carrier" } else { "Destroyer" } })) -StartSeconds 0 -Lane $laneBase -Count ($(if ($stage -eq 10) { 2 } else { 1 })) -SpawnLeadDistance (260 + $stage * 8) -SpawnIntervalSeconds 0.32 -SpacingX 104 -SpeedMultiplier (0.94 + $stage * 0.03 + $sectionIndex * 0.04) -MovePatternOverride ($(if ($sectionIndex -eq 0) { "StraightFlyIn" } else { if ($stage -ge 6) { "TurretCarrier" } else { "Dive" } })) -FirePatternOverride ($(if ($sectionIndex -eq 0 -and $stage -le 2) { "None" } else { if ($stage -ge 6) { "SpreadPulse" } else { "ForwardPulse" } })) -Amplitude (28 + $sectionIndex * 12) -Frequency (0.82 + $sectionIndex * 0.1)),
+                (New-Group -ArchetypeId "Interceptor" -StartSeconds (12 + $sectionIndex * 4) -Lane (($laneBase + 2) % 5) -Count ($(if ($stage -eq 10) { 4 } else { 3 })) -SpawnLeadDistance 250 -SpawnIntervalSeconds 0.14 -SpacingX 72 -SpeedMultiplier (1.08 + $stage * 0.03) -MovePatternOverride "SineWave" -FirePatternOverride "None" -Amplitude (44 + $stage * 3) -Frequency 1.16)
+            )
+
+            $sections += New-Section -Label ("Overdrive {0}" -f ($sectionIndex + 1)) -StartSeconds $startSeconds -DurationSeconds $sectionDuration -Checkpoint $checkpoint -PowerDropBonusChance ([math]::Min(0.18, 0.04 + $stage * 0.006 + $sectionIndex * 0.015)) -ScrollMultiplier (0.98 + $sectionIndex * 0.1) -EnemySpeedMultiplier (0.94 + $sectionIndex * 0.12) -Mood $sectionMood -EventWindows @() -Groups $groups
+            if ($checkpoint)
+            {
+                $checkpointMarkers += $startSeconds
+            }
+        }
+
+        $packetTimes = if ($stage -eq 10) { @(4, 12, 21, 30, 40, 50, 61, 72) } else { @(4, 13, 23, 34, 46, 58) }
+        $packetArchetypes = switch ($stage)
+        {
+            1 { @("Interceptor", "Walker", "Interceptor", "Walker", "Destroyer", "Interceptor") }
+            2 { @("Interceptor", "Walker", "Destroyer", "Interceptor", "Walker", "Destroyer") }
+            3 { @("Walker", "Interceptor", "Destroyer", "Carrier", "Interceptor", "Destroyer") }
+            4 { @("Interceptor", "Destroyer", "Carrier", "Walker", "Destroyer", "Carrier") }
+            5 { @("Carrier", "Interceptor", "Destroyer", "Carrier", "Bulwark", "Interceptor") }
+            6 { @("Destroyer", "Carrier", "Bulwark", "Interceptor", "Destroyer", "Carrier") }
+            7 { @("Bulwark", "Interceptor", "Carrier", "Destroyer", "Bulwark", "Interceptor") }
+            8 { @("Destroyer", "Bulwark", "Carrier", "Interceptor", "Bulwark", "Carrier") }
+            9 { @("Bulwark", "Carrier", "Destroyer", "Bulwark", "Carrier", "Destroyer") }
+            default { @("Destroyer", "Carrier", "Bulwark", "Destroyer", "Carrier", "Bulwark", "Destroyer", "Carrier") }
+        }
+
+        $hordePackets = @()
+        for ($packetIndex = 0; $packetIndex -lt $packetTimes.Count; $packetIndex++)
+        {
+            $archetypeId = $packetArchetypes[[math]::Min($packetIndex, $packetArchetypes.Count - 1)]
+            $lane = ($stage + $packetIndex * 2) % 5
+            $burstCount = if ($archetypeId -eq "Interceptor") { 3 } elseif ($archetypeId -eq "Walker") { 3 } else { 2 }
+            $countPerBurst = switch ($archetypeId)
+            {
+                "Interceptor" { 4 + [math]::Min(3, [math]::Floor($stage / 3)) }
+                "Walker" { 4 + [math]::Min(2, [math]::Floor($stage / 4)) }
+                "Destroyer" { 2 + [math]::Min(2, [math]::Floor($stage / 5)) }
+                "Carrier" { 2 + [math]::Min(1, [math]::Floor(($stage - 2) / 4)) }
+                default { 1 + [math]::Min(1, [math]::Floor(($stage - 4) / 3)) }
+            }
+            $moveOverride = switch ($archetypeId)
+            {
+                "Interceptor" { "SineWave" }
+                "Walker" { "StraightFlyIn" }
+                "Carrier" { "TurretCarrier" }
+                "Bulwark" { "RetreatBackfire" }
+                default { "Dive" }
+            }
+            $fireOverride = switch ($archetypeId)
+            {
+                "Interceptor" { "None" }
+                "Walker" { if ($stage -le 2) { "None" } else { "AimedShot" } }
+                "Carrier" { "SpreadPulse" }
+                default { "ForwardPulse" }
+            }
+
+            $hordePackets += New-HordePacket -ArchetypeId $archetypeId -StartSeconds $packetTimes[$packetIndex] -Lane $lane -BurstCount $burstCount -CountPerBurst $countPerBurst -SpawnLeadDistance (250 + $stage * 6) -BurstIntervalSeconds 1.3 -SpawnIntervalSeconds 0.1 -SpacingX 64 -SpeedMultiplier (1.02 + $stage * 0.03 + $packetIndex * 0.01) -MovePatternOverride $moveOverride -FirePatternOverride $fireOverride -Amplitude (40 + $stage * 2) -Frequency (0.92 + $packetIndex * 0.04)
+        }
+
+        $eliteBursts = @()
+        switch ($stage)
+        {
+            4 { $eliteBursts += New-EliteBurst -WarningText "FRACTURE CONVOY" -StartSeconds 52 -ArchetypeId "Destroyer" -EliteCount 2 -TargetY 0.46 -SpawnLeadDistance 330 -SpeedMultiplier 1.14 -MovePatternOverride "Dive" -FirePatternOverride "ForwardPulse" -ScrapReward 1 -RewindRefillPercent 0.16 }
+            7 { $eliteBursts += New-EliteBurst -WarningText "CARRIER CLOUD" -StartSeconds 48 -ArchetypeId "Carrier" -EliteCount 2 -TargetY 0.5 -SpawnLeadDistance 340 -SpeedMultiplier 1.12 -MovePatternOverride "TurretCarrier" -FirePatternOverride "SpreadPulse" -ScrapReward 1 -RewindRefillPercent 0.18 }
+            9 { $eliteBursts += New-EliteBurst -WarningText "PURSUIT DREADNOUGHT" -StartSeconds 56 -ArchetypeId "Bulwark" -EliteCount 2 -TargetY 0.52 -SpawnLeadDistance 350 -SpeedMultiplier 1.16 -MovePatternOverride "RetreatBackfire" -FirePatternOverride "ForwardPulse" -ScrapReward 2 -RewindRefillPercent 0.2 }
+            10
+            {
+                $eliteBursts += New-EliteBurst -WarningText "FRACTURE CONVOY" -StartSeconds 18 -ArchetypeId "Destroyer" -EliteCount 2 -TargetY 0.42 -SpawnLeadDistance 340 -SpeedMultiplier 1.18 -MovePatternOverride "Dive" -FirePatternOverride "ForwardPulse" -ScrapReward 1 -RewindRefillPercent 0.18
+                $eliteBursts += New-EliteBurst -WarningText "PURSUIT DREADNOUGHT" -StartSeconds 66 -ArchetypeId "Bulwark" -EliteCount 2 -TargetY 0.52 -SpawnLeadDistance 350 -SpeedMultiplier 1.2 -MovePatternOverride "RetreatBackfire" -FirePatternOverride "ForwardPulse" -ScrapReward 2 -RewindRefillPercent 0.22
+            }
+        }
+
+        $killChainEvents = @(
+            (New-KillChainEvent -TriggerMultiplier 8 -Label "KILL CHAIN" -BonusXp (2.5 + $stage * 0.2) -BonusScrap 1 -BonusRewindPercent 0.06 -AccentColor "#73F3E8"),
+            (New-KillChainEvent -TriggerMultiplier 16 -Label "REACTOR SPIKE" -BonusXp (4 + $stage * 0.25) -BonusScrap 1 -BonusRewindPercent 0.08 -AccentColor "#56F0FF"),
+            (New-KillChainEvent -TriggerMultiplier 28 -Label "OVERDRIVE" -BonusXp (6 + $stage * 0.3) -BonusScrap 2 -BonusRewindPercent 0.1 -AccentColor "#FFB347")
+        )
+
+        $presentationCues = @()
+        if ($stage -eq 1)
+        {
+            $presentationCues += New-PresentationCue -Kind "ChapterBeat" -StartSeconds 1 -DurationSeconds 2.2 -Label "CHAPTER 1: OVERDRIVE" -AccentColor "#56F0FF" -Intensity 1.1
+        }
+        $presentationCues += New-PresentationCue -Kind "Warning" -StartSeconds 8 -DurationSeconds 1.5 -Label $name.ToUpperInvariant() -AccentColor "#6EC1FF" -Intensity 0.95
+        if ($stage -eq 4)
+        {
+            $presentationCues += New-PresentationCue -Kind "BossSignal" -StartSeconds 50 -DurationSeconds 2 -Label "4 MINUTE ESCALATION" -AccentColor "#FFB347" -Intensity 1.05
+        }
+        if ($stage -eq 7)
+        {
+            $presentationCues += New-PresentationCue -Kind "PaletteSpike" -StartSeconds 42 -DurationSeconds 2 -Label "8 MINUTE REDLINE" -AccentColor "#FF7A59" -Intensity 1.1
+        }
+        if ($stage -eq 10)
+        {
+            $presentationCues += New-PresentationCue -Kind "BossSignal" -StartSeconds 74 -DurationSeconds 2.4 -Label "CORE BREACH WINDOW" -AccentColor "#FFD166" -Intensity 1.2
+        }
+
+        $boss = $null
+        if ($stage -eq 10)
+        {
+            $boss = [ordered]@{
+                Type = "DestroyerBoss"
+                DisplayName = "Pursuit Dreadnought"
+                ArchetypeId = "BossDestroyer"
+                IntroSeconds = 1.35
+                TargetY = 0.48
+                ArenaScrollSpeed = 56
+                HitPoints = 102
+                AllowRandomEvents = $false
+                HazardOverrides = @()
+                MoodOverride = (Get-ThemeMood -Theme $theme -Stage $stage -SectionIndex 1 -SectionCount 2 -Boss $true)
+                PhaseThresholds = @(0.8, 0.56, 0.3)
+                MovePattern = "BossCharge"
+                FirePattern = "BossFan"
+            }
+        }
+
+        $stageObject = [ordered]@{
+            StageNumber = $stage
+            Name = $name
+            IntroSeconds = 1.0
+            ScrollSpeed = [math]::Round($baseScrollSpeed + 6, 2)
+            BaseScrollSpeed = [math]::Round($baseScrollSpeed + 6, 2)
+            Theme = $theme
+            BackgroundSeed = $stage * 7
+            StartingLives = 3
+            ShipsPerLife = 2
+            BackgroundMood = $stageMood
+            SliceChapterName = "Chapter 1: Overdrive"
+            SliceTargetDurationSeconds = 720
+            CheckpointMarkers = $checkpointMarkers
+            Sections = $sections
+            HordePackets = $hordePackets
+            EliteBursts = $eliteBursts
+            KillChainEvents = $killChainEvents
+            PresentationCues = $presentationCues
+            Boss = $boss
+        }
+
+        $fileName = "level-{0}.json" -f $stage.ToString("00")
+        Write-JsonFile -Path (Join-Path $levelsDir $fileName) -Object $stageObject
+        continue
+    }
 
     if ($isBossStage)
     {

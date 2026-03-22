@@ -11,7 +11,7 @@ namespace SpaceBurst
     sealed class CampaignDirector
     {
         private const float GameOverDelaySeconds = 0.85f;
-        private const float StageTransitionSeconds = 2.2f;
+        private const float StageTransitionSeconds = 0.72f;
         private const float BossApproachSeconds = 1.0f;
         private const float PlayerSafetyClearRadius = 220f;
         private const float RewindCapacitySeconds = 8f;
@@ -68,6 +68,8 @@ namespace SpaceBurst
             "FOR MORE INFORMATION, PLEASE REFER TO UNLICENSE.ORG";
 
         private readonly CampaignRepository repository = new CampaignRepository();
+        private readonly RunProgressionController runProgressionController = new RunProgressionController();
+        private readonly SpawnDirector spawnDirector = new SpawnDirector();
         private readonly OptionsData options;
         private OptionsData optionsSnapshot;
         private readonly MedalProgress medals;
@@ -391,12 +393,21 @@ namespace SpaceBurst
 
         public float PowerupMagnetStrength
         {
-            get { return state == GameFlowState.StageTransition ? 320f + 420f * TransitionWarpStrength : 0f; }
+            get
+            {
+                float transitionStrength = state == GameFlowState.StageTransition ? 320f + 420f * TransitionWarpStrength : 0f;
+                return transitionStrength + PlayerStatus.RunProgress.GetMagnetStrength();
+            }
         }
 
         public VisualPreset VisualPreset
         {
             get { return options.VisualPreset; }
+        }
+
+        internal bool AllowLiveWeaponCycling
+        {
+            get { return state == GameFlowState.Tutorial; }
         }
 
         public AudioQualityPreset AudioQualityPreset
@@ -1216,6 +1227,7 @@ namespace SpaceBurst
             SpawnDueEntities();
             SpawnDueReentries();
             SpawnDueEvents();
+            spawnDirector.Update(stageElapsedSeconds, deltaSeconds, currentStage, repository, ref rewindMeterSeconds, RewindCapacitySeconds);
             UpdateActiveEvent(deltaSeconds);
             EntityManager.Update();
 
@@ -1226,6 +1238,24 @@ namespace SpaceBurst
             }
 
             PlayerStatus.Update();
+
+            if (!string.IsNullOrEmpty(spawnDirector.ActiveWarning))
+            {
+                activeEventWarning = spawnDirector.ActiveWarning;
+                if (activeEventType == RandomEventType.None)
+                    activeEventIntensity = Math.Max(0f, spawnDirector.ActiveWarningIntensity * 0.24f);
+            }
+            else if (activeEventType == RandomEventType.None)
+            {
+                activeEventWarning = string.Empty;
+                activeEventIntensity = 0f;
+            }
+
+            if (state == GameFlowState.Playing && PlayerStatus.RunProgress.HasPendingLevelUp)
+            {
+                OpenUpgradeDraft(GameFlowState.Playing, false);
+                return;
+            }
 
             if (activeBoss != null)
                 DrainBossSupportQueue();
@@ -1360,12 +1390,6 @@ namespace SpaceBurst
                 return;
             }
 
-            if (!transitionToBoss && PlayerStatus.RunProgress.StoredUpgradeCharges > 0 && stateTimer <= StageTransitionSeconds * 0.48f)
-            {
-                OpenUpgradeDraft(GameFlowState.StageTransition, false);
-                return;
-            }
-
             if (stateTimer > 0f)
                 return;
 
@@ -1453,6 +1477,7 @@ namespace SpaceBurst
             scheduledSpawns.Clear();
             scheduledEvents.Clear();
             reentryTickets.Clear();
+            spawnDirector.Reset();
 
             PlayerStatus.PrepareStage(currentStage, false);
             EntityManager.Reset();
@@ -1540,6 +1565,7 @@ namespace SpaceBurst
             scheduledSpawns.Clear();
             scheduledEvents.Clear();
             reentryTickets.Clear();
+            spawnDirector.Reset();
             activeEventType = RandomEventType.None;
             activeEventTimer = 0f;
             activeEventSpawnTimer = 0f;
@@ -1621,9 +1647,10 @@ namespace SpaceBurst
                 titleIntroActive = false;
                 titleIntroExploded = true;
                 titleIntroTimer = 0f;
-                introPixels.Clear();
+                    introPixels.Clear();
             }
             EntityManager.Reset();
+            spawnDirector.Reset();
             ResetRewindBuffer();
         }
 
@@ -1783,6 +1810,7 @@ namespace SpaceBurst
             scheduledSpawns.Clear();
             scheduledEvents.Clear();
             reentryTickets.Clear();
+            spawnDirector.Reset();
             PlayerStatus.PrepareStage(currentStage, false);
             Player1.Instance.MakeInvulnerable(0.8f);
             state = GameFlowState.Playing;
@@ -1790,6 +1818,20 @@ namespace SpaceBurst
             transitionToBoss = false;
             bannerText = string.Empty;
             ResetRewindBuffer();
+        }
+
+        internal void AwardEliteKillReward(bool bossKill, float rewindRefillPercent)
+        {
+            float refillPercent = rewindRefillPercent > 0f
+                ? rewindRefillPercent
+                : (bossKill ? 0.2f : 0.12f);
+            if (PlayerStatus.RunProgress.HasPassive(PassiveReactorId.TimeBattery))
+                refillPercent += bossKill ? 0.06f : 0.04f;
+
+            rewindMeterSeconds = Math.Min(RewindCapacitySeconds, rewindMeterSeconds + RewindCapacitySeconds * refillPercent);
+
+            if (Player1.Instance != null && PlayerStatus.RunProgress.HasPassive(PassiveReactorId.TimeBattery))
+                EntityManager.SpawnShockwave(Player1.Instance.Position, Color.Cyan * 0.18f, 12f, bossKill ? 84f : 64f, 0.18f);
         }
 
         private void CaptureRewindFrame(float deltaSeconds)
@@ -2352,34 +2394,27 @@ namespace SpaceBurst
 
         private void OpenUpgradeDraft(GameFlowState returnState, bool tutorialMode)
         {
-            if (PlayerStatus.RunProgress.StoredUpgradeCharges <= 0)
-                return;
-
-            draftChargeStyle = tutorialMode ? WeaponStyleId.Spread : PlayerStatus.RunProgress.PriorityChargeStyle;
-            draftCards.Clear();
-            draftCards.Add(BuildWeaponDraftCard(draftChargeStyle));
             if (tutorialMode)
             {
+                if (PlayerStatus.RunProgress.StoredUpgradeCharges <= 0)
+                    return;
+            }
+            else if (!PlayerStatus.RunProgress.HasPendingLevelUp)
+            {
+                return;
+            }
+
+            draftChargeStyle = tutorialMode ? WeaponStyleId.Spread : PlayerStatus.RunProgress.Weapons.ActiveStyle;
+            draftCards.Clear();
+            if (tutorialMode)
+            {
+                draftCards.Add(BuildWeaponDraftCard(draftChargeStyle));
                 draftCards.Add(CreateDraftCard(UpgradeCardType.MobilityTuning));
                 draftCards.Add(CreateDraftCard(UpgradeCardType.RewindBattery));
             }
             else
             {
-                var pool = new List<UpgradeCardType>
-                {
-                    UpgradeCardType.MobilityTuning,
-                    UpgradeCardType.EmergencyReserve,
-                    UpgradeCardType.RewindBattery,
-                    UpgradeCardType.LuckyCore,
-                };
-
-                while (draftCards.Count < 3 && pool.Count > 0)
-                {
-                    int index = gameplayRandom.NextInt(0, pool.Count);
-                    UpgradeCardType type = pool[index];
-                    pool.RemoveAt(index);
-                    draftCards.Add(CreateDraftCard(type));
-                }
+                draftCards.AddRange(runProgressionController.BuildDraftCards(PlayerStatus.RunProgress, gameplayRandom, false));
             }
 
             draftSelection = 0;
@@ -2387,7 +2422,7 @@ namespace SpaceBurst
             for (int i = 0; i < draftCards.Count; i++)
                 draftCards[i].HotkeyLabel = i < hotkeys.Length ? hotkeys[i] : string.Empty;
 
-            draftTimer = 5f;
+            draftTimer = tutorialMode ? 5f : 4f;
             draftReturnState = returnState;
             draftFromTutorial = tutorialMode;
             state = GameFlowState.UpgradeDraft;
@@ -2526,33 +2561,52 @@ namespace SpaceBurst
 
             int safeSelection = Math.Clamp(selection, 0, draftCards.Count - 1);
             UpgradeDraftCard card = draftCards[safeSelection];
-            if (!PlayerStatus.RunProgress.TryConsumeUpgradeCharge(draftChargeStyle))
+            if (draftFromTutorial)
             {
-                FinishUpgradeDraft();
-                return;
-            }
+                if (!PlayerStatus.RunProgress.TryConsumeUpgradeCharge(draftChargeStyle))
+                {
+                    FinishUpgradeDraft();
+                    return;
+                }
 
-            switch (card.Type)
+                switch (card.Type)
+                {
+                    case UpgradeCardType.WeaponSurge:
+                        PlayerStatus.RunProgress.ApplyWeaponUpgrade(card.StyleId, true);
+                        Player1.Instance.RefreshLoadout();
+                        break;
+                    case UpgradeCardType.MobilityTuning:
+                        PlayerStatus.RunProgress.ApplyMobilityUpgrade();
+                        break;
+                    case UpgradeCardType.EmergencyReserve:
+                        PlayerStatus.RunProgress.ApplyEmergencyReserveUpgrade();
+                        PlayerStatus.GrantShips(1);
+                        break;
+                    case UpgradeCardType.RewindBattery:
+                        PlayerStatus.RunProgress.ApplyRewindUpgrade();
+                        rewindMeterSeconds = RewindCapacitySeconds;
+                        break;
+                    case UpgradeCardType.LuckyCore:
+                        PlayerStatus.RunProgress.ApplyEconomyUpgrade();
+                        PlayerStatus.AddPoints(250);
+                        break;
+                }
+            }
+            else
             {
-                case UpgradeCardType.WeaponSurge:
-                    PlayerStatus.RunProgress.ApplyWeaponUpgrade(card.StyleId, true);
-                    Player1.Instance.RefreshLoadout();
-                    break;
-                case UpgradeCardType.MobilityTuning:
-                    PlayerStatus.RunProgress.ApplyMobilityUpgrade();
-                    break;
-                case UpgradeCardType.EmergencyReserve:
-                    PlayerStatus.RunProgress.ApplyEmergencyReserveUpgrade();
-                    PlayerStatus.GrantShips(1);
-                    break;
-                case UpgradeCardType.RewindBattery:
-                    PlayerStatus.RunProgress.ApplyRewindUpgrade();
-                    rewindMeterSeconds = RewindCapacitySeconds;
-                    break;
-                case UpgradeCardType.LuckyCore:
-                    PlayerStatus.RunProgress.ApplyEconomyUpgrade();
-                    PlayerStatus.AddPoints(250);
-                    break;
+                if (!runProgressionController.ApplyDraftSelection(PlayerStatus.RunProgress, card, ref rewindMeterSeconds, RewindCapacitySeconds))
+                {
+                    FinishUpgradeDraft();
+                    return;
+                }
+
+                if (!PlayerStatus.RunProgress.TryConsumeLevelUp())
+                {
+                    FinishUpgradeDraft();
+                    return;
+                }
+
+                Player1.Instance.RefreshLoadout();
             }
 
             if (draftFromTutorial && PlayerStatus.RunProgress.Weapons.OwnedStyles.Count < 2)
@@ -2567,7 +2621,8 @@ namespace SpaceBurst
             if (draftFromTutorial && tutorialStep == TutorialStep.UpgradeDraft)
                 AdvanceTutorialStep(TutorialStep.SwitchStyle);
 
-            if (PlayerStatus.RunProgress.StoredUpgradeCharges > 0)
+            if ((draftFromTutorial && PlayerStatus.RunProgress.StoredUpgradeCharges > 0)
+                || (!draftFromTutorial && PlayerStatus.RunProgress.HasPendingLevelUp))
             {
                 OpenUpgradeDraft(draftReturnState, false);
                 return;
@@ -4502,67 +4557,58 @@ namespace SpaceBurst
             float hudPulse = Game1.Instance?.HudPulse ?? 0f;
             float pickupPulse = Game1.Instance?.PickupPulse ?? 0f;
             WeaponInventoryState inventory = PlayerStatus.RunProgress.Weapons;
-            WeaponStyleDefinition activeStyle = WeaponCatalog.GetStyle(inventory.ActiveStyle);
             string stageLabel = state switch
             {
                 GameFlowState.Tutorial => "TUTORIAL",
-                GameFlowState.UpgradeDraft => "UPGRADE",
+                GameFlowState.UpgradeDraft => draftFromTutorial ? "UPGRADE" : "LEVEL UP",
                 _ when state == GameFlowState.StageTransition && transitionToBoss => "BOSS RUN",
                 _ when state == GameFlowState.StageTransition && transitionTargetStageNumber > currentStageNumber => string.Concat("JUMP ", transitionTargetStageNumber.ToString("00")),
                 _ => string.Concat("STAGE ", currentStageNumber.ToString("00")),
             };
-            string scoreLabel = string.Concat("SCORE ", PlayerStatus.Score.ToString());
             HudLayout layout = HudLayoutCalculator.Calculate(Game1.VirtualWidth, state, currentStageNumber, transitionTargetStageNumber, transitionToBoss, inventory, PlayerStatus.Score);
-            Rectangle livesBounds = layout.LivesBounds;
-            Rectangle activeBounds = layout.ActiveBounds;
-            Rectangle ownedBounds = layout.OwnedBounds;
-            Rectangle stageBounds = layout.StageBounds;
-            Rectangle pityBounds = layout.PityBounds;
-            Rectangle scoreBounds = layout.ScoreBounds;
-
-            DrawPanel(spriteBatch, pixel, livesBounds, Color.Black * (0.22f + hudPulse * 0.05f), Color.White * (0.18f + hudPulse * 0.08f));
-            DrawPanel(spriteBatch, pixel, activeBounds, Color.Black * (0.18f + pickupPulse * 0.06f), Color.White * (0.14f + pickupPulse * 0.12f));
-            DrawPanel(spriteBatch, pixel, ownedBounds, Color.Black * 0.16f, Color.White * 0.12f);
-            DrawPanel(spriteBatch, pixel, stageBounds, Color.Black * (0.18f + hudPulse * 0.03f), Color.White * 0.14f);
-            DrawPanel(spriteBatch, pixel, pityBounds, Color.Black * (0.18f + pickupPulse * 0.04f), Color.White * (0.14f + pickupPulse * 0.08f));
-            DrawPanel(spriteBatch, pixel, scoreBounds, Color.Black * 0.22f, Color.White * (0.18f + hudPulse * 0.05f));
-
-            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("LIVES ", PlayerStatus.Lives.ToString()), new Vector2(livesBounds.X + 12f, livesBounds.Y + 12f), Color.White, 2f);
-            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("SHIPS ", PlayerStatus.Ships.ToString()), new Vector2(livesBounds.X + 12f, livesBounds.Y + 38f), Color.White, 2f);
-            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("HULL ", Math.Max(0f, Player1.Instance.HullRatio * 100f).ToString("0"), "%"), new Vector2(livesBounds.X + 12f, livesBounds.Bottom - 22f), Color.White * 0.55f, 1.15f);
-
-            DrawStyleHud(spriteBatch, pixel, activeBounds);
-            DrawOwnedStyleHud(spriteBatch, pixel, ownedBounds, inventory);
-#if ANDROID
-            BitmapFontRenderer.Draw(spriteBatch, pixel, "TAP WEAPON HUD TO SWAP", new Vector2(ownedBounds.X + 12f, ownedBounds.Y + 24f), Color.White * 0.4f, 0.86f);
-#endif
-
-            DrawCenteredText(spriteBatch, pixel, stageLabel, stageBounds.Center.X, stageBounds.Y + 14f, Color.White, GetFittedScale(stageLabel, stageBounds.Width - 20f, 1.7f, 1.15f));
             string stageSubLabel = state == GameFlowState.StageTransition
                 ? (transitionToBoss ? "THREAT LOCK" : "FTL TRANSIT")
-                : (!string.IsNullOrEmpty(activeEventWarning) ? activeEventWarning : (state == GameFlowState.Tutorial ? tutorialStep.ToString().ToUpperInvariant() : currentStage?.Name?.ToUpperInvariant() ?? "RUN"));
-            DrawCenteredText(spriteBatch, pixel, stageSubLabel, stageBounds.Center.X, stageBounds.Y + 46f, !string.IsNullOrEmpty(activeEventWarning) ? Color.Orange : Color.White * 0.7f, GetFittedScale(stageSubLabel, stageBounds.Width - 20f, 1.08f, 0.82f));
+                : (!string.IsNullOrEmpty(activeEventWarning)
+                    ? activeEventWarning
+                    : (state == GameFlowState.Tutorial
+                        ? tutorialStep.ToString().ToUpperInvariant()
+                        : !string.IsNullOrWhiteSpace(currentStage?.SliceChapterName)
+                            ? currentStage.SliceChapterName.ToUpperInvariant()
+                            : currentStage?.Name?.ToUpperInvariant() ?? "RUN"));
+            Color stageSubColor = state == GameFlowState.StageTransition
+                ? Color.Orange
+                : !string.IsNullOrEmpty(spawnDirector.ActiveWarning)
+                    ? spawnDirector.ActiveWarningColor
+                    : !string.IsNullOrEmpty(activeEventWarning)
+                        ? Color.Orange
+                        : Color.White * 0.72f;
             string presentationLabel = string.Concat(
                 DifficultyTuning.GetLabel(PlayerStatus.RunProgress.Difficulty), "  ",
                 presentationTier.ToString().ToUpperInvariant(),
                 CanUseChaseView()
                     ? (viewMode == ViewMode.Chase3D ? "  V SIDE" : "  V CHASE")
                     : string.Empty);
-            DrawCenteredText(spriteBatch, pixel, presentationLabel, stageBounds.Center.X, stageBounds.Bottom - 18f, Color.White * 0.55f, GetFittedScale(presentationLabel, stageBounds.Width - 20f, 0.8f, 0.62f));
+
+            HudPresenter.Draw(spriteBatch, pixel, new HudPresenterContext(
+                layout,
+                inventory,
+                stageLabel,
+                stageSubLabel,
+                stageSubColor,
+                presentationLabel,
+                hudPulse,
+                pickupPulse,
+                PlayerStatus.RunProgress.Powerups.PityMeter,
+                rewindMeterSeconds / RewindCapacitySeconds,
+                PlayerStatus.RunProgress.GetXpRatio(),
+                PlayerStatus.RunProgress.RunLevel,
+                PlayerStatus.RunProgress.Scrap,
 #if ANDROID
-            Rectangle pauseChip = HudLayoutCalculator.GetAndroidPauseChipBounds(layout);
-            DrawPanel(spriteBatch, pixel, pauseChip, Color.Black * 0.3f, Color.Orange * 0.42f);
-            DrawCenteredText(spriteBatch, pixel, "||", pauseChip.Center.X, pauseChip.Y + 3f, Color.White, 1.2f);
+                true
+#else
+                false
 #endif
-
-            BitmapFontRenderer.Draw(spriteBatch, pixel, "PITY", new Vector2(pityBounds.X + 12f, pityBounds.Y + 10f), Color.White, 1.25f);
-            DrawBar(spriteBatch, pixel, new Rectangle(pityBounds.X + 12, pityBounds.Y + 34, pityBounds.Width - 24, 12), PlayerStatus.RunProgress.Powerups.PityMeter, Color.Lerp(Color.Orange, Color.White, pickupPulse * 0.35f));
-            DrawChargeTray(spriteBatch, pixel, pityBounds, inventory);
-
-            BitmapFontRenderer.Draw(spriteBatch, pixel, scoreLabel, new Vector2(scoreBounds.X + 12f, scoreBounds.Y + 10f), Color.White, 1.65f);
-            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("MULTI ", PlayerStatus.Multiplier.ToString()), new Vector2(scoreBounds.X + 12f, scoreBounds.Y + 34f), Color.White, 1.45f);
-            BitmapFontRenderer.Draw(spriteBatch, pixel, "REWIND", new Vector2(scoreBounds.X + 12f, scoreBounds.Y + 56f), Color.White * 0.85f, 1.08f);
-            DrawBar(spriteBatch, pixel, new Rectangle(scoreBounds.X + 92, scoreBounds.Y + 58, scoreBounds.Width - 104, 10), rewindMeterSeconds / RewindCapacitySeconds, Color.Lerp(Color.Cyan, Color.White, hudPulse * 0.2f) * 0.9f);
+            ));
 
             if (activeBoss != null && !activeBoss.IsExpired)
                 DrawBossHealthBar(spriteBatch, pixel, activeBoss);
@@ -4726,8 +4772,8 @@ namespace SpaceBurst
             DrawCenteredText(spriteBatch, pixel, header, chip.Center.X, chip.Y + 6f, Color.White * 0.85f, 1.15f);
             DrawCenteredText(spriteBatch, pixel, detail, chip.Center.X, chip.Y + 24f, Color.Orange * (0.78f + warp * 0.22f), 1.15f);
 
-            if (PlayerStatus.RunProgress.StoredUpgradeCharges > 0 && !transitionToBoss)
-                DrawCenteredText(spriteBatch, pixel, "UPGRADE DRAFT CHARGED", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 64f, Color.White * 0.72f, 1.15f);
+            if (PlayerStatus.RunProgress.HasPendingLevelUp && !transitionToBoss)
+                DrawCenteredText(spriteBatch, pixel, "LEVEL UP READY", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 64f, Color.White * 0.72f, 1.15f);
         }
 
         private void DrawRewindOverlay(SpriteBatch spriteBatch, Texture2D pixel)
@@ -4778,7 +4824,7 @@ namespace SpaceBurst
         {
             spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), Color.Black * 0.58f);
 
-            DrawCenteredText(spriteBatch, pixel, "UPGRADE DRAFT", Game1.ScreenSize.X / 2f, 108f, Color.White, 2.6f);
+            DrawCenteredText(spriteBatch, pixel, draftFromTutorial ? "UPGRADE DRAFT" : "LEVEL SURGE", Game1.ScreenSize.X / 2f, 108f, Color.White, 2.6f);
             DrawCenteredText(spriteBatch, pixel, options.AutoUpgradeDraft ? string.Concat("AUTO PICKS RANDOMLY IN ", Math.Max(0f, draftTimer).ToString("0.0"), "s") : string.Concat("CHOOSE IN ", Math.Max(0f, draftTimer).ToString("0.0"), "s"), Game1.ScreenSize.X / 2f, 146f, Color.White * 0.72f, 1.18f);
 
             int cardWidth = 300;
@@ -4823,7 +4869,13 @@ namespace SpaceBurst
                 }
             }
 
-            DrawCenteredText(spriteBatch, pixel, string.Concat("STORED CHARGES ", PlayerStatus.RunProgress.StoredUpgradeCharges.ToString()), Game1.ScreenSize.X / 2f, 476f, Color.White * 0.75f, 1.15f);
+            string statusLine = draftFromTutorial
+                ? string.Concat("STORED CHARGES ", PlayerStatus.RunProgress.StoredUpgradeCharges.ToString())
+                : string.Concat(
+                    "RUN LV ", PlayerStatus.RunProgress.RunLevel.ToString(),
+                    "   PENDING ", PlayerStatus.RunProgress.PendingLevelUps.ToString(),
+                    "   SCRAP ", PlayerStatus.RunProgress.Scrap.ToString());
+            DrawCenteredText(spriteBatch, pixel, statusLine, Game1.ScreenSize.X / 2f, 476f, Color.White * 0.75f, 1.15f);
 #if ANDROID
             DrawCenteredText(spriteBatch, pixel, "TAP A CARD TO PICK IT  AUTO DRAFT ROLLS RANDOMLY AT 0", Game1.ScreenSize.X / 2f, 520f, Color.White * 0.62f, 1.05f);
 #else
@@ -5022,6 +5074,7 @@ namespace SpaceBurst
                 TutorialStep = tutorialStep,
                 TutorialProgressSeconds = tutorialProgressSeconds,
                 DraftCards = new List<UpgradeDraftCard>(draftCards),
+                SpawnDirector = spawnDirector.CaptureSnapshot(),
                 PlayerStatus = PlayerStatus.CaptureSnapshot(),
                 Player = Player1.Instance.CaptureSnapshot(),
                 Enemies = EntityManager.CaptureEnemies(),
@@ -5102,6 +5155,7 @@ namespace SpaceBurst
             draftCards.Clear();
             if (save.DraftCards != null)
                 draftCards.AddRange(save.DraftCards);
+            spawnDirector.RestoreSnapshot(save.SpawnDirector);
 
             gameplayRandom.Restore(save.GameplayRngState == 0 ? 1u : save.GameplayRngState);
             PlayerStatus.RestoreSnapshot(save.PlayerStatus);

@@ -28,6 +28,8 @@ namespace SpaceBurst
         protected float phaseOffset;
         protected bool reentryRollConsumed;
         protected bool wasReentrySpawn;
+        protected int eliteRewardScrap;
+        protected float eliteRewardRewindPercent;
         private static readonly DeterministicRngState fallbackGameplayRandom = new DeterministicRngState(0x5EED1234u);
         private static readonly Random cosmeticRandom = new Random();
 
@@ -206,6 +208,12 @@ namespace SpaceBurst
             Velocity += Vector2.Normalize(direction) * impulse;
         }
 
+        public void ConfigureSliceEliteReward(int scrapReward, float rewindRefillPercent)
+        {
+            eliteRewardScrap = Math.Max(0, scrapReward);
+            eliteRewardRewindPercent = MathF.Max(0f, rewindRefillPercent);
+        }
+
         public virtual EnemySnapshotData CaptureSnapshot()
         {
             return new EnemySnapshotData
@@ -231,6 +239,8 @@ namespace SpaceBurst
                 PhaseOffset = phaseOffset,
                 ReentryRollConsumed = reentryRollConsumed,
                 WasReentrySpawn = wasReentrySpawn,
+                EliteRewardScrap = eliteRewardScrap,
+                EliteRewardRewindPercent = eliteRewardRewindPercent,
                 IsBoss = false,
                 Mask = sprite?.CaptureMaskSnapshot() ?? new MaskSnapshotData(),
             };
@@ -256,6 +266,8 @@ namespace SpaceBurst
             phaseOffset = snapshot.PhaseOffset;
             reentryRollConsumed = snapshot.ReentryRollConsumed;
             wasReentrySpawn = snapshot.WasReentrySpawn;
+            eliteRewardScrap = Math.Max(0, snapshot.EliteRewardScrap);
+            eliteRewardRewindPercent = MathF.Max(0f, snapshot.EliteRewardRewindPercent);
             sprite?.RestoreMaskSnapshot(snapshot.Mask);
             color = flashTimer > 0f ? Color.Lerp(Color.White, accentColor, 0.28f) : Color.White;
             RestoreEntityId(snapshot.EntityId);
@@ -362,10 +374,30 @@ namespace SpaceBurst
             PlayerStatus.AddPoints(PointValue);
             PlayerStatus.IncreaseMultiplier();
 
+            bool eliteKill = IsBoss || ShowDurabilityBar;
+            int rewardScrap = eliteKill
+                ? Math.Max(1, eliteRewardScrap > 0 ? eliteRewardScrap : (IsBoss ? 2 : 1))
+                : 0;
+            float rewardRewindPercent = eliteKill
+                ? (eliteRewardRewindPercent > 0f ? eliteRewardRewindPercent : (IsBoss ? 0.2f : 0.12f))
+                : 0f;
             float bonusChance = Game1.Instance != null ? Game1.Instance.CurrentPowerDropBonusChance : 0f;
             float dropWeight = archetype.PowerupWeight * PlayerStatus.RunProgress.GetDropWeightMultiplier(GetCurrentStageNumber(), IsBoss);
+            bool spawnedXp = false;
             if (archetype.PowerupEligible && PlayerStatus.RunProgress.Powerups.ShouldDrop(Game1.Instance?.GameplayRandom, bonusChance, dropWeight, IsBoss))
-                EntityManager.Add(new PowerupPickup(Position, ResolvePowerupStyle(), CombatPosition));
+            {
+                EntityManager.Add(PowerupPickup.CreateXpShard(Position, eliteKill ? 2 : 1, CombatPosition));
+                spawnedXp = true;
+            }
+
+            if (eliteKill)
+            {
+                if (!spawnedXp)
+                    EntityManager.Add(PowerupPickup.CreateXpShard(Position, IsBoss ? 3 : 2, CombatPosition));
+
+                EntityManager.Add(PowerupPickup.CreateScrapCache(Position + new Vector2(16f, -12f), rewardScrap, CombatPosition + new Vector3(16f, -12f, 0f)));
+                Game1.Instance?.CampaignDirector?.AwardEliteKillReward(IsBoss, rewardRewindPercent);
+            }
         }
 
         protected virtual void HandleLiveAreaExit()

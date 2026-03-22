@@ -78,6 +78,18 @@ namespace SpaceBurst.RuntimeData
     }
 
     /// <summary>
+    /// Defines authored presentation callout families for the horde slice.
+    /// </summary>
+    public enum PresentationCueKind
+    {
+        Warning,
+        Reward,
+        BossSignal,
+        PaletteSpike,
+        ChapterBeat,
+    }
+
+    /// <summary>
     /// Describes the active presentation fidelity layer used for a stage.
     /// </summary>
     public enum PresentationTier
@@ -356,6 +368,73 @@ namespace SpaceBurst.RuntimeData
     }
 
     /// <summary>
+    /// Defines a dense horde injection that supplements the legacy group scheduler.
+    /// </summary>
+    public sealed class HordePacketDefinition
+    {
+        public string ArchetypeId { get; set; }
+        public float StartSeconds { get; set; }
+        public int Lane { get; set; } = 2;
+        public float? TargetY { get; set; }
+        public int BurstCount { get; set; } = 3;
+        public int CountPerBurst { get; set; } = 4;
+        public float SpawnLeadDistance { get; set; } = 260f;
+        public float BurstIntervalSeconds { get; set; } = 1.4f;
+        public float SpawnIntervalSeconds { get; set; } = 0.08f;
+        public float SpacingX { get; set; } = 56f;
+        public float SpeedMultiplier { get; set; } = 1f;
+        public MovePattern? MovePatternOverride { get; set; }
+        public FirePattern? FirePatternOverride { get; set; }
+        public float Amplitude { get; set; } = 48f;
+        public float Frequency { get; set; } = 1f;
+        public bool IgnoreHostileCap { get; set; }
+    }
+
+    /// <summary>
+    /// Defines an authored elite surge with optional rewind and scrap rewards.
+    /// </summary>
+    public sealed class EliteBurstEventDefinition
+    {
+        public string WarningText { get; set; } = string.Empty;
+        public float StartSeconds { get; set; }
+        public string ArchetypeId { get; set; }
+        public int EliteCount { get; set; } = 1;
+        public float TargetY { get; set; } = 0.5f;
+        public float SpawnLeadDistance { get; set; } = 320f;
+        public float SpeedMultiplier { get; set; } = 1f;
+        public MovePattern? MovePatternOverride { get; set; }
+        public FirePattern? FirePatternOverride { get; set; }
+        public int ScrapReward { get; set; } = 1;
+        public float RewindRefillPercent { get; set; } = 0.18f;
+    }
+
+    /// <summary>
+    /// Defines a multiplier-driven reward burst or warning.
+    /// </summary>
+    public sealed class KillChainEventDefinition
+    {
+        public int TriggerMultiplier { get; set; } = 4;
+        public string Label { get; set; } = string.Empty;
+        public float BonusXp { get; set; }
+        public int BonusScrap { get; set; }
+        public float BonusRewindPercent { get; set; }
+        public string AccentColor { get; set; } = "#FFB347";
+    }
+
+    /// <summary>
+    /// Defines a presentation-only authored callout.
+    /// </summary>
+    public sealed class PresentationCueDefinition
+    {
+        public PresentationCueKind Kind { get; set; } = PresentationCueKind.Warning;
+        public float StartSeconds { get; set; }
+        public float DurationSeconds { get; set; } = 1.8f;
+        public string Label { get; set; } = string.Empty;
+        public string AccentColor { get; set; } = "#FFB347";
+        public float Intensity { get; set; } = 1f;
+    }
+
+    /// <summary>
     /// Defines an optional runtime-selected boss variant for a milestone stage.
     /// </summary>
     public sealed class BossVariantDefinition
@@ -409,8 +488,14 @@ namespace SpaceBurst.RuntimeData
         public PresentationTier? PresentationTierOverride { get; set; }
         public bool EnableChaseView { get; set; } = true;
         public BackgroundMoodDefinition BackgroundMood { get; set; } = new BackgroundMoodDefinition();
+        public string SliceChapterName { get; set; } = string.Empty;
+        public float SliceTargetDurationSeconds { get; set; }
         public List<float> CheckpointMarkers { get; set; } = new List<float>();
         public List<SectionDefinition> Sections { get; set; } = new List<SectionDefinition>();
+        public List<HordePacketDefinition> HordePackets { get; set; } = new List<HordePacketDefinition>();
+        public List<EliteBurstEventDefinition> EliteBursts { get; set; } = new List<EliteBurstEventDefinition>();
+        public List<KillChainEventDefinition> KillChainEvents { get; set; } = new List<KillChainEventDefinition>();
+        public List<PresentationCueDefinition> PresentationCues { get; set; } = new List<PresentationCueDefinition>();
         public BossDefinition Boss { get; set; }
     }
 

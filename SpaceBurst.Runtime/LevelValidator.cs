@@ -87,6 +87,8 @@ namespace SpaceBurst.RuntimeData
                 issues.Add(new ValidationIssue("StartingLives", "StartingLives must be greater than zero."));
             if (stage.ShipsPerLife <= 0)
                 issues.Add(new ValidationIssue("ShipsPerLife", "ShipsPerLife must be greater than zero."));
+            if (stage.SliceTargetDurationSeconds < 0f)
+                issues.Add(new ValidationIssue("SliceTargetDurationSeconds", "SliceTargetDurationSeconds cannot be negative."));
             if (stage.Sections == null || stage.Sections.Count == 0)
                 issues.Add(new ValidationIssue("Sections", "At least one section is required."));
 
@@ -207,6 +209,147 @@ namespace SpaceBurst.RuntimeData
                         if (group.Frequency <= 0f)
                             issues.Add(new ValidationIssue(groupPath, "Frequency must be greater than zero."));
                     }
+                }
+            }
+
+            if (stage.HordePackets != null)
+            {
+                float lastStart = -1f;
+                for (int i = 0; i < stage.HordePackets.Count; i++)
+                {
+                    HordePacketDefinition packet = stage.HordePackets[i];
+                    string packetPath = string.Concat("HordePackets[", i.ToString(), "]");
+
+                    if (packet == null)
+                    {
+                        issues.Add(new ValidationIssue(packetPath, "Horde packet cannot be null."));
+                        continue;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(packet.ArchetypeId))
+                        issues.Add(new ValidationIssue(packetPath, "ArchetypeId is required."));
+                    else if (archetypes == null || !archetypes.ContainsKey(packet.ArchetypeId))
+                        issues.Add(new ValidationIssue(packetPath, string.Concat("Unknown ArchetypeId '", packet.ArchetypeId, "'.")));
+
+                    if (packet.StartSeconds < 0f)
+                        issues.Add(new ValidationIssue(packetPath, "StartSeconds cannot be negative."));
+                    if (packet.StartSeconds < lastStart)
+                        issues.Add(new ValidationIssue(packetPath, "Horde packets must be ordered by StartSeconds."));
+                    if (packet.Lane < 0 || packet.Lane > 4)
+                        issues.Add(new ValidationIssue(packetPath, "Lane must be between 0 and 4."));
+                    if (packet.TargetY.HasValue && (packet.TargetY.Value < 0f || packet.TargetY.Value > 1f))
+                        issues.Add(new ValidationIssue(packetPath, "TargetY must be between 0 and 1 when provided."));
+                    if (packet.BurstCount <= 0)
+                        issues.Add(new ValidationIssue(packetPath, "BurstCount must be greater than zero."));
+                    if (packet.CountPerBurst <= 0)
+                        issues.Add(new ValidationIssue(packetPath, "CountPerBurst must be greater than zero."));
+                    if (packet.SpawnLeadDistance < 0f)
+                        issues.Add(new ValidationIssue(packetPath, "SpawnLeadDistance cannot be negative."));
+                    if (packet.BurstIntervalSeconds < 0f)
+                        issues.Add(new ValidationIssue(packetPath, "BurstIntervalSeconds cannot be negative."));
+                    if (packet.SpawnIntervalSeconds < 0f)
+                        issues.Add(new ValidationIssue(packetPath, "SpawnIntervalSeconds cannot be negative."));
+                    if (packet.SpacingX < 0f)
+                        issues.Add(new ValidationIssue(packetPath, "SpacingX cannot be negative."));
+                    if (packet.SpeedMultiplier <= 0f)
+                        issues.Add(new ValidationIssue(packetPath, "SpeedMultiplier must be greater than zero."));
+                    if (packet.Amplitude < 0f)
+                        issues.Add(new ValidationIssue(packetPath, "Amplitude cannot be negative."));
+                    if (packet.Frequency <= 0f)
+                        issues.Add(new ValidationIssue(packetPath, "Frequency must be greater than zero."));
+
+                    lastStart = packet.StartSeconds;
+                }
+            }
+
+            if (stage.EliteBursts != null)
+            {
+                float lastStart = -1f;
+                for (int i = 0; i < stage.EliteBursts.Count; i++)
+                {
+                    EliteBurstEventDefinition burst = stage.EliteBursts[i];
+                    string burstPath = string.Concat("EliteBursts[", i.ToString(), "]");
+
+                    if (burst == null)
+                    {
+                        issues.Add(new ValidationIssue(burstPath, "Elite burst cannot be null."));
+                        continue;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(burst.ArchetypeId))
+                        issues.Add(new ValidationIssue(burstPath, "ArchetypeId is required."));
+                    else if (archetypes == null || !archetypes.ContainsKey(burst.ArchetypeId))
+                        issues.Add(new ValidationIssue(burstPath, string.Concat("Unknown ArchetypeId '", burst.ArchetypeId, "'.")));
+
+                    if (burst.StartSeconds < 0f)
+                        issues.Add(new ValidationIssue(burstPath, "StartSeconds cannot be negative."));
+                    if (burst.StartSeconds < lastStart)
+                        issues.Add(new ValidationIssue(burstPath, "Elite bursts must be ordered by StartSeconds."));
+                    if (burst.EliteCount <= 0)
+                        issues.Add(new ValidationIssue(burstPath, "EliteCount must be greater than zero."));
+                    if (burst.TargetY < 0.1f || burst.TargetY > 0.9f)
+                        issues.Add(new ValidationIssue(burstPath, "TargetY must be between 0.1 and 0.9."));
+                    if (burst.SpawnLeadDistance < 0f)
+                        issues.Add(new ValidationIssue(burstPath, "SpawnLeadDistance cannot be negative."));
+                    if (burst.SpeedMultiplier <= 0f)
+                        issues.Add(new ValidationIssue(burstPath, "SpeedMultiplier must be greater than zero."));
+                    if (burst.ScrapReward < 0)
+                        issues.Add(new ValidationIssue(burstPath, "ScrapReward cannot be negative."));
+                    if (burst.RewindRefillPercent < 0f || burst.RewindRefillPercent > 1f)
+                        issues.Add(new ValidationIssue(burstPath, "RewindRefillPercent must be between 0 and 1."));
+
+                    lastStart = burst.StartSeconds;
+                }
+            }
+
+            if (stage.KillChainEvents != null)
+            {
+                for (int i = 0; i < stage.KillChainEvents.Count; i++)
+                {
+                    KillChainEventDefinition chainEvent = stage.KillChainEvents[i];
+                    string eventPath = string.Concat("KillChainEvents[", i.ToString(), "]");
+
+                    if (chainEvent == null)
+                    {
+                        issues.Add(new ValidationIssue(eventPath, "Kill-chain event cannot be null."));
+                        continue;
+                    }
+
+                    if (chainEvent.TriggerMultiplier <= 0)
+                        issues.Add(new ValidationIssue(eventPath, "TriggerMultiplier must be greater than zero."));
+                    if (chainEvent.BonusXp < 0f)
+                        issues.Add(new ValidationIssue(eventPath, "BonusXp cannot be negative."));
+                    if (chainEvent.BonusScrap < 0)
+                        issues.Add(new ValidationIssue(eventPath, "BonusScrap cannot be negative."));
+                    if (chainEvent.BonusRewindPercent < 0f || chainEvent.BonusRewindPercent > 1f)
+                        issues.Add(new ValidationIssue(eventPath, "BonusRewindPercent must be between 0 and 1."));
+                }
+            }
+
+            if (stage.PresentationCues != null)
+            {
+                float lastStart = -1f;
+                for (int i = 0; i < stage.PresentationCues.Count; i++)
+                {
+                    PresentationCueDefinition cue = stage.PresentationCues[i];
+                    string cuePath = string.Concat("PresentationCues[", i.ToString(), "]");
+
+                    if (cue == null)
+                    {
+                        issues.Add(new ValidationIssue(cuePath, "Presentation cue cannot be null."));
+                        continue;
+                    }
+
+                    if (cue.StartSeconds < 0f)
+                        issues.Add(new ValidationIssue(cuePath, "StartSeconds cannot be negative."));
+                    if (cue.StartSeconds < lastStart)
+                        issues.Add(new ValidationIssue(cuePath, "Presentation cues must be ordered by StartSeconds."));
+                    if (cue.DurationSeconds <= 0f)
+                        issues.Add(new ValidationIssue(cuePath, "DurationSeconds must be greater than zero."));
+                    if (cue.Intensity < 0f)
+                        issues.Add(new ValidationIssue(cuePath, "Intensity cannot be negative."));
+
+                    lastStart = cue.StartSeconds;
                 }
             }
 
