@@ -6,15 +6,6 @@ namespace SpaceBurst
 {
     sealed class RunProgressionController
     {
-        private static readonly WeaponStyleId[] SliceSupportWeapons =
-        {
-            WeaponStyleId.Missile,
-            WeaponStyleId.Arc,
-            WeaponStyleId.Drone,
-            WeaponStyleId.Blade,
-            WeaponStyleId.Fortress,
-        };
-
         private static readonly PassiveReactorId[] SlicePassives =
         {
             PassiveReactorId.Overclock,
@@ -25,7 +16,7 @@ namespace SpaceBurst
             PassiveReactorId.ChainReactor,
         };
 
-        public List<UpgradeDraftCard> BuildDraftCards(PlayerRunProgress progress, DeterministicRngState rng, bool tutorialMode)
+        public List<UpgradeDraftCard> BuildDraftCards(PlayerRunProgress progress, DeterministicRngState rng, bool tutorialMode, int stageNumber = 1)
         {
             var cards = new List<UpgradeDraftCard>();
             if (progress == null)
@@ -39,13 +30,12 @@ namespace SpaceBurst
                 return cards;
             }
 
-            List<UpgradeDraftCard> pool = new List<UpgradeDraftCard>
-            {
-                CreateWeaponSurgeCard(progress.Weapons.ActiveStyle, progress, "CORE"),
-            };
+            var pool = new List<UpgradeDraftCard>();
+            if (progress.Weapons.CanUpgradeStyle(progress.Weapons.ActiveStyle))
+                pool.Add(CreateWeaponSurgeCard(progress.Weapons.ActiveStyle, progress, "CORE"));
 
             AddEvolutionCards(pool, progress);
-            AddSupportWeaponCards(pool, progress);
+            AddSupportWeaponCards(pool, progress, stageNumber);
             AddPassiveCards(pool, progress);
             AddSupportUpgradeCards(pool, progress);
             pool.Add(CreateRewindCard(progress));
@@ -69,14 +59,21 @@ namespace SpaceBurst
             switch (card.Type)
             {
                 case UpgradeCardType.WeaponSurge:
-                    progress.ApplyWeaponUpgrade(card.StyleId, card.StyleId == progress.Weapons.ActiveStyle);
+                    WeaponUpgradeOutcome outcome = progress.ApplyWeaponUpgrade(card.StyleId, card.StyleId == progress.Weapons.ActiveStyle);
+                    if (outcome == WeaponUpgradeOutcome.NoChange)
+                        return false;
                     if (card.StyleId != progress.Weapons.ActiveStyle)
                         progress.TryEquipSupportWeapon(card.StyleId);
                     return true;
 
                 case UpgradeCardType.SupportWeapon:
-                    progress.ApplyWeaponUpgrade(card.StyleId, false);
-                    return progress.TryEquipSupportWeapon(card.StyleId);
+                    if (progress.Weapons.HasSupportCapacity)
+                        return progress.TryEquipSupportWeapon(card.StyleId);
+
+                    if (progress.Weapons.OwnsStyle(card.StyleId))
+                        return false;
+
+                    return progress.ApplyWeaponUpgrade(card.StyleId, true) == WeaponUpgradeOutcome.UnlockedStyle;
 
                 case UpgradeCardType.PassiveReactor:
                     if (!progress.TryEquipPassive(card.PassiveReactorId))
@@ -125,76 +122,44 @@ namespace SpaceBurst
 
         private static void AddEvolutionCards(List<UpgradeDraftCard> pool, PlayerRunProgress progress)
         {
-            if (progress.Weapons.ActiveStyle == WeaponStyleId.Pulse &&
-                progress.Weapons.GetLevel(WeaponStyleId.Pulse) >= 3 &&
-                progress.HasPassive(PassiveReactorId.Overclock) &&
-                !progress.HasEvolution(EvolutionId.SingularityRail))
+            for (int index = 0; index < WeaponProgressionCatalog.Evolutions.Count; index++)
             {
-                pool.Add(new UpgradeDraftCard
+                WeaponEvolutionDefinition definition = WeaponProgressionCatalog.Evolutions[index];
+                if (!progress.Weapons.OwnsStyle(definition.StyleId) ||
+                    progress.Weapons.GetLevel(definition.StyleId) < definition.RequiredLevel ||
+                    !progress.HasPassive(definition.RequiredPassive) ||
+                    progress.HasEvolution(definition.Id))
                 {
-                    Type = UpgradeCardType.EvolutionSurge,
-                    EvolutionId = EvolutionId.SingularityRail,
-                    StyleId = WeaponStyleId.Pulse,
-                    Title = "SINGULARITY RAIL",
-                    Subtitle = "EVOLUTION",
-                    Description = "CORE PULSE COLLAPSES INTO A PIERCING HYPER-RAIL",
-                    PreviewText = "PULSE -> RAIL",
-                    DeltaText = "PIERCE + DMG",
-                    BadgeText = "EVOLVE",
-                    AccentColor = WeaponCatalog.GetStyle(WeaponStyleId.Rail).AccentColor,
-                });
-            }
+                    continue;
+                }
 
-            if (progress.Weapons.OwnsStyle(WeaponStyleId.Missile) &&
-                progress.Weapons.GetLevel(WeaponStyleId.Missile) >= 2 &&
-                progress.HasPassive(PassiveReactorId.SalvageNode) &&
-                !progress.HasEvolution(EvolutionId.CataclysmRack))
-            {
                 pool.Add(new UpgradeDraftCard
                 {
                     Type = UpgradeCardType.EvolutionSurge,
-                    EvolutionId = EvolutionId.CataclysmRack,
-                    StyleId = WeaponStyleId.Missile,
-                    Title = "CATACLYSM RACK",
+                    EvolutionId = definition.Id,
+                    StyleId = definition.StyleId,
+                    Title = definition.Title,
                     Subtitle = "EVOLUTION",
-                    Description = "MISSILES SPLIT HARDER AND DETONATE WIDER",
-                    PreviewText = "MISSILE ++",
-                    DeltaText = "BLAST + VOLLEY",
+                    Description = definition.Description,
+                    PreviewText = definition.PreviewText,
+                    DeltaText = definition.DeltaText,
                     BadgeText = "EVOLVE",
-                    AccentColor = WeaponCatalog.GetStyle(WeaponStyleId.Missile).AccentColor,
-                });
-            }
-
-            if (progress.Weapons.OwnsStyle(WeaponStyleId.Drone) &&
-                progress.Weapons.GetLevel(WeaponStyleId.Drone) >= 2 &&
-                progress.HasPassive(PassiveReactorId.TimeBattery) &&
-                !progress.HasEvolution(EvolutionId.EchoHive))
-            {
-                pool.Add(new UpgradeDraftCard
-                {
-                    Type = UpgradeCardType.EvolutionSurge,
-                    EvolutionId = EvolutionId.EchoHive,
-                    StyleId = WeaponStyleId.Drone,
-                    Title = "ECHO HIVE",
-                    Subtitle = "EVOLUTION",
-                    Description = "DRONES MULTIPLY AND FIRE THROUGH REWIND AFTERGLOWS",
-                    PreviewText = "DRONE ++",
-                    DeltaText = "DRONES + CHAIN",
-                    BadgeText = "EVOLVE",
-                    AccentColor = WeaponCatalog.GetStyle(WeaponStyleId.Drone).AccentColor,
+                    AccentColor = WeaponCatalog.GetStyle(definition.StyleId).AccentColor,
                 });
             }
         }
 
-        private static void AddSupportWeaponCards(List<UpgradeDraftCard> pool, PlayerRunProgress progress)
+        private static void AddSupportWeaponCards(List<UpgradeDraftCard> pool, PlayerRunProgress progress, int stageNumber)
         {
-            for (int i = 0; i < SliceSupportWeapons.Length; i++)
+            bool requiresCoreSwap = !progress.Weapons.HasSupportCapacity;
+            IReadOnlyList<WeaponStyleId> availableStyles = WeaponProgressionCatalog.GetAvailableStyles(stageNumber);
+            for (int i = 0; i < availableStyles.Count; i++)
             {
-                WeaponStyleId style = SliceSupportWeapons[i];
-                if (style == progress.Weapons.ActiveStyle || progress.Weapons.HasSupportWeapon(style))
+                WeaponStyleId style = availableStyles[i];
+                if (style == progress.Weapons.ActiveStyle || progress.Weapons.HasSupportWeapon(style) || (requiresCoreSwap && progress.Weapons.OwnsStyle(style)))
                     continue;
 
-                pool.Add(CreateSupportWeaponCard(style, "STACK"));
+                pool.Add(CreateSupportWeaponCard(style, requiresCoreSwap ? "CORE SWAP" : "STACK", requiresCoreSwap));
             }
         }
 
@@ -218,7 +183,8 @@ namespace SpaceBurst
             for (int i = 0; i < progress.Weapons.SupportWeapons.Count; i++)
             {
                 WeaponStyleId style = progress.Weapons.SupportWeapons[i];
-                pool.Add(CreateWeaponSurgeCard(style, progress, "SUPPORT"));
+                if (progress.Weapons.CanUpgradeStyle(style))
+                    pool.Add(CreateWeaponSurgeCard(style, progress, "SUPPORT"));
             }
         }
 
@@ -263,18 +229,20 @@ namespace SpaceBurst
             };
         }
 
-        private static UpgradeDraftCard CreateSupportWeaponCard(WeaponStyleId styleId, string badge)
+        private static UpgradeDraftCard CreateSupportWeaponCard(WeaponStyleId styleId, string badge, bool replacesCore = false)
         {
             WeaponStyleDefinition style = WeaponCatalog.GetStyle(styleId);
             return new UpgradeDraftCard
             {
                 Type = UpgradeCardType.SupportWeapon,
                 StyleId = styleId,
-                Title = string.Concat(style.DisplayName, " WING"),
-                Subtitle = "AUTO FIRE",
-                Description = string.Concat("ADD ", style.DisplayName, " AS A SUPPORT WEAPON"),
+                Title = string.Concat(style.DisplayName, replacesCore ? " CORE" : " WING"),
+                Subtitle = replacesCore ? "ARSENAL UNLOCK" : "AUTO FIRE",
+                Description = replacesCore
+                    ? string.Concat("UNLOCK ", style.DisplayName, " AS CORE; ROTATE BACK WITH Q OR E")
+                    : string.Concat("ADD ", style.DisplayName, " AS A SUPPORT WEAPON"),
                 PreviewText = GetWeaponPreview(styleId),
-                DeltaText = "STACK +1",
+                DeltaText = replacesCore ? "NEW CORE" : "STACK +1",
                 BadgeText = badge,
                 AccentColor = style.AccentColor,
             };
@@ -284,12 +252,12 @@ namespace SpaceBurst
         {
             return passive switch
             {
-                PassiveReactorId.Overclock => CreatePassiveCard(passive, "OVERCLOCK", "REACTOR", "BOOSTS FIRE RATE AND UNLOCKS PULSE EVOLUTION", "RATE +"),
-                PassiveReactorId.MagnetCore => CreatePassiveCard(passive, "MAGNET CORE", "REACTOR", "PULLS SHARDS HARDER AND IMPROVES CORE FLOW", "MAGNET +"),
-                PassiveReactorId.ArmorPlating => CreatePassiveCard(passive, "ARMOR PLATING", "REACTOR", "ADDS SHIPS AND HOLDS THE LINE LONGER", "SHIPS +1"),
-                PassiveReactorId.TimeBattery => CreatePassiveCard(passive, "TIME BATTERY", "REACTOR", "BUFFS REWIND AND UNLOCKS DRONE EVOLUTION", "REWIND +"),
+                PassiveReactorId.Overclock => CreatePassiveCard(passive, "OVERCLOCK", "REACTOR", "BOOSTS FIRE RATE AND UNLOCKS PULSE OR RAIL EVOLUTIONS", "RATE +"),
+                PassiveReactorId.MagnetCore => CreatePassiveCard(passive, "MAGNET CORE", "REACTOR", "PULLS SHARDS HARDER AND UNLOCKS SPREAD EVOLUTION", "MAGNET +"),
+                PassiveReactorId.ArmorPlating => CreatePassiveCard(passive, "ARMOR PLATING", "REACTOR", "ADDS SHIPS AND UNLOCKS BLADE OR FORTRESS EVOLUTIONS", "SHIPS +1"),
+                PassiveReactorId.TimeBattery => CreatePassiveCard(passive, "TIME BATTERY", "REACTOR", "BUFFS REWIND AND UNLOCKS PLASMA OR DRONE EVOLUTIONS", "REWIND +"),
                 PassiveReactorId.SalvageNode => CreatePassiveCard(passive, "SALVAGE NODE", "REACTOR", "BOOSTS SCRAP FLOW AND UNLOCKS MISSILE EVOLUTION", "SCRAP +"),
-                _ => CreatePassiveCard(passive, "CHAIN REACTOR", "REACTOR", "ADDS SEEKING AND ARC PRESSURE TO THE STACK", "CHAIN +"),
+                _ => CreatePassiveCard(passive, "CHAIN REACTOR", "REACTOR", "ADDS SEEKING AND UNLOCKS LASER OR ARC EVOLUTIONS", "CHAIN +"),
             };
         }
 
@@ -318,7 +286,7 @@ namespace SpaceBurst
                 Subtitle = "UTILITY",
                 Description = "REFILL REWIND AND LOWER METER DRAIN",
                 PreviewText = "REWIND",
-                DeltaText = string.Concat("DRAIN -", MathF.Round((progress.RewindEfficiency + 0.12f) * 100f).ToString("0"), "%"),
+                DeltaText = string.Concat("DRAIN -", MathF.Round(MathF.Min(0.6f, progress.RewindEfficiency + 0.12f) * 100f).ToString("0"), "%"),
                 BadgeText = "TIME",
                 AccentColor = "#56F0FF",
             };
@@ -345,7 +313,11 @@ namespace SpaceBurst
             return styleId switch
             {
                 WeaponStyleId.Pulse => "FOCUS RAIL",
+                WeaponStyleId.Spread => "NOVA FAN",
+                WeaponStyleId.Laser => "PRISM BEAM",
+                WeaponStyleId.Plasma => "CHRONO BLAST",
                 WeaponStyleId.Missile => "HOMING BLAST",
+                WeaponStyleId.Rail => "VOID PIERCE",
                 WeaponStyleId.Arc => "CHAIN VOLT",
                 WeaponStyleId.Drone => "HIVE FIRE",
                 WeaponStyleId.Blade => "SCREEN COVER",

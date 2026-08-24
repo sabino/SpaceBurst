@@ -6,6 +6,8 @@ namespace SpaceBurst
 {
     static class ProceduralAudioSynth
     {
+        private static readonly float[] MidiFrequencies = BuildMidiFrequencies();
+
         public static SoundEffect CreateEffect(int sampleRate, float durationSeconds, SynthPatchDefinition patch)
         {
             byte[] pcm = RenderMonoPcm(sampleRate, durationSeconds, t => RenderPatchSample(t, durationSeconds, patch));
@@ -127,6 +129,31 @@ namespace SpaceBurst
         {
             int sampleCount = Math.Max(1, (int)(sampleRate * durationSeconds));
             byte[] buffer = new byte[sampleCount * 2];
+#if BLAZORGL
+            // Browser builds can run without the optional wasm-tools optimizer.
+            // Evaluate the expensive oscillator graph at a quality-dependent
+            // control rate, then interpolate into the requested PCM rate. This
+            // keeps synthesis responsive while preserving smooth waveforms.
+            int synthesisStride = sampleRate <= 11025 ? 8 : sampleRate <= 16000 ? 4 : 2;
+            float currentSample = Math.Clamp(sampleFunc(0f), -1f, 1f);
+            for (int blockStart = 0; blockStart < sampleCount; blockStart += synthesisStride)
+            {
+                int nextIndex = Math.Min(sampleCount - 1, blockStart + synthesisStride);
+                float nextSample = Math.Clamp(sampleFunc(nextIndex / (float)sampleRate), -1f, 1f);
+                int blockEnd = Math.Min(sampleCount, blockStart + synthesisStride);
+                for (int i = blockStart; i < blockEnd; i++)
+                {
+                    float amount = (i - blockStart) / (float)synthesisStride;
+                    float sample = MathHelper.Lerp(currentSample, nextSample, amount);
+                    short pcm = (short)(sample * short.MaxValue);
+                    int index = i * 2;
+                    buffer[index] = (byte)(pcm & 0xFF);
+                    buffer[index + 1] = (byte)((pcm >> 8) & 0xFF);
+                }
+
+                currentSample = nextSample;
+            }
+#else
             for (int i = 0; i < sampleCount; i++)
             {
                 float time = i / (float)sampleRate;
@@ -136,6 +163,7 @@ namespace SpaceBurst
                 buffer[index] = (byte)(pcm & 0xFF);
                 buffer[index + 1] = (byte)((pcm >> 8) & 0xFF);
             }
+#endif
 
             return buffer;
         }
@@ -143,7 +171,7 @@ namespace SpaceBurst
         private static float RenderPatchSample(float time, float durationSeconds, SynthPatchDefinition patch)
         {
             float frequency = GetPatchFrequency(patch.Name, time);
-            float vibrato = patch.VibratoDepth <= 0f ? 0f : MathF.Sin(time * patch.VibratoFrequency * MathF.Tau) * patch.VibratoDepth;
+            float vibrato = patch.VibratoDepth <= 0f ? 0f : OscillatorSin(time * patch.VibratoFrequency * MathF.Tau) * patch.VibratoDepth;
             float sweep = 1f + patch.SweepAmount * (1f - MathHelper.Clamp(time / MathF.Max(durationSeconds, 0.001f), 0f, 1f));
             float frequencyA = frequency * (1f + vibrato) * sweep;
             float frequencyB = frequency * (1f - patch.Detune + vibrato * 0.5f);
@@ -177,8 +205,31 @@ namespace SpaceBurst
                 MusicStemKind.Pulse => RenderPulse(theme, chordDegree, barIndex, barSixteenth, sixteenthPhase, time),
                 MusicStemKind.Lead => RenderLead(theme, chordDegree, barIndex, barEighth, eighthPhase, swungBeat, time),
                 MusicStemKind.Danger => RenderDanger(theme, chordDegree, barIndex, barSixteenth, sixteenthPhase, time),
-                _ => RenderBoss(theme, chordDegree, barIndex, barEighth, eighthPhase, time),
+                MusicStemKind.Boss => RenderBoss(theme, chordDegree, barIndex, barEighth, eighthPhase, time),
+                MusicStemKind.ReducedMix => RenderReducedMix(theme, chordDegree, barIndex, barSixteenth, barEighth, sixteenthPhase, eighthPhase, time, beatInBar),
+                _ => 0f,
             };
+        }
+
+        private static float RenderReducedMix(
+            MusicThemeDefinition theme,
+            int chordDegree,
+            int barIndex,
+            int barSixteenth,
+            int barEighth,
+            float sixteenthPhase,
+            float eighthPhase,
+            float time,
+            float beatInBar)
+        {
+            float drums = RenderDrums(theme, barIndex, barSixteenth, sixteenthPhase, time) * 0.48f;
+            float bass = RenderBass(theme, chordDegree, barIndex, barEighth, eighthPhase, time) * 0.56f;
+            float pad = RenderPad(theme, chordDegree, time, beatInBar) * 0.78f;
+            float pulse = RenderPulse(theme, chordDegree, barIndex, barSixteenth, sixteenthPhase, time) * 0.42f;
+            float boss = theme.Id.EndsWith("-boss", StringComparison.OrdinalIgnoreCase)
+                ? RenderBoss(theme, chordDegree, barIndex, barEighth, eighthPhase, time) * 0.5f
+                : 0f;
+            return Math.Clamp((drums + bass + pad + pulse + boss) * 0.62f, -1f, 1f);
         }
 
         private static float RenderDrums(MusicThemeDefinition theme, int barIndex, int barSixteenth, float sixteenthPhase, float time)
@@ -216,7 +267,7 @@ namespace SpaceBurst
 
         private static float RenderPad(MusicThemeDefinition theme, int chordDegree, float time, float beatInBar)
         {
-            float slowPulse = 0.88f + MathF.Sin(time * 0.42f + theme.ThemeSeed * 0.1f) * 0.12f;
+            float slowPulse = 0.88f + OscillatorSin(time * 0.42f + theme.ThemeSeed * 0.1f) * 0.12f;
             float sample = 0f;
             for (int i = 0; i < theme.PadChordSteps.Length; i++)
             {
@@ -230,7 +281,7 @@ namespace SpaceBurst
                 sample += voice;
             }
 
-            float swell = 0.16f + 0.08f * slowPulse + 0.02f * MathF.Sin(beatInBar * MathF.Tau * 0.5f);
+            float swell = 0.16f + 0.08f * slowPulse + 0.02f * OscillatorSin(beatInBar * MathF.Tau * 0.5f);
             return sample * swell;
         }
 
@@ -269,7 +320,7 @@ namespace SpaceBurst
 
             float frequency = MidiToFrequency(note);
             float envelope = eighthPhase < 0.86f ? 1f - eighthPhase * 0.62f : 0.1f;
-            float vibrato = MathF.Sin((time + swungBeat * 0.02f) * (5.8f + theme.Brightness * 3.4f) * MathF.Tau) * (0.003f + theme.Brightness * 0.004f);
+            float vibrato = OscillatorSin((time + swungBeat * 0.02f) * (5.8f + theme.Brightness * 3.4f) * MathF.Tau) * (0.003f + theme.Brightness * 0.004f);
             float saw = SampleWaveform(SynthWaveform.Saw, frequency * (1f + vibrato), time, 0.5f);
             float shimmer = SampleWaveform(SynthWaveform.Sine, frequency * 2f, time, 0.5f) * (0.18f + theme.Brightness * 0.08f);
             float triangle = SampleWaveform(SynthWaveform.Triangle, frequency * 0.5f, time, 0.5f) * 0.12f;
@@ -315,13 +366,13 @@ namespace SpaceBurst
         private static float DrumKick(float phase)
         {
             float pitch = MathHelper.Lerp(90f, 34f, MathHelper.Clamp(phase * 1.8f, 0f, 1f));
-            return MathF.Sin(phase * pitch) * MathF.Exp(-phase * 10f) * 0.9f;
+            return OscillatorSin(phase * pitch) * Decay(phase * 10f) * 0.9f;
         }
 
         private static float DrumSnare(float phase)
         {
-            float envelope = MathF.Exp(-phase * 14f);
-            float tone = MathF.Sin(phase * 210f) * 0.18f;
+            float envelope = Decay(phase * 14f);
+            float tone = OscillatorSin(phase * 210f) * 0.18f;
             float noise = (HashNoise(phase * 12000f) * 2f - 1f) * 0.82f;
             return (tone + noise) * envelope * 0.44f;
         }
@@ -329,7 +380,7 @@ namespace SpaceBurst
         private static float DrumHat(float phase, float density)
         {
             float color = 0.06f + density * 0.05f;
-            return (HashNoise(phase * 18000f) * 2f - 1f) * MathF.Exp(-phase * (22f + density * 12f)) * color;
+            return (HashNoise(phase * 18000f) * 2f - 1f) * Decay(phase * (22f + density * 12f)) * color;
         }
 
         private static float ApplySwing(float beatInBar, float swingAmount)
@@ -384,7 +435,7 @@ namespace SpaceBurst
                 "Plasma" => 240f - time * 40f,
                 "Missile" => 170f - time * 35f,
                 "Rail" => 890f,
-                "Arc" => 420f + MathF.Sin(time * 14f) * 90f,
+                "Arc" => 420f + OscillatorSin(time * 14f) * 90f,
                 "Blade" => 660f - time * 140f,
                 "Drone" => 580f - time * 60f,
                 "Fortress" => 220f - time * 20f,
@@ -398,7 +449,7 @@ namespace SpaceBurst
                 "Transition" => 240f - time * 160f,
                 "PlayerDamage" => 180f - time * 60f,
                 "RewindStart" => 320f + time * 140f,
-                "RewindLoop" => 140f + MathF.Sin(time * 3.4f) * 18f,
+                "RewindLoop" => 140f + OscillatorSin(time * 3.4f) * 18f,
                 "UiConfirm" => 640f,
                 "UiCancel" => 460f,
                 _ => 420f,
@@ -425,7 +476,7 @@ namespace SpaceBurst
             float wrapped = time * frequency - MathF.Floor(time * frequency);
             return waveform switch
             {
-                SynthWaveform.Sine => MathF.Sin(MathF.Tau * wrapped),
+                SynthWaveform.Sine => OscillatorSin(MathF.Tau * wrapped),
                 SynthWaveform.Triangle => 1f - 4f * MathF.Abs(wrapped - 0.5f),
                 SynthWaveform.Square => wrapped < 0.5f ? 1f : -1f,
                 SynthWaveform.Pulse => wrapped < MathHelper.Clamp(pulseWidth, 0.05f, 0.95f) ? 1f : -1f,
@@ -436,18 +487,84 @@ namespace SpaceBurst
 
         private static float ApplyDrive(float sample, float drive)
         {
-            return MathF.Tanh(sample * Math.Max(0.1f, drive));
+            return SoftClip(sample * Math.Max(0.1f, drive));
         }
 
         private static float MidiToFrequency(int midiNote)
         {
-            return 440f * MathF.Pow(2f, (midiNote - 69) / 12f);
+            return MidiFrequencies[Math.Clamp(midiNote, 0, MidiFrequencies.Length - 1)];
         }
 
         private static float HashNoise(float value)
         {
+            return FastNoise(value);
+        }
+
+        private static float[] BuildMidiFrequencies()
+        {
+            var frequencies = new float[128];
+            float frequency = 8.1757989156f;
+            const float semitoneRatio = 1.05946309436f;
+            for (int note = 0; note < frequencies.Length; note++)
+            {
+                frequencies[note] = frequency;
+                frequency *= semitoneRatio;
+            }
+
+            return frequencies;
+        }
+
+        private static float OscillatorSin(float radians)
+        {
+#if BLAZORGL
+            float wrapped = radians - MathF.Floor((radians + MathF.PI) / MathF.Tau) * MathF.Tau;
+            float shaped = 1.27323954f * wrapped - 0.405284735f * wrapped * MathF.Abs(wrapped);
+            return 0.225f * (shaped * MathF.Abs(shaped) - shaped) + shaped;
+#else
+            return MathF.Sin(radians);
+#endif
+        }
+
+        private static float Decay(float positiveExponent)
+        {
+#if BLAZORGL
+            float value = 1f / (1f + Math.Max(0f, positiveExponent) * 0.125f);
+            value *= value;
+            value *= value;
+            return value * value;
+#else
+            return MathF.Exp(-positiveExponent);
+#endif
+        }
+
+        private static float SoftClip(float sample)
+        {
+#if BLAZORGL
+            float clamped = MathHelper.Clamp(sample, -3f, 3f);
+            float square = clamped * clamped;
+            return clamped * (27f + square) / (27f + 9f * square);
+#else
+            return MathF.Tanh(sample);
+#endif
+        }
+
+        private static float FastNoise(float value)
+        {
+#if BLAZORGL
+            unchecked
+            {
+                uint bits = (uint)BitConverter.SingleToInt32Bits(value);
+                bits ^= bits >> 16;
+                bits *= 0x7FEB352Du;
+                bits ^= bits >> 15;
+                bits *= 0x846CA68Bu;
+                bits ^= bits >> 16;
+                return (bits & 0x00FFFFFFu) / 16777215f;
+            }
+#else
             float sine = MathF.Sin(value * 12.9898f) * 43758.5453f;
             return sine - MathF.Floor(sine);
+#endif
         }
     }
 }

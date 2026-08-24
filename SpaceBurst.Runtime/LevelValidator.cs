@@ -28,6 +28,12 @@ namespace SpaceBurst.RuntimeData
                 EnemyArchetypeDefinition archetype = catalog.Archetypes[i];
                 string path = string.Concat("Archetypes[", i.ToString(), "]");
 
+                if (archetype == null)
+                {
+                    issues.Add(new ValidationIssue(path, "Archetype cannot be null."));
+                    continue;
+                }
+
                 if (string.IsNullOrWhiteSpace(archetype.Id))
                     issues.Add(new ValidationIssue(path, "Id is required."));
                 else if (!ids.Add(archetype.Id))
@@ -87,10 +93,22 @@ namespace SpaceBurst.RuntimeData
                 issues.Add(new ValidationIssue("StartingLives", "StartingLives must be greater than zero."));
             if (stage.ShipsPerLife <= 0)
                 issues.Add(new ValidationIssue("ShipsPerLife", "ShipsPerLife must be greater than zero."));
-            if (stage.SliceTargetDurationSeconds < 0f)
-                issues.Add(new ValidationIssue("SliceTargetDurationSeconds", "SliceTargetDurationSeconds cannot be negative."));
+            if (string.IsNullOrWhiteSpace(stage.SliceChapterName))
+                issues.Add(new ValidationIssue("SliceChapterName", "SliceChapterName is required."));
+            if (stage.SliceTargetDurationSeconds <= 0f)
+                issues.Add(new ValidationIssue("SliceTargetDurationSeconds", "SliceTargetDurationSeconds must be greater than zero."));
             if (stage.Sections == null || stage.Sections.Count == 0)
                 issues.Add(new ValidationIssue("Sections", "At least one section is required."));
+
+            int minimumHordePackets = stage.StageNumber > 0 && stage.StageNumber % 10 == 0 ? 3 : 4;
+            if (stage.HordePackets == null || stage.HordePackets.Count < minimumHordePackets)
+                issues.Add(new ValidationIssue("HordePackets", string.Concat("At least ", minimumHordePackets.ToString(), " horde packets are required for this stage.")));
+            if (stage.EliteBursts == null)
+                issues.Add(new ValidationIssue("EliteBursts", "EliteBursts cannot be null."));
+            if (stage.KillChainEvents == null || stage.KillChainEvents.Count < 3)
+                issues.Add(new ValidationIssue("KillChainEvents", "At least three kill-chain events are required."));
+            if (stage.PresentationCues == null || stage.PresentationCues.Count < 2)
+                issues.Add(new ValidationIssue("PresentationCues", "At least two presentation cues are required."));
 
             bool bossStage = stage.StageNumber > 0 && stage.StageNumber % 10 == 0;
             if (bossStage && stage.Boss == null)
@@ -98,12 +116,23 @@ namespace SpaceBurst.RuntimeData
             if (!bossStage && stage.Boss != null)
                 issues.Add(new ValidationIssue("Boss", "Only stages 10, 20, 30, 40, and 50 may define a Boss."));
 
-            if (stage.CheckpointMarkers != null)
+            float authoredDuration = GetAuthoredDuration(stage);
+            if (stage.CheckpointMarkers == null)
             {
+                issues.Add(new ValidationIssue("CheckpointMarkers", "CheckpointMarkers cannot be null."));
+            }
+            else
+            {
+                float lastMarker = -1f;
                 foreach (float marker in stage.CheckpointMarkers)
                 {
                     if (marker < 0f)
                         issues.Add(new ValidationIssue("CheckpointMarkers", "Checkpoint markers cannot be negative."));
+                    if (marker < lastMarker)
+                        issues.Add(new ValidationIssue("CheckpointMarkers", "Checkpoint markers must be ordered."));
+                    if (authoredDuration > 0f && marker > authoredDuration)
+                        issues.Add(new ValidationIssue("CheckpointMarkers", "Checkpoint markers must fall within the authored stage duration."));
+                    lastMarker = marker;
                 }
             }
 
@@ -160,6 +189,8 @@ namespace SpaceBurst.RuntimeData
                                 issues.Add(new ValidationIssue(eventPath, "StartSeconds cannot be negative."));
                             if (window.DurationSeconds <= 0f)
                                 issues.Add(new ValidationIssue(eventPath, "DurationSeconds must be greater than zero."));
+                            if (window.StartSeconds + window.DurationSeconds > section.DurationSeconds + 0.01f)
+                                issues.Add(new ValidationIssue(eventPath, "Event windows must fall within their section duration."));
                             if (window.Weight <= 0f)
                                 issues.Add(new ValidationIssue(eventPath, "Weight must be greater than zero."));
                             if (window.Intensity <= 0f)
@@ -190,6 +221,8 @@ namespace SpaceBurst.RuntimeData
 
                         if (group.StartSeconds < 0f)
                             issues.Add(new ValidationIssue(groupPath, "StartSeconds cannot be negative."));
+                        if (group.StartSeconds > section.DurationSeconds + 0.25f)
+                            issues.Add(new ValidationIssue(groupPath, "StartSeconds must fall within the section duration."));
                         if (group.Count <= 0)
                             issues.Add(new ValidationIssue(groupPath, "Count must be greater than zero."));
                         if (group.Lane < 0 || group.Lane > 4)
@@ -233,6 +266,8 @@ namespace SpaceBurst.RuntimeData
 
                     if (packet.StartSeconds < 0f)
                         issues.Add(new ValidationIssue(packetPath, "StartSeconds cannot be negative."));
+                    if (authoredDuration > 0f && packet.StartSeconds > authoredDuration)
+                        issues.Add(new ValidationIssue(packetPath, "StartSeconds must fall within the authored stage duration."));
                     if (packet.StartSeconds < lastStart)
                         issues.Add(new ValidationIssue(packetPath, "Horde packets must be ordered by StartSeconds."));
                     if (packet.Lane < 0 || packet.Lane > 4)
@@ -283,8 +318,12 @@ namespace SpaceBurst.RuntimeData
 
                     if (burst.StartSeconds < 0f)
                         issues.Add(new ValidationIssue(burstPath, "StartSeconds cannot be negative."));
+                    if (authoredDuration > 0f && burst.StartSeconds > authoredDuration)
+                        issues.Add(new ValidationIssue(burstPath, "StartSeconds must fall within the authored stage duration."));
                     if (burst.StartSeconds < lastStart)
                         issues.Add(new ValidationIssue(burstPath, "Elite bursts must be ordered by StartSeconds."));
+                    if (string.IsNullOrWhiteSpace(burst.WarningText))
+                        issues.Add(new ValidationIssue(burstPath, "WarningText is required."));
                     if (burst.EliteCount <= 0)
                         issues.Add(new ValidationIssue(burstPath, "EliteCount must be greater than zero."));
                     if (burst.TargetY < 0.1f || burst.TargetY > 0.9f)
@@ -304,6 +343,8 @@ namespace SpaceBurst.RuntimeData
 
             if (stage.KillChainEvents != null)
             {
+                int lastTrigger = 0;
+                var triggerMultipliers = new HashSet<int>();
                 for (int i = 0; i < stage.KillChainEvents.Count; i++)
                 {
                     KillChainEventDefinition chainEvent = stage.KillChainEvents[i];
@@ -315,14 +356,22 @@ namespace SpaceBurst.RuntimeData
                         continue;
                     }
 
-                    if (chainEvent.TriggerMultiplier <= 0)
-                        issues.Add(new ValidationIssue(eventPath, "TriggerMultiplier must be greater than zero."));
+                    if (chainEvent.TriggerMultiplier < 2 || chainEvent.TriggerMultiplier > 20)
+                        issues.Add(new ValidationIssue(eventPath, "TriggerMultiplier must be between 2 and the reachable multiplier cap of 20."));
+                    if (chainEvent.TriggerMultiplier <= lastTrigger)
+                        issues.Add(new ValidationIssue(eventPath, "Kill-chain events must be ordered by TriggerMultiplier."));
+                    if (!triggerMultipliers.Add(chainEvent.TriggerMultiplier))
+                        issues.Add(new ValidationIssue(eventPath, "TriggerMultiplier must be unique within the stage."));
+                    if (string.IsNullOrWhiteSpace(chainEvent.Label))
+                        issues.Add(new ValidationIssue(eventPath, "Label is required."));
                     if (chainEvent.BonusXp < 0f)
                         issues.Add(new ValidationIssue(eventPath, "BonusXp cannot be negative."));
                     if (chainEvent.BonusScrap < 0)
                         issues.Add(new ValidationIssue(eventPath, "BonusScrap cannot be negative."));
                     if (chainEvent.BonusRewindPercent < 0f || chainEvent.BonusRewindPercent > 1f)
                         issues.Add(new ValidationIssue(eventPath, "BonusRewindPercent must be between 0 and 1."));
+
+                    lastTrigger = chainEvent.TriggerMultiplier;
                 }
             }
 
@@ -342,10 +391,14 @@ namespace SpaceBurst.RuntimeData
 
                     if (cue.StartSeconds < 0f)
                         issues.Add(new ValidationIssue(cuePath, "StartSeconds cannot be negative."));
+                    if (authoredDuration > 0f && cue.StartSeconds + cue.DurationSeconds > authoredDuration + 0.01f)
+                        issues.Add(new ValidationIssue(cuePath, "Presentation cues must finish within the authored stage duration."));
                     if (cue.StartSeconds < lastStart)
                         issues.Add(new ValidationIssue(cuePath, "Presentation cues must be ordered by StartSeconds."));
                     if (cue.DurationSeconds <= 0f)
                         issues.Add(new ValidationIssue(cuePath, "DurationSeconds must be greater than zero."));
+                    if (string.IsNullOrWhiteSpace(cue.Label))
+                        issues.Add(new ValidationIssue(cuePath, "Label is required."));
                     if (cue.Intensity < 0f)
                         issues.Add(new ValidationIssue(cuePath, "Intensity cannot be negative."));
 
@@ -383,7 +436,51 @@ namespace SpaceBurst.RuntimeData
                 issues.AddRange(ValidateStage(stages[i], archetypes).Select(x => new ValidationIssue(string.Concat("Stage ", stages[i].StageNumber.ToString(), " / ", x.Path), x.Message)));
             }
 
+            if (stages.Count == 50 && stages.All(stage => stage != null))
+            {
+                int previousModernHordeCount = -1;
+                for (int chapterIndex = 0; chapterIndex < 5; chapterIndex++)
+                {
+                    List<StageDefinition> chapterStages = stages.Skip(chapterIndex * 10).Take(10).ToList();
+                    string chapterPath = string.Concat("Chapter ", (chapterIndex + 1).ToString());
+                    string chapterName = chapterStages[0].SliceChapterName;
+                    float targetDuration = chapterStages[0].SliceTargetDurationSeconds;
+
+                    if (chapterStages.Any(stage => !string.Equals(stage.SliceChapterName, chapterName, StringComparison.Ordinal)))
+                        issues.Add(new ValidationIssue(chapterPath, "All ten stages must share the same SliceChapterName."));
+                    if (chapterStages.Any(stage => Math.Abs(stage.SliceTargetDurationSeconds - targetDuration) > 0.01f))
+                        issues.Add(new ValidationIssue(chapterPath, "All ten stages must share the same SliceTargetDurationSeconds."));
+
+                    float authoredChapterDuration = chapterStages.Sum(GetAuthoredDuration);
+                    float durationTolerance = Math.Max(10f, targetDuration * 0.03f);
+                    if (targetDuration > 0f && Math.Abs(authoredChapterDuration - targetDuration) > durationTolerance)
+                        issues.Add(new ValidationIssue(chapterPath, string.Concat("Authored duration must stay within three percent of the ", targetDuration.ToString("0.##"), " second chapter target.")));
+
+                    int eliteBurstCount = chapterStages.Sum(stage => stage.EliteBursts?.Count ?? 0);
+                    if (eliteBurstCount < 5)
+                        issues.Add(new ValidationIssue(chapterPath, "Each chapter requires at least five elite bursts."));
+
+                    int hordePacketCount = chapterStages.Sum(stage => stage.HordePackets?.Count ?? 0);
+                    if (chapterIndex >= 1 && previousModernHordeCount >= 0 && hordePacketCount < previousModernHordeCount)
+                        issues.Add(new ValidationIssue(chapterPath, "Horde packet count must not regress after Chapter 2."));
+                    if (chapterIndex >= 1)
+                        previousModernHordeCount = hordePacketCount;
+                }
+            }
+
             return issues;
+        }
+
+        private static float GetAuthoredDuration(StageDefinition stage)
+        {
+            if (stage?.Sections == null || stage.Sections.Count == 0)
+                return 0f;
+
+            return stage.Sections
+                .Where(section => section != null)
+                .Select(section => section.StartSeconds + Math.Max(0f, section.DurationSeconds))
+                .DefaultIfEmpty(0f)
+                .Max();
         }
 
         private static List<ValidationIssue> ValidateSpriteDefinition(ProceduralSpriteDefinition sprite)

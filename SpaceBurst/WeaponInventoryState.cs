@@ -15,7 +15,9 @@ namespace SpaceBurst
 
     sealed class WeaponInventoryState
     {
-        private const int MaxSupportWeapons = 4;
+        internal const int SupportWeaponCapacity = 4;
+        private const int MaxWeaponRank = 99;
+        private const int MaxStoredChargesPerStyle = 99;
         private readonly Dictionary<WeaponStyleId, int> styleLevels = new Dictionary<WeaponStyleId, int>();
         private readonly Dictionary<WeaponStyleId, int> styleRanks = new Dictionary<WeaponStyleId, int>();
         private readonly Dictionary<WeaponStyleId, int> styleCharges = new Dictionary<WeaponStyleId, int>();
@@ -53,6 +55,11 @@ namespace SpaceBurst
         public IReadOnlyList<WeaponStyleId> SupportWeapons
         {
             get { return supportWeapons; }
+        }
+
+        public bool HasSupportCapacity
+        {
+            get { return supportWeapons.Count < SupportWeaponCapacity; }
         }
 
         public IReadOnlyList<PassiveReactorId> PassiveReactors
@@ -164,10 +171,10 @@ namespace SpaceBurst
 
         public void AddUpgradeCharge(WeaponStyleId style, int count = 1)
         {
-            if (count <= 0)
+            if (count <= 0 || !IsValidStyle(style))
                 return;
 
-            styleCharges[style] = GetStoredCharge(style) + count;
+            styleCharges[style] = Math.Min(MaxStoredChargesPerStyle, GetStoredCharge(style) + count);
         }
 
         public bool ConsumeUpgradeCharge(WeaponStyleId style)
@@ -185,7 +192,7 @@ namespace SpaceBurst
 
         public bool TryEquipSupportWeapon(WeaponStyleId style)
         {
-            if (style == ActiveStyle || supportWeapons.Contains(style) || supportWeapons.Count >= MaxSupportWeapons)
+            if (!IsValidStyle(style) || style == ActiveStyle || supportWeapons.Contains(style) || !HasSupportCapacity)
                 return false;
 
             if (!OwnsStyle(style))
@@ -200,7 +207,7 @@ namespace SpaceBurst
 
         public bool TryEquipPassive(PassiveReactorId passive, int availableSlots)
         {
-            if (passiveReactors.Contains(passive) || passiveReactors.Count >= Math.Max(1, availableSlots))
+            if (!Enum.IsDefined(typeof(PassiveReactorId), passive) || passiveReactors.Contains(passive) || passiveReactors.Count >= Math.Clamp(availableSlots, 1, 3))
                 return false;
 
             passiveReactors.Add(passive);
@@ -209,11 +216,21 @@ namespace SpaceBurst
 
         public bool TryAddEvolution(EvolutionId evolution)
         {
-            if (evolutions.Contains(evolution))
+            WeaponEvolutionDefinition definition = WeaponProgressionCatalog.GetEvolution(evolution);
+            if (definition == null || !MeetsEvolutionRequirements(definition) || evolutions.Contains(evolution))
+                return false;
+
+            if (evolutions.Any(existing => WeaponProgressionCatalog.GetEvolution(existing)?.StyleId == definition.StyleId))
                 return false;
 
             evolutions.Add(evolution);
             return true;
+        }
+
+        public bool CanUpgradeStyle(WeaponStyleId style)
+        {
+            return IsValidStyle(style)
+                && (!OwnsStyle(style) || GetLevel(style) < 3 || GetRank(style) < MaxWeaponRank);
         }
 
         public WeaponUpgradeOutcome ApplyWeaponUpgrade()
@@ -223,12 +240,15 @@ namespace SpaceBurst
 
         public WeaponUpgradeOutcome ApplyWeaponUpgrade(WeaponStyleId style, bool activateStyle = false)
         {
+            if (!IsValidStyle(style))
+                return WeaponUpgradeOutcome.NoChange;
+
             if (!OwnsStyle(style))
             {
                 styleLevels[style] = 0;
                 styleRanks[style] = 0;
                 if (activateStyle || style == ActiveStyle)
-                    ActiveStyle = style;
+                    ActivateStyle(style);
                 else
                     TryEquipSupportWeapon(style);
                 return WeaponUpgradeOutcome.UnlockedStyle;
@@ -239,13 +259,17 @@ namespace SpaceBurst
             {
                 styleLevels[style] = level + 1;
                 if (activateStyle)
-                    ActiveStyle = style;
+                    ActivateStyle(style);
                 return WeaponUpgradeOutcome.LevelUp;
             }
 
-            styleRanks[style] = GetRank(style) + 1;
+            int rank = GetRank(style);
+            if (rank >= MaxWeaponRank)
+                return WeaponUpgradeOutcome.NoChange;
+
+            styleRanks[style] = rank + 1;
             if (activateStyle)
-                ActiveStyle = style;
+                ActivateStyle(style);
             return WeaponUpgradeOutcome.RankUp;
         }
 
@@ -260,7 +284,7 @@ namespace SpaceBurst
                 currentIndex = 0;
 
             currentIndex = (currentIndex + styles.Count + direction) % styles.Count;
-            ActiveStyle = styles[currentIndex];
+            ActivateStyle(styles[currentIndex]);
         }
 
         public void ApplyDeathPenalty()
@@ -291,16 +315,39 @@ namespace SpaceBurst
 
         public void SetStyleProgress(WeaponStyleId style, int level, int rank = 0, bool activate = false)
         {
+            if (!IsValidStyle(style))
+                return;
+
             styleLevels[style] = Math.Clamp(level, 0, 3);
-            styleRanks[style] = Math.Max(0, rank);
+            styleRanks[style] = Math.Clamp(rank, 0, MaxWeaponRank);
             if (activate)
-                ActiveStyle = style;
+                ActivateStyle(style);
         }
 
         public void SetActiveStyle(WeaponStyleId style)
         {
             if (OwnsStyle(style))
-                ActiveStyle = style;
+                ActivateStyle(style);
+        }
+
+        private void ActivateStyle(WeaponStyleId style)
+        {
+            if (!OwnsStyle(style) || style == ActiveStyle)
+                return;
+
+            WeaponStyleId previousActive = ActiveStyle;
+            int supportIndex = supportWeapons.IndexOf(style);
+            if (supportIndex >= 0)
+                supportWeapons.RemoveAt(supportIndex);
+
+            ActiveStyle = style;
+            if (!OwnsStyle(previousActive) || supportWeapons.Contains(previousActive))
+                return;
+
+            if (supportIndex >= 0)
+                supportWeapons.Insert(Math.Min(supportIndex, supportWeapons.Count), previousActive);
+            else if (HasSupportCapacity)
+                supportWeapons.Add(previousActive);
         }
 
         private void RemoveStyle(WeaponStyleId style)
@@ -315,6 +362,7 @@ namespace SpaceBurst
                 styleLevels[WeaponStyleId.Pulse] = 0;
             if (!styleRanks.ContainsKey(WeaponStyleId.Pulse))
                 styleRanks[WeaponStyleId.Pulse] = 0;
+            supportWeapons.RemoveAll(candidate => candidate == ActiveStyle);
         }
 
         public WeaponInventorySnapshotData CaptureSnapshot()
@@ -339,13 +387,19 @@ namespace SpaceBurst
             if (snapshot?.StyleLevels != null)
             {
                 foreach (var entry in snapshot.StyleLevels)
-                    styleLevels[entry.Key] = entry.Value;
+                {
+                    if (IsValidStyle(entry.Key))
+                        styleLevels[entry.Key] = Math.Clamp(entry.Value, 0, 3);
+                }
             }
 
             if (snapshot?.StyleRanks != null)
             {
                 foreach (var entry in snapshot.StyleRanks)
-                    styleRanks[entry.Key] = Math.Max(0, entry.Value);
+                {
+                    if (IsValidStyle(entry.Key) && styleLevels.ContainsKey(entry.Key))
+                        styleRanks[entry.Key] = Math.Clamp(entry.Value, 0, MaxWeaponRank);
+                }
             }
 
             styleCharges.Clear();
@@ -353,10 +407,19 @@ namespace SpaceBurst
             {
                 foreach (var entry in snapshot.StyleCharges)
                 {
-                    if (entry.Value > 0)
-                        styleCharges[entry.Key] = entry.Value;
+                    if (IsValidStyle(entry.Key) && entry.Value > 0)
+                        styleCharges[entry.Key] = Math.Min(MaxStoredChargesPerStyle, entry.Value);
                 }
             }
+
+            if (!styleLevels.ContainsKey(WeaponStyleId.Pulse))
+                styleLevels[WeaponStyleId.Pulse] = 0;
+            if (!styleRanks.ContainsKey(WeaponStyleId.Pulse))
+                styleRanks[WeaponStyleId.Pulse] = 0;
+
+            ActiveStyle = snapshot != null && IsValidStyle(snapshot.ActiveStyle) && styleLevels.ContainsKey(snapshot.ActiveStyle)
+                ? snapshot.ActiveStyle
+                : WeaponStyleId.Pulse;
 
             supportWeapons.Clear();
             if (snapshot?.SupportWeapons != null)
@@ -364,7 +427,7 @@ namespace SpaceBurst
                 for (int i = 0; i < snapshot.SupportWeapons.Count; i++)
                 {
                     WeaponStyleId style = snapshot.SupportWeapons[i];
-                    if (style != ActiveStyle && styleLevels.ContainsKey(style) && !supportWeapons.Contains(style))
+                    if (supportWeapons.Count < SupportWeaponCapacity && IsValidStyle(style) && style != ActiveStyle && styleLevels.ContainsKey(style) && !supportWeapons.Contains(style))
                         supportWeapons.Add(style);
                 }
             }
@@ -375,7 +438,7 @@ namespace SpaceBurst
                 for (int i = 0; i < snapshot.PassiveReactors.Count; i++)
                 {
                     PassiveReactorId passive = snapshot.PassiveReactors[i];
-                    if (!passiveReactors.Contains(passive))
+                    if (passiveReactors.Count < 3 && Enum.IsDefined(typeof(PassiveReactorId), passive) && !passiveReactors.Contains(passive))
                         passiveReactors.Add(passive);
                 }
             }
@@ -386,21 +449,24 @@ namespace SpaceBurst
                 for (int i = 0; i < snapshot.Evolutions.Count; i++)
                 {
                     EvolutionId evolution = snapshot.Evolutions[i];
-                    if (!evolutions.Contains(evolution))
+                    WeaponEvolutionDefinition definition = WeaponProgressionCatalog.GetEvolution(evolution);
+                    if (definition != null && MeetsEvolutionRequirements(definition) && !evolutions.Contains(evolution) && !evolutions.Any(existing => WeaponProgressionCatalog.GetEvolution(existing)?.StyleId == definition.StyleId))
                         evolutions.Add(evolution);
                 }
             }
+        }
 
-            if (!styleLevels.ContainsKey(WeaponStyleId.Pulse))
-                styleLevels[WeaponStyleId.Pulse] = 0;
-            if (!styleRanks.ContainsKey(WeaponStyleId.Pulse))
-                styleRanks[WeaponStyleId.Pulse] = 0;
+        private bool MeetsEvolutionRequirements(WeaponEvolutionDefinition definition)
+        {
+            return definition != null
+                && OwnsStyle(definition.StyleId)
+                && GetLevel(definition.StyleId) >= definition.RequiredLevel
+                && passiveReactors.Contains(definition.RequiredPassive);
+        }
 
-            ActiveStyle = snapshot != null && styleLevels.ContainsKey(snapshot.ActiveStyle)
-                ? snapshot.ActiveStyle
-                : WeaponStyleId.Pulse;
-
-            supportWeapons.RemoveAll(style => style == ActiveStyle || !styleLevels.ContainsKey(style));
+        private static bool IsValidStyle(WeaponStyleId style)
+        {
+            return Enum.IsDefined(typeof(WeaponStyleId), style);
         }
     }
 }

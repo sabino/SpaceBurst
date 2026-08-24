@@ -12,6 +12,8 @@ namespace SpaceBurst
         private const string OptionsKey = "options.json";
         private const string MedalsKey = "medals.json";
         private const string HighScoreKey = "highscore.txt";
+        private const string BackupSuffix = ".backup";
+        private static string lastNotice = string.Empty;
         private static IStorageBackend Storage
         {
             get
@@ -41,6 +43,11 @@ namespace SpaceBurst
             {
                 return Storage.GetDisplayPath("config");
             }
+        }
+
+        public static string LastNotice
+        {
+            get { return lastNotice; }
         }
 
         private static string GetRunSlotKey(int slotIndex)
@@ -193,7 +200,36 @@ namespace SpaceBurst
 
         public static RunSaveData LoadRunSlot(int slotIndex)
         {
-            return LoadFile<RunSaveData>(GetRunSlotKey(slotIndex), null);
+            RunSaveData save = LoadRunSlotCore(slotIndex, true, out string notice);
+            lastNotice = notice;
+            return save;
+        }
+
+        private static RunSaveData LoadRunSlotCore(int slotIndex, bool reportEmptySlot, out string notice)
+        {
+            notice = string.Empty;
+            string logicalKey = GetRunSlotKey(slotIndex);
+            bool primaryExists = SafeExists(logicalKey);
+            if (TryReadFile(logicalKey, out RunSaveData primary) && RunSaveIntegrity.TryPrepareForLoad(primary, jsonOptions, out string primaryWarning))
+            {
+                if (!string.IsNullOrWhiteSpace(primaryWarning))
+                    notice = primaryWarning;
+                return primary;
+            }
+
+            string backupKey = string.Concat(logicalKey, BackupSuffix);
+            bool backupExists = SafeExists(backupKey);
+            if (TryReadFile(backupKey, out RunSaveData backup) && RunSaveIntegrity.TryPrepareForLoad(backup, jsonOptions, out _))
+            {
+                notice = string.Concat("SLOT ", Math.Clamp(slotIndex, 1, 3).ToString(), " RECOVERED FROM BACKUP");
+                return backup;
+            }
+
+            if (primaryExists || backupExists)
+                notice = string.Concat("SLOT ", Math.Clamp(slotIndex, 1, 3).ToString(), " IS DAMAGED; START A NEW SAVE OR RESTORE A BACKUP");
+            else if (reportEmptySlot)
+                notice = string.Concat("SLOT ", Math.Clamp(slotIndex, 1, 3).ToString(), " IS EMPTY");
+            return null;
         }
 
         public static void SaveRunSlot(int slotIndex, RunSaveData data)
@@ -201,15 +237,29 @@ namespace SpaceBurst
             if (data == null)
                 return;
 
-            SaveFile(GetRunSlotKey(slotIndex), data);
+            try
+            {
+                RunSaveIntegrity.Seal(data, jsonOptions);
+                SaveFile(
+                    GetRunSlotKey(slotIndex),
+                    data,
+                    candidate => RunSaveIntegrity.TryPrepareForLoad(candidate, jsonOptions, out _));
+            }
+            catch
+            {
+                lastNotice = string.Concat("COULD NOT WRITE ", Path.GetFileName(GetRunSlotKey(slotIndex)).ToUpperInvariant(), "; CHECK SAVE DATA AND STORAGE SPACE");
+            }
         }
 
         public static SaveSlotSummary[] LoadSaveSlotSummaries()
         {
             var summaries = new SaveSlotSummary[3];
+            string summaryNotice = string.Empty;
             for (int slotIndex = 1; slotIndex <= 3; slotIndex++)
             {
-                RunSaveData save = LoadRunSlot(slotIndex);
+                RunSaveData save = LoadRunSlotCore(slotIndex, false, out string notice);
+                if (summaryNotice.Length == 0 && notice.Length > 0)
+                    summaryNotice = notice;
                 summaries[slotIndex - 1] = save?.Summary ?? new SaveSlotSummary
                 {
                     SlotIndex = slotIndex,
@@ -217,6 +267,7 @@ namespace SpaceBurst
                 };
             }
 
+            lastNotice = summaryNotice;
             return summaries;
         }
 
@@ -242,23 +293,62 @@ namespace SpaceBurst
 
         private static T LoadFile<T>(string logicalKey, T fallback) where T : class
         {
+            if (TryReadFile(logicalKey, out T primary))
+                return primary;
+
+            if (TryReadFile(string.Concat(logicalKey, BackupSuffix), out T backup))
+            {
+                lastNotice = string.Concat(Path.GetFileName(logicalKey).ToUpperInvariant(), " RECOVERED FROM BACKUP");
+                return backup;
+            }
+
+            return fallback;
+        }
+
+        private static void SaveFile<T>(string logicalKey, T value, Func<T, bool> backupValidator = null) where T : class
+        {
             try
             {
-                if (!Storage.Exists(logicalKey))
-                    return fallback;
+                if (TryReadFile(logicalKey, out T existing) && (backupValidator == null || backupValidator(existing)))
+                    Storage.WriteAllText(string.Concat(logicalKey, BackupSuffix), JsonSerializer.Serialize(existing, jsonOptions));
 
-                string json = Storage.ReadAllText(logicalKey);
-                return JsonSerializer.Deserialize<T>(json, jsonOptions) ?? fallback;
+                Storage.WriteAllText(logicalKey, JsonSerializer.Serialize(value, jsonOptions));
+                if (logicalKey.StartsWith("slot-", StringComparison.OrdinalIgnoreCase))
+                    lastNotice = string.Empty;
             }
             catch
             {
-                return fallback;
+                lastNotice = string.Concat("COULD NOT WRITE ", Path.GetFileName(logicalKey).ToUpperInvariant(), "; CHECK STORAGE SPACE AND PERMISSIONS");
             }
         }
 
-        private static void SaveFile<T>(string logicalKey, T value)
+        private static bool TryReadFile<T>(string logicalKey, out T value) where T : class
         {
-            Storage.WriteAllText(logicalKey, JsonSerializer.Serialize(value, jsonOptions));
+            value = null;
+            try
+            {
+                if (!Storage.Exists(logicalKey))
+                    return false;
+
+                value = JsonSerializer.Deserialize<T>(Storage.ReadAllText(logicalKey), jsonOptions);
+                return value != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool SafeExists(string logicalKey)
+        {
+            try
+            {
+                return Storage.Exists(logicalKey);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static string GetConfigKey(string fileName)

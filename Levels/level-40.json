@@ -190,5 +190,119 @@
     ],
     "MovePattern": "BossOrbit",
     "FirePattern": "BossFan"
-  }
+  },
+  "SliceChapterName": "Chapter 4: Parallax",
+  "SliceTargetDurationSeconds": 455,
+  "HordePackets": [
+    {
+      "ArchetypeId": "Carrier",
+      "StartSeconds": 4.0,
+      "Lane": 0,
+      "BurstCount": 2,
+      "CountPerBurst": 3,
+      "SpawnLeadDistance": 342.0,
+      "BurstIntervalSeconds": 1.0,
+      "SpawnIntervalSeconds": 0.1,
+      "SpacingX": 60.0,
+      "SpeedMultiplier": 1.22,
+      "MovePatternOverride": "TurretCarrier",
+      "FirePatternOverride": "SpreadPulse",
+      "Amplitude": 76.0,
+      "Frequency": 0.96,
+      "IgnoreHostileCap": false
+    },
+    {
+      "ArchetypeId": "Destroyer",
+      "StartSeconds": 10.35,
+      "Lane": 2,
+      "BurstCount": 2,
+      "CountPerBurst": 3,
+      "SpawnLeadDistance": 342.0,
+      "BurstIntervalSeconds": 1.0,
+      "SpawnIntervalSeconds": 0.1,
+      "SpacingX": 60.0,
+      "SpeedMultiplier": 1.23,
+      "MovePatternOverride": "Dive",
+      "FirePatternOverride": "SpreadPulse",
+      "Amplitude": 76.0,
+      "Frequency": 1.01,
+      "IgnoreHostileCap": false
+    },
+    {
+      "ArchetypeId": "Interceptor",
+      "StartSeconds": 16.7,
+      "Lane": 4,
+      "BurstCount": 3,
+      "CountPerBurst": 5,
+      "SpawnLeadDistance": 342.0,
+      "BurstIntervalSeconds": 1.0,
+      "SpawnIntervalSeconds": 0.1,
+      "SpacingX": 60.0,
+      "SpeedMultiplier": 1.25,
+      "MovePatternOverride": "SineWave",
+      "FirePatternOverride": "None",
+      "Amplitude": 76.0,
+      "Frequency": 1.06,
+      "IgnoreHostileCap": false
+    }
+  ],
+  "EliteBursts": [
+    {
+      "WarningText": "PARALLAX HUNTER",
+      "StartSeconds": 14.0,
+      "ArchetypeId": "Bulwark",
+      "EliteCount": 2,
+      "TargetY": 0.5,
+      "SpawnLeadDistance": 362.0,
+      "SpeedMultiplier": 1.28,
+      "MovePatternOverride": "RetreatBackfire",
+      "FirePatternOverride": "ForwardPulse",
+      "ScrapReward": 3,
+      "RewindRefillPercent": 0.24
+    }
+  ],
+  "KillChainEvents": [
+    {
+      "TriggerMultiplier": 8,
+      "Label": "CHAIN DRIVE",
+      "BonusXp": 6.2,
+      "BonusScrap": 1,
+      "BonusRewindPercent": 0.06,
+      "AccentColor": "#73F3E8"
+    },
+    {
+      "TriggerMultiplier": 14,
+      "Label": "REACTOR REDLINE",
+      "BonusXp": 9.0,
+      "BonusScrap": 2,
+      "BonusRewindPercent": 0.08,
+      "AccentColor": "#56F0FF"
+    },
+    {
+      "TriggerMultiplier": 20,
+      "Label": "MAXIMUM BURST",
+      "BonusXp": 13.6,
+      "BonusScrap": 3,
+      "BonusRewindPercent": 0.12,
+      "AccentColor": "#FFB347"
+    }
+  ],
+  "PresentationCues": [
+    {
+      "Kind": "Warning",
+      "StartSeconds": 4.5,
+      "DurationSeconds": 1.6,
+      "Label": "BOSS 40: WALKER MK II",
+      "AccentColor": "#B57CFF",
+      "Intensity": 1.04
+    },
+    {
+      "Kind": "BossSignal",
+      "StartSeconds": 16.0,
+      "DurationSeconds": 2.0,
+      "Label": "PARALLAX SHIFT DETECTED",
+      "AccentColor": "#B57CFF",
+      "Intensity": 1.2
+    }
+  ]
 }

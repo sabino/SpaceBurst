@@ -15,7 +15,13 @@ namespace SpaceBurst.RuntimeData
         public int OccupiedCount { get; private set; }
         public int RemainingCoreCount { get; private set; }
 
-        public MaskGrid(int width, int height, bool[] occupied, bool[] vitalCore)
+        public MaskGrid(
+            int width,
+            int height,
+            bool[] occupied,
+            bool[] vitalCore,
+            int? initialOccupiedCount = null,
+            int? initialCoreCount = null)
         {
             Width = width;
             Height = height;
@@ -30,8 +36,8 @@ namespace SpaceBurst.RuntimeData
                     RemainingCoreCount++;
             }
 
-            InitialOccupiedCount = OccupiedCount;
-            InitialCoreCount = RemainingCoreCount;
+            InitialOccupiedCount = Math.Max(OccupiedCount, initialOccupiedCount ?? OccupiedCount);
+            InitialCoreCount = Math.Max(RemainingCoreCount, initialCoreCount ?? RemainingCoreCount);
         }
 
         public bool IsOccupied(int x, int y)

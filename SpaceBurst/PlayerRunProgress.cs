@@ -227,36 +227,62 @@ namespace SpaceBurst
             return MathHelper.Clamp(FocusFireSeconds / 1.2f, 0f, 1f);
         }
 
-        public float GetFireIntervalScale(bool focusHeld)
+        public float GetFireIntervalScale(WeaponStyleId style, bool focusHeld)
         {
             float scale = 1f;
             if (focusHeld)
                 scale *= MathHelper.Lerp(0.9f, 0.76f, GetFocusFireIntensity());
             if (HasPassive(PassiveReactorId.Overclock))
                 scale *= 0.9f;
-            if (HasEvolution(EvolutionId.SingularityRail))
-                scale *= 0.94f;
+
+            WeaponEvolutionDefinition evolution = WeaponProgressionCatalog.GetEvolutionForStyle(style);
+            if (evolution != null && HasEvolution(evolution.Id))
+            {
+                scale *= evolution.Id switch
+                {
+                    EvolutionId.TempestCircuit => 0.82f,
+                    EvolutionId.VoidLance => 0.86f,
+                    EvolutionId.EchoHive => 0.86f,
+                    EvolutionId.NovaFan => 0.88f,
+                    EvolutionId.AegisStorm => 0.88f,
+                    EvolutionId.CitadelNova => 0.88f,
+                    EvolutionId.PrismLance => 0.9f,
+                    EvolutionId.ChronoNova => 0.9f,
+                    EvolutionId.CataclysmRack => 0.9f,
+                    _ => 0.94f,
+                };
+            }
 
             return MathF.Max(0.34f, scale);
         }
 
-        public float GetProjectileSpeedScale(bool focusHeld)
+        public float GetProjectileSpeedScale(WeaponStyleId style, bool focusHeld)
         {
             float scale = 1f;
-            if (focusHeld)
-                scale *= 1f + GetFocusFireIntensity() * 0.18f;
+            float focusIntensity = GetFocusFireIntensity();
+            if (focusHeld || focusIntensity > 0f)
+                scale *= 1f + focusIntensity * 0.18f;
             if (HasPassive(PassiveReactorId.ChainReactor))
                 scale *= 1.06f;
+            if (style == WeaponStyleId.Rail && HasEvolution(EvolutionId.VoidLance))
+                scale *= 1.2f;
+            if (style == WeaponStyleId.Pulse && HasEvolution(EvolutionId.SingularityRail))
+                scale *= 1.1f;
             return scale;
         }
 
-        public float GetHomingBonus(bool focusHeld)
+        public float GetHomingBonus(WeaponStyleId style, bool focusHeld)
         {
             float bonus = 0f;
-            if (focusHeld)
-                bonus += 0.25f + GetFocusFireIntensity() * 0.25f;
+            float focusIntensity = GetFocusFireIntensity();
+            if (focusHeld || focusIntensity > 0f)
+                bonus += 0.25f + focusIntensity * 0.25f;
             if (HasPassive(PassiveReactorId.ChainReactor))
                 bonus += 0.12f;
+            if (style == WeaponStyleId.Missile && HasEvolution(EvolutionId.CataclysmRack))
+                bonus += 0.3f;
+            if (style == WeaponStyleId.Drone && HasEvolution(EvolutionId.EchoHive))
+                bonus += 0.18f;
             return bonus;
         }
 
@@ -270,19 +296,16 @@ namespace SpaceBurst
             return baseStrength;
         }
 
-        public int GetChainBonus()
+        public int GetChainBonus(WeaponStyleId style)
         {
             int bonus = 0;
             if (HasPassive(PassiveReactorId.ChainReactor))
                 bonus++;
-            if (HasEvolution(EvolutionId.EchoHive))
+            if (style == WeaponStyleId.Drone && HasEvolution(EvolutionId.EchoHive))
                 bonus++;
+            if (style == WeaponStyleId.Arc && HasEvolution(EvolutionId.TempestCircuit))
+                bonus += 4;
             return bonus;
-        }
-
-        public int GetDroneBonus()
-        {
-            return HasEvolution(EvolutionId.EchoHive) ? 2 : 0;
         }
 
         public int GetProjectileDamageBonus(WeaponStyleId style)
@@ -296,6 +319,20 @@ namespace SpaceBurst
                 bonus += 2;
             if (style == WeaponStyleId.Drone && HasEvolution(EvolutionId.EchoHive))
                 bonus += 1;
+            if (style == WeaponStyleId.Spread && HasEvolution(EvolutionId.NovaFan))
+                bonus += 1;
+            if (style == WeaponStyleId.Laser && HasEvolution(EvolutionId.PrismLance))
+                bonus += 1;
+            if (style == WeaponStyleId.Plasma && HasEvolution(EvolutionId.ChronoNova))
+                bonus += 2;
+            if (style == WeaponStyleId.Rail && HasEvolution(EvolutionId.VoidLance))
+                bonus += 2;
+            if (style == WeaponStyleId.Arc && HasEvolution(EvolutionId.TempestCircuit))
+                bonus += 1;
+            if (style == WeaponStyleId.Blade && HasEvolution(EvolutionId.AegisStorm))
+                bonus += 1;
+            if (style == WeaponStyleId.Fortress && HasEvolution(EvolutionId.CitadelNova))
+                bonus += 2;
             return bonus;
         }
 
@@ -303,6 +340,10 @@ namespace SpaceBurst
         {
             if (style == WeaponStyleId.Missile && HasEvolution(EvolutionId.CataclysmRack))
                 return 24f;
+            if (style == WeaponStyleId.Plasma && HasEvolution(EvolutionId.ChronoNova))
+                return 26f;
+            if (style == WeaponStyleId.Fortress && HasEvolution(EvolutionId.CitadelNova))
+                return 22f;
 
             return 0f;
         }
@@ -355,9 +396,7 @@ namespace SpaceBurst
             DifficultyProfile profile = DifficultyTuning.GetProfile(Difficulty);
             float pressure = DifficultyTuning.GetStagePressure(stageNumber) * (profile.StagePressureScale + 0.1f)
                 + DifficultyTuning.GetPowerPressure(PowerBudget) * profile.BossPowerPressureScale;
-            float floor = profile.BossPressureFloor;
-            if (stageNumber <= 10)
-                floor = MathF.Max(floor, profile.EarlyBossPressureFloor);
+            float floor = MathF.Max(profile.BossPressureFloor, profile.EarlyBossPressureFloor);
 
             return MathHelper.Clamp(MathF.Max(floor, pressure), 0f, 2f);
         }
@@ -471,23 +510,30 @@ namespace SpaceBurst
             if (snapshot == null)
                 return;
 
-            Difficulty = snapshot.Difficulty;
-            StartingLives = snapshot.StartingLives > 0 ? snapshot.StartingLives : 3;
-            ShipsPerLife = snapshot.ShipsPerLife > 0 ? snapshot.ShipsPerLife : 2;
+            Difficulty = Enum.IsDefined(typeof(GameDifficulty), snapshot.Difficulty) ? snapshot.Difficulty : GameDifficulty.Easy;
+            StartingLives = Math.Clamp(snapshot.StartingLives > 0 ? snapshot.StartingLives : 3, 1, 9);
+            ShipsPerLife = Math.Clamp(snapshot.ShipsPerLife > 0 ? snapshot.ShipsPerLife : 2, 1, 9);
             MedalEligible = snapshot.MedalEligible;
-            NonWeaponUpgradeCount = Math.Max(0, snapshot.NonWeaponUpgradeCount);
-            MoveSpeedMultiplier = snapshot.MoveSpeedMultiplier > 0f ? snapshot.MoveSpeedMultiplier : 1f;
-            RewindEfficiency = MathF.Max(0f, snapshot.RewindEfficiency);
-            DropBonusChance = MathF.Max(0f, snapshot.DropBonusChance);
-            RunXp = MathF.Max(0f, snapshot.RunXp);
-            RunLevel = Math.Max(1, snapshot.RunLevel);
-            Scrap = Math.Max(0, snapshot.Scrap);
-            PendingLevelUps = Math.Max(0, snapshot.PendingLevelUps);
+            NonWeaponUpgradeCount = Math.Clamp(snapshot.NonWeaponUpgradeCount, 0, 999);
+            MoveSpeedMultiplier = float.IsFinite(snapshot.MoveSpeedMultiplier) && snapshot.MoveSpeedMultiplier > 0f
+                ? Math.Clamp(snapshot.MoveSpeedMultiplier, 0.5f, 1.8f)
+                : 1f;
+            RewindEfficiency = ClampFinite(snapshot.RewindEfficiency, 0f, 0.65f, 0f);
+            DropBonusChance = ClampFinite(snapshot.DropBonusChance, 0f, 0.3f, 0f);
+            RunXp = ClampFinite(snapshot.RunXp, 0f, 100000f, 0f);
+            RunLevel = Math.Clamp(snapshot.RunLevel, 1, 999);
+            Scrap = Math.Clamp(snapshot.Scrap, 0, 999999);
+            PendingLevelUps = Math.Clamp(snapshot.PendingLevelUps, 0, 999);
             PassiveSlots = Math.Clamp(snapshot.PassiveSlots, 1, 3);
-            KillChainTier = Math.Max(0, snapshot.KillChainTier);
-            FocusFireSeconds = MathF.Max(0f, snapshot.FocusFireSeconds);
+            KillChainTier = Math.Clamp(snapshot.KillChainTier, 0, 3);
+            FocusFireSeconds = ClampFinite(snapshot.FocusFireSeconds, 0f, 4f, 0f);
             Weapons.RestoreSnapshot(snapshot.Weapons);
             Powerups.RestoreSnapshot(snapshot.Powerups);
+        }
+
+        private static float ClampFinite(float value, float minimum, float maximum, float fallback)
+        {
+            return float.IsFinite(value) ? Math.Clamp(value, minimum, maximum) : fallback;
         }
 
         private int ResolveStartingLives(StageDefinition stage)

@@ -6,7 +6,9 @@ SpaceBurst is a procedural side-scrolling shooter with deterministic rewind, wea
 
 ## Highlights
 
-- 50 authored stages with boss fights on stages 10, 20, 30, 40, and 50.
+- Five progressively paced chapters across 50 authored stages, with a boss every 10th stage.
+- Ten weapon styles, four simultaneous support slots, and one unique evolution per style.
+- Horde, elite, kill-chain, and presentation systems across the entire campaign.
 - Fully procedural gameplay visuals, effects, and runtime-generated audio.
 - Deterministic rewind, save slots, stage transitions, and upgrade drafts.
 - Desktop, Linux, and Android release packaging from GitHub Actions.

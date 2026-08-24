@@ -20,6 +20,7 @@ namespace SpaceBurst.Tests
             progress.TryEquipSupportWeapon(WeaponStyleId.Missile);
             progress.TryEquipPassive(PassiveReactorId.Overclock);
             progress.TryEquipPassive(PassiveReactorId.TimeBattery);
+            progress.Weapons.SetStyleProgress(WeaponStyleId.Pulse, 3);
             progress.TryAddEvolution(EvolutionId.SingularityRail);
             progress.UpdateFocusFire(true, 0.75f);
             progress.UpdateKillChain(12);

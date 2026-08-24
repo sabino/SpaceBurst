@@ -36,7 +36,7 @@ namespace SpaceBurst
 
         public void RestoreSnapshot(PowerupDropSnapshotData snapshot)
         {
-            EligibleKillsSinceLastDrop = snapshot?.EligibleKillsSinceLastDrop ?? 0;
+            EligibleKillsSinceLastDrop = Math.Clamp(snapshot?.EligibleKillsSinceLastDrop ?? 0, 0, GuaranteedOnKillCount - 1);
         }
 
         public bool ShouldDrop(Random random, float sectionBonusChance, float weightMultiplier, bool guaranteed)

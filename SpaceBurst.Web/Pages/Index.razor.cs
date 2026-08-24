@@ -10,6 +10,7 @@ namespace SpaceBurst.Web.Pages
         private Game game;
         private DotNetObjectReference<Index> renderReference;
         private bool initialized;
+        private bool disposed;
 
         [Inject]
         private IJSRuntime JsRuntime { get; set; }
@@ -23,7 +24,7 @@ namespace SpaceBurst.Web.Pages
         {
             base.OnAfterRender(firstRender);
 
-            if (!firstRender || initialized)
+            if (!firstRender || initialized || disposed)
                 return;
 
             initialized = true;
@@ -50,6 +51,9 @@ namespace SpaceBurst.Web.Pages
         [JSInvokable]
         public void TickDotNet()
         {
+            if (disposed)
+                return;
+
             if (game == null)
             {
                 game = new Game1();
@@ -61,8 +65,25 @@ namespace SpaceBurst.Web.Pages
 
         public void Dispose()
         {
+            if (disposed)
+                return;
+
+            disposed = true;
+            try
+            {
+                SyncJsRuntime?.InvokeVoid("spaceBurstHost.disposeRender");
+            }
+            catch (JSException)
+            {
+            }
+            catch (InvalidOperationException)
+            {
+            }
+
             renderReference?.Dispose();
+            renderReference = null;
             game?.Dispose();
+            game = null;
         }
     }
 }

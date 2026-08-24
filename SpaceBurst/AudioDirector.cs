@@ -37,66 +37,75 @@ namespace SpaceBurst
     sealed class AudioDirector : System.IDisposable
     {
         private readonly System.Collections.Generic.Dictionary<WeaponStyleId, GeneratedSoundBank> weaponBanks = new System.Collections.Generic.Dictionary<WeaponStyleId, GeneratedSoundBank>();
-        private readonly GeneratedSoundBank explosionBank;
-        private readonly GeneratedSoundBank impactBank;
-        private readonly GeneratedSoundBank enemyShotBank;
-        private readonly GeneratedSoundBank uiConfirmBank;
-        private readonly GeneratedSoundBank uiCancelBank;
-        private readonly GeneratedSoundBank pickupBank;
-        private readonly GeneratedSoundBank upgradeBank;
-        private readonly GeneratedSoundBank bossCueBank;
-        private readonly GeneratedSoundBank transitionBank;
-        private readonly GeneratedSoundBank playerDamageBank;
-        private readonly GeneratedSoundBank rewindStartBank;
+        private readonly System.Lazy<GeneratedSoundBank> explosionBank;
+        private readonly System.Lazy<GeneratedSoundBank> impactBank;
+        private readonly System.Lazy<GeneratedSoundBank> enemyShotBank;
+        private readonly System.Lazy<GeneratedSoundBank> uiConfirmBank;
+        private readonly System.Lazy<GeneratedSoundBank> uiCancelBank;
+        private readonly System.Lazy<GeneratedSoundBank> pickupBank;
+        private readonly System.Lazy<GeneratedSoundBank> upgradeBank;
+        private readonly System.Lazy<GeneratedSoundBank> bossCueBank;
+        private readonly System.Lazy<GeneratedSoundBank> transitionBank;
+        private readonly System.Lazy<GeneratedSoundBank> playerDamageBank;
+        private readonly System.Lazy<GeneratedSoundBank> rewindStartBank;
         private readonly MusicStemMixer musicMixer;
-        private readonly SoundEffect rewindLoopEffect;
-        private readonly SoundEffectInstance rewindLoopInstance;
+        private readonly int sampleRate;
+        private readonly float rewindLoopSeconds;
+        private SoundEffect rewindLoopEffect;
+        private SoundEffectInstance rewindLoopInstance;
 
         private float masterVolume;
         private float musicVolume;
         private float sfxVolume;
         private float rewindAmount;
+        private bool musicAvailable = true;
 
         public AudioDirector(AudioQualityPreset qualityPreset)
         {
-            int sampleRate = qualityPreset switch
+#if BLAZORGL
+            sampleRate = qualityPreset switch
+            {
+                AudioQualityPreset.Reduced => 11025,
+                AudioQualityPreset.High => 22050,
+                _ => 16000,
+            };
+            rewindLoopSeconds = qualityPreset == AudioQualityPreset.Reduced ? 0.8f : 1.2f;
+#else
+            sampleRate = qualityPreset switch
             {
                 AudioQualityPreset.Reduced => 22050,
                 AudioQualityPreset.High => 44100,
                 _ => 32000,
             };
+            rewindLoopSeconds = qualityPreset == AudioQualityPreset.Reduced ? 2.2f : 3f;
+#endif
 
-            explosionBank = new GeneratedSoundBank(
+            // Synthesize banks on first use. Eagerly rendering every weapon and
+            // effect made browser startup pay for sounds a run may never use.
+            explosionBank = new System.Lazy<GeneratedSoundBank>(() => new GeneratedSoundBank(
                 ProceduralAudioSynth.CreateEffect(sampleRate, 0.44f, ProceduralAudioSynth.ExplosionPatch(0.85f)),
                 ProceduralAudioSynth.CreateEffect(sampleRate, 0.48f, ProceduralAudioSynth.ExplosionPatch(1f)),
-                ProceduralAudioSynth.CreateEffect(sampleRate, 0.52f, ProceduralAudioSynth.ExplosionPatch(1.15f)));
-            impactBank = new GeneratedSoundBank(
+                ProceduralAudioSynth.CreateEffect(sampleRate, 0.52f, ProceduralAudioSynth.ExplosionPatch(1.15f))));
+            impactBank = new System.Lazy<GeneratedSoundBank>(() => new GeneratedSoundBank(
                 ProceduralAudioSynth.CreateEffect(sampleRate, 0.12f, ProceduralAudioSynth.ImpactPatch()),
-                ProceduralAudioSynth.CreateEffect(sampleRate, 0.14f, ProceduralAudioSynth.ImpactPatch(0.1f)));
-            enemyShotBank = new GeneratedSoundBank(
+                ProceduralAudioSynth.CreateEffect(sampleRate, 0.14f, ProceduralAudioSynth.ImpactPatch(0.1f))));
+            enemyShotBank = new System.Lazy<GeneratedSoundBank>(() => new GeneratedSoundBank(
                 ProceduralAudioSynth.CreateEffect(sampleRate, 0.1f, ProceduralAudioSynth.EnemyShotPatch()),
-                ProceduralAudioSynth.CreateEffect(sampleRate, 0.12f, ProceduralAudioSynth.EnemyShotPatch(0.08f)));
-            uiConfirmBank = new GeneratedSoundBank(ProceduralAudioSynth.CreateEffect(sampleRate, 0.1f, ProceduralAudioSynth.UiPatch(true)));
-            uiCancelBank = new GeneratedSoundBank(ProceduralAudioSynth.CreateEffect(sampleRate, 0.11f, ProceduralAudioSynth.UiPatch(false)));
-            pickupBank = new GeneratedSoundBank(
+                ProceduralAudioSynth.CreateEffect(sampleRate, 0.12f, ProceduralAudioSynth.EnemyShotPatch(0.08f))));
+            uiConfirmBank = new System.Lazy<GeneratedSoundBank>(() => new GeneratedSoundBank(ProceduralAudioSynth.CreateEffect(sampleRate, 0.1f, ProceduralAudioSynth.UiPatch(true))));
+            uiCancelBank = new System.Lazy<GeneratedSoundBank>(() => new GeneratedSoundBank(ProceduralAudioSynth.CreateEffect(sampleRate, 0.11f, ProceduralAudioSynth.UiPatch(false))));
+            pickupBank = new System.Lazy<GeneratedSoundBank>(() => new GeneratedSoundBank(
                 ProceduralAudioSynth.CreateEffect(sampleRate, 0.18f, ProceduralAudioSynth.PickupPatch(false)),
-                ProceduralAudioSynth.CreateEffect(sampleRate, 0.2f, ProceduralAudioSynth.PickupPatch(true)));
-            upgradeBank = new GeneratedSoundBank(
+                ProceduralAudioSynth.CreateEffect(sampleRate, 0.2f, ProceduralAudioSynth.PickupPatch(true))));
+            upgradeBank = new System.Lazy<GeneratedSoundBank>(() => new GeneratedSoundBank(
                 ProceduralAudioSynth.CreateEffect(sampleRate, 0.32f, ProceduralAudioSynth.UpgradePatch()),
-                ProceduralAudioSynth.CreateEffect(sampleRate, 0.35f, ProceduralAudioSynth.UpgradePatch(0.14f)));
-            bossCueBank = new GeneratedSoundBank(ProceduralAudioSynth.CreateEffect(sampleRate, 0.5f, ProceduralAudioSynth.BossCuePatch()));
-            transitionBank = new GeneratedSoundBank(ProceduralAudioSynth.CreateEffect(sampleRate, 0.46f, ProceduralAudioSynth.TransitionPatch()));
-            playerDamageBank = new GeneratedSoundBank(ProceduralAudioSynth.CreateEffect(sampleRate, 0.24f, ProceduralAudioSynth.PlayerDamagePatch()));
-            rewindStartBank = new GeneratedSoundBank(ProceduralAudioSynth.CreateEffect(sampleRate, 0.2f, ProceduralAudioSynth.RewindStartPatch()));
-
-            foreach (WeaponStyleId styleId in WeaponCatalog.StyleOrder)
-                weaponBanks[styleId] = BuildWeaponBank(styleId, sampleRate);
+                ProceduralAudioSynth.CreateEffect(sampleRate, 0.35f, ProceduralAudioSynth.UpgradePatch(0.14f))));
+            bossCueBank = new System.Lazy<GeneratedSoundBank>(() => new GeneratedSoundBank(ProceduralAudioSynth.CreateEffect(sampleRate, 0.5f, ProceduralAudioSynth.BossCuePatch())));
+            transitionBank = new System.Lazy<GeneratedSoundBank>(() => new GeneratedSoundBank(ProceduralAudioSynth.CreateEffect(sampleRate, 0.46f, ProceduralAudioSynth.TransitionPatch())));
+            playerDamageBank = new System.Lazy<GeneratedSoundBank>(() => new GeneratedSoundBank(ProceduralAudioSynth.CreateEffect(sampleRate, 0.24f, ProceduralAudioSynth.PlayerDamagePatch())));
+            rewindStartBank = new System.Lazy<GeneratedSoundBank>(() => new GeneratedSoundBank(ProceduralAudioSynth.CreateEffect(sampleRate, 0.2f, ProceduralAudioSynth.RewindStartPatch())));
 
             musicMixer = new MusicStemMixer(qualityPreset);
-            rewindLoopEffect = ProceduralAudioSynth.CreateEffect(sampleRate, qualityPreset == AudioQualityPreset.Reduced ? 2.2f : 3f, ProceduralAudioSynth.RewindLoopPatch());
-            rewindLoopInstance = rewindLoopEffect.CreateInstance();
-            rewindLoopInstance.IsLooped = true;
-            rewindLoopInstance.Volume = 0f;
         }
 
         public void Update(GameAudioState state, float masterVolume, float musicVolume, float sfxVolume, float deltaSeconds)
@@ -105,14 +114,34 @@ namespace SpaceBurst
             this.musicVolume = MathHelper.Clamp(musicVolume, 0f, 1f);
             this.sfxVolume = MathHelper.Clamp(sfxVolume, 0f, 1f);
 
-            musicMixer.Update(state, this.masterVolume, this.musicVolume, deltaSeconds);
+            if (musicAvailable)
+            {
+                try
+                {
+                    musicMixer.Update(state, this.masterVolume, this.musicVolume, deltaSeconds);
+                }
+                catch
+                {
+                    musicAvailable = false;
+                }
+            }
 
-            float targetLoopVolume = this.masterVolume * this.sfxVolume * MathHelper.Clamp(rewindAmount * 0.4f, 0f, 0.4f);
-            rewindLoopInstance.Volume = MathHelper.Lerp(rewindLoopInstance.Volume, targetLoopVolume, MathHelper.Clamp(deltaSeconds * 7f, 0f, 1f));
-            if (rewindLoopInstance.State != SoundState.Playing && rewindLoopInstance.Volume > 0.005f)
-                rewindLoopInstance.Play();
-            else if (rewindLoopInstance.State == SoundState.Playing && rewindLoopInstance.Volume <= 0.005f && rewindAmount <= 0.001f)
-                rewindLoopInstance.Stop();
+            if (rewindLoopInstance != null)
+            {
+                try
+                {
+                    float targetLoopVolume = this.masterVolume * this.sfxVolume * MathHelper.Clamp(rewindAmount * 0.4f, 0f, 0.4f);
+                    rewindLoopInstance.Volume = MathHelper.Lerp(rewindLoopInstance.Volume, targetLoopVolume, MathHelper.Clamp(deltaSeconds * 7f, 0f, 1f));
+                    if (rewindLoopInstance.State != SoundState.Playing && rewindLoopInstance.Volume > 0.005f)
+                        rewindLoopInstance.Play();
+                    else if (rewindLoopInstance.State == SoundState.Playing && rewindLoopInstance.Volume <= 0.005f && rewindAmount <= 0.001f)
+                        rewindLoopInstance.Stop();
+                }
+                catch
+                {
+                    DisposeRewindLoop();
+                }
+            }
         }
 
         public void SetRewindAmount(float amount)
@@ -122,65 +151,84 @@ namespace SpaceBurst
 
         public void PlayPlayerShot(WeaponStyleId styleId, float intensity)
         {
-            if (weaponBanks.TryGetValue(styleId, out GeneratedSoundBank bank))
+            try
+            {
+                if (!weaponBanks.TryGetValue(styleId, out GeneratedSoundBank bank))
+                {
+                    bank = BuildWeaponBank(styleId, sampleRate);
+                    weaponBanks[styleId] = bank;
+                }
+
                 bank.Play(masterVolume, sfxVolume, 0.1f + intensity * 0.12f, 0f, 0f);
+            }
+            catch
+            {
+            }
         }
 
         public void PlayEnemyShot(float intensity = 1f)
         {
-            enemyShotBank.Play(masterVolume, sfxVolume, 0.08f + intensity * 0.05f, -0.08f, -0.15f);
+            PlaySafely(enemyShotBank, 0.08f + intensity * 0.05f, -0.08f, -0.15f);
         }
 
         public void PlayEnemyImpact(float intensity, bool coreHit)
         {
-            impactBank.Play(masterVolume, sfxVolume, coreHit ? 0.22f : 0.16f + intensity * 0.04f, coreHit ? 0.08f : -0.04f, 0f);
+            PlaySafely(impactBank, coreHit ? 0.22f : 0.16f + intensity * 0.04f, coreHit ? 0.08f : -0.04f, 0f);
         }
 
         public void PlayExplosion(float intensity, bool heavy)
         {
-            explosionBank.Play(masterVolume, sfxVolume, heavy ? 0.5f : 0.34f + intensity * 0.08f, heavy ? -0.1f : -0.18f, 0f);
+            PlaySafely(explosionBank, heavy ? 0.5f : 0.34f + intensity * 0.08f, heavy ? -0.1f : -0.18f, 0f);
         }
 
         public void PlayPickup(WeaponStyleId styleId, bool immediate)
         {
-            pickupBank.Play(masterVolume, sfxVolume, immediate ? 0.34f : 0.22f, immediate ? 0.14f : 0.06f, 0f);
+            PlaySafely(pickupBank, immediate ? 0.34f : 0.22f, immediate ? 0.14f : 0.06f, 0f);
         }
 
         public void PlayUpgrade(WeaponStyleId styleId)
         {
-            upgradeBank.Play(masterVolume, sfxVolume, 0.34f, 0.12f, 0f);
+            PlaySafely(upgradeBank, 0.34f, 0.12f, 0f);
         }
 
         public void PlayPlayerDamaged()
         {
-            playerDamageBank.Play(masterVolume, sfxVolume, 0.28f, -0.08f, 0f);
+            PlaySafely(playerDamageBank, 0.28f, -0.08f, 0f);
         }
 
         public void PlayBossCue()
         {
-            bossCueBank.Play(masterVolume, sfxVolume, 0.36f, -0.04f, 0f);
+            PlaySafely(bossCueBank, 0.36f, -0.04f, 0f);
         }
 
         public void PlayTransitionWhoosh()
         {
-            transitionBank.Play(masterVolume, sfxVolume, 0.28f, 0f, 0f);
+            PlaySafely(transitionBank, 0.28f, 0f, 0f);
         }
 
         public void PlayUiConfirm()
         {
-            uiConfirmBank.Play(masterVolume, sfxVolume, 0.18f);
+            PlaySafely(uiConfirmBank, 0.18f);
         }
 
         public void PlayUiCancel()
         {
-            uiCancelBank.Play(masterVolume, sfxVolume, 0.16f);
+            PlaySafely(uiCancelBank, 0.16f);
         }
 
         public void StartRewindLoop()
         {
-            rewindStartBank.Play(masterVolume, sfxVolume, 0.2f, 0.08f, 0f);
-            if (rewindLoopInstance.State != SoundState.Playing)
-                rewindLoopInstance.Play();
+            PlaySafely(rewindStartBank, 0.2f, 0.08f, 0f);
+            try
+            {
+                EnsureRewindLoop();
+                if (rewindLoopInstance.State != SoundState.Playing)
+                    rewindLoopInstance.Play();
+            }
+            catch
+            {
+                DisposeRewindLoop();
+            }
         }
 
         public void StopRewindLoop()
@@ -194,20 +242,65 @@ namespace SpaceBurst
                 bank.Dispose();
 
             weaponBanks.Clear();
-            explosionBank.Dispose();
-            impactBank.Dispose();
-            enemyShotBank.Dispose();
-            uiConfirmBank.Dispose();
-            uiCancelBank.Dispose();
-            pickupBank.Dispose();
-            upgradeBank.Dispose();
-            bossCueBank.Dispose();
-            transitionBank.Dispose();
-            playerDamageBank.Dispose();
-            rewindStartBank.Dispose();
+            DisposeIfCreated(explosionBank);
+            DisposeIfCreated(impactBank);
+            DisposeIfCreated(enemyShotBank);
+            DisposeIfCreated(uiConfirmBank);
+            DisposeIfCreated(uiCancelBank);
+            DisposeIfCreated(pickupBank);
+            DisposeIfCreated(upgradeBank);
+            DisposeIfCreated(bossCueBank);
+            DisposeIfCreated(transitionBank);
+            DisposeIfCreated(playerDamageBank);
+            DisposeIfCreated(rewindStartBank);
+            DisposeRewindLoop();
+            musicMixer.Dispose();
+        }
+
+        private void PlaySafely(System.Lazy<GeneratedSoundBank> bank, float volume, float pitch = 0f, float pan = 0f)
+        {
+            try
+            {
+                bank.Value.Play(masterVolume, sfxVolume, volume, pitch, pan);
+            }
+            catch
+            {
+            }
+        }
+
+        private void EnsureRewindLoop()
+        {
+            if (rewindLoopInstance != null)
+                return;
+
+            SoundEffect effect = ProceduralAudioSynth.CreateEffect(sampleRate, rewindLoopSeconds, ProceduralAudioSynth.RewindLoopPatch());
+            try
+            {
+                SoundEffectInstance instance = effect.CreateInstance();
+                instance.IsLooped = true;
+                instance.Volume = 0f;
+                rewindLoopEffect = effect;
+                rewindLoopInstance = instance;
+            }
+            catch
+            {
+                effect.Dispose();
+                throw;
+            }
+        }
+
+        private void DisposeRewindLoop()
+        {
             rewindLoopInstance?.Dispose();
             rewindLoopEffect?.Dispose();
-            musicMixer.Dispose();
+            rewindLoopInstance = null;
+            rewindLoopEffect = null;
+        }
+
+        private static void DisposeIfCreated(System.Lazy<GeneratedSoundBank> bank)
+        {
+            if (bank?.IsValueCreated == true)
+                bank.Value.Dispose();
         }
 
         private static GeneratedSoundBank BuildWeaponBank(WeaponStyleId styleId, int sampleRate)

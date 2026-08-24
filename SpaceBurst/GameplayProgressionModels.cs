@@ -37,6 +37,13 @@ namespace SpaceBurst
         SingularityRail,
         CataclysmRack,
         EchoHive,
+        NovaFan,
+        PrismLance,
+        ChronoNova,
+        VoidLance,
+        TempestCircuit,
+        AegisStorm,
+        CitadelNova,
     }
 
     enum TutorialStep

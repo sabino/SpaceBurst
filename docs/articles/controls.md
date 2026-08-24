@@ -6,7 +6,7 @@
 - `Arrow Keys`: aim
 - `Space`: fire
 - `A / S / D` during upgrade drafts: pick left / middle / right instantly
-- `Q / E`: rotate owned weapon styles
+- `Q / E`: swap the core weapon with an owned support style
 - `R`: rewind
 - `Esc`: pause
 - `F1`: help
@@ -17,14 +17,14 @@
 - Right stick: aim
 - Right trigger: fire
 - Left shoulder: rewind
-- D-pad left/right: rotate owned weapon styles
+- D-pad left/right: swap the core weapon with an owned support style
 
 ## Android
 
 - Left touch pad: move
 - Right touch pad: aim and fire
 - `R` touch button: rewind
-- Tap the weapon HUD at the top to cycle owned weapon styles
+- Tap the weapon HUD at the top to swap the core weapon with an owned support style
 - Tap the visible `PAUSE` chip in the top stage panel to pause
 - Use the Android back action to close help, options, and save/load screens
 

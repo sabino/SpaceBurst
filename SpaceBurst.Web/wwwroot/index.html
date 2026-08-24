@@ -1,26 +1,29 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>SpaceBurst</title>
     <base href="./" />
+    <link rel="icon" href="favicon.ico" />
     <link href="app.css" rel="stylesheet" />
 </head>
 <body>
     <div id="app">
         <div class="loading-shell">
-            <div class="loading-card">
+            <div class="loading-console" role="status" aria-live="polite">
+                <div class="loading-mark" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
                 <div class="loading-title">SABINO SOFTWARE</div>
-                <div class="loading-copy">booting browser systems</div>
+                <div class="loading-copy">ARMING SPACEBURST SYSTEMS</div>
+                <div class="loading-rail" aria-hidden="true"><span></span></div>
             </div>
         </div>
     </div>
 
-    <div id="blazor-error-ui">
-        An unhandled error has occurred.
-        <a href="" class="reload">Reload</a>
-        <a class="dismiss">x</a>
+    <div id="blazor-error-ui" role="alert" aria-hidden="true">
+        <span class="error-copy">THE BROWSER RUNTIME STOPPED. RELOAD TO RESTART THE RUN.</span>
+        <a href="" class="reload">RELOAD</a>
+        <button type="button" class="dismiss" aria-label="Dismiss error">DISMISS</button>
     </div>
 
     <script src="_framework/blazor.webassembly.js" autostart="false"></script>

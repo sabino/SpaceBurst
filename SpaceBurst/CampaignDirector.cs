@@ -16,8 +16,8 @@ namespace SpaceBurst
         private const float PlayerSafetyClearRadius = 220f;
         private const float RewindCapacitySeconds = 8f;
         private const float RewindSnapshotInterval = 1f / 30f;
-        private const int HelpPageCount = 7;
-        private const int AboutHelpPageIndex = 5;
+        private const int HelpPageCount = 9;
+        private const int AboutHelpPageIndex = 7;
         private const float TitleIntroDurationSeconds = 4.8f;
         private const float TitleIntroSkipDurationSeconds = 1.05f;
         private const float DeveloperCodeTimeoutSeconds = 1.5f;
@@ -79,6 +79,7 @@ namespace SpaceBurst
         private readonly DeterministicRngState gameplayRandom = new DeterministicRngState(1u);
         private readonly List<RunSaveData> rewindFrames = new List<RunSaveData>();
         private readonly List<UpgradeDraftCard> draftCards = new List<UpgradeDraftCard>();
+        private SaveSlotSummary[] saveSlotSummaries = Array.Empty<SaveSlotSummary>();
         private readonly Random titleVisualRandom = new Random(unchecked(Environment.TickCount * 397));
         private static readonly Keys[] DeveloperToolsCode =
         {
@@ -724,11 +725,7 @@ namespace SpaceBurst
                     break;
                 case GameFlowState.CampaignComplete:
                     DrawHud(spriteBatch, pixel);
-#if ANDROID
-                    DrawCenteredBanner(spriteBatch, pixel, string.Concat("CAMPAIGN COMPLETE\nSCORE ", PlayerStatus.Score.ToString(), "\nHIGH ", PlayerStatus.HighScore.ToString(), "\nTAP TO CONTINUE"), Color.White, 3f);
-#else
-                    DrawCenteredBanner(spriteBatch, pixel, string.Concat("CAMPAIGN COMPLETE\nSCORE ", PlayerStatus.Score.ToString(), "\nHIGH ", PlayerStatus.HighScore.ToString(), "\nPRESS ENTER"), Color.White, 3f);
-#endif
+                    DrawCampaignComplete(spriteBatch, pixel);
                     break;
             }
         }
@@ -860,14 +857,10 @@ namespace SpaceBurst
             switch (entries[pauseSelection].Action)
             {
                 case PauseMenuAction.SaveGame:
-                    slotReturnState = GameFlowState.Paused;
-                    slotSelection = 0;
-                    state = GameFlowState.SaveSlots;
+                    OpenSaveSlots(GameFlowState.Paused, true);
                     break;
                 case PauseMenuAction.LoadGame:
-                    slotReturnState = GameFlowState.Paused;
-                    slotSelection = 0;
-                    state = GameFlowState.LoadSlots;
+                    OpenSaveSlots(GameFlowState.Paused, false);
                     break;
                 case PauseMenuAction.Options:
                     OpenOptions(GameFlowState.Paused);
@@ -1129,6 +1122,8 @@ namespace SpaceBurst
             if (saving)
             {
                 PersistentStorage.SaveRunSlot(slotSelection + 1, CaptureRunSaveData(slotSelection + 1, true));
+                if (!string.IsNullOrWhiteSpace(PersistentStorage.LastNotice))
+                    return;
             }
             else
             {
@@ -1138,6 +1133,8 @@ namespace SpaceBurst
                     RestoreRunSaveData(save, true, false);
                     return;
                 }
+
+                return;
             }
 
             state = slotReturnState;
@@ -1260,13 +1257,16 @@ namespace SpaceBurst
             if (activeBoss != null)
                 DrainBossSupportQueue();
 
-            if (activeBoss == null && ActiveStageBossDefinition != null && currentSectionIndex >= currentStage.Sections.Count && scheduledSpawns.Count == 0 && reentryTickets.Count == 0 && !EntityManager.HasHostiles)
+            bool authoredTimelineComplete = stageElapsedSeconds >= GetAuthoredStageDuration(currentStage);
+            bool encounterTimelineComplete = !spawnDirector.HasPendingCombat(currentStage);
+
+            if (activeBoss == null && ActiveStageBossDefinition != null && authoredTimelineComplete && encounterTimelineComplete && currentSectionIndex >= currentStage.Sections.Count && scheduledSpawns.Count == 0 && reentryTickets.Count == 0 && !EntityManager.HasHostiles)
             {
                 BeginBossApproachTransition();
                 return;
             }
 
-            if (ActiveStageBossDefinition == null && currentSectionIndex >= currentStage.Sections.Count && scheduledSpawns.Count == 0 && reentryTickets.Count == 0 && !EntityManager.HasHostiles)
+            if (ActiveStageBossDefinition == null && authoredTimelineComplete && encounterTimelineComplete && currentSectionIndex >= currentStage.Sections.Count && scheduledSpawns.Count == 0 && reentryTickets.Count == 0 && !EntityManager.HasHostiles)
             {
                 CompleteStage();
                 return;
@@ -2414,7 +2414,7 @@ namespace SpaceBurst
             }
             else
             {
-                draftCards.AddRange(runProgressionController.BuildDraftCards(PlayerStatus.RunProgress, gameplayRandom, false));
+                draftCards.AddRange(runProgressionController.BuildDraftCards(PlayerStatus.RunProgress, gameplayRandom, false, currentStageNumber));
             }
 
             draftSelection = 0;
@@ -3057,9 +3057,7 @@ namespace SpaceBurst
 
             if (selection == index++)
             {
-                slotReturnState = GameFlowState.Title;
-                slotSelection = 0;
-                state = GameFlowState.LoadSlots;
+                OpenSaveSlots(GameFlowState.Title, false);
                 return;
             }
 
@@ -3331,6 +3329,14 @@ namespace SpaceBurst
             audioQualityApplyDelay = 0f;
             Input.ClearUiControlCapture();
             state = GameFlowState.Options;
+        }
+
+        private void OpenSaveSlots(GameFlowState returnState, bool saving)
+        {
+            slotReturnState = returnState;
+            slotSelection = 0;
+            saveSlotSummaries = PersistentStorage.LoadSaveSlotSummaries();
+            state = saving ? GameFlowState.SaveSlots : GameFlowState.LoadSlots;
         }
 
         private void ConfirmOptionsAndClose()
@@ -4128,8 +4134,7 @@ namespace SpaceBurst
 
             if (!options.TutorialCompleted)
             {
-                DrawCenteredText(spriteBatch, pixel, "FIRST LAUNCH STARTS THE TUTORIAL PROLOGUE", Game1.ScreenSize.X / 2f, 230f, Color.Orange * 0.9f, 1.25f);
-                DrawCenteredText(spriteBatch, pixel, "START WITHOUT TUTORIAL SKIPS IT IMMEDIATELY", Game1.ScreenSize.X / 2f, 254f, Color.White * 0.66f, 1.05f);
+                DrawCenteredText(spriteBatch, pixel, "FIRST START INCLUDES THE TUTORIAL  SKIP OPTION BELOW", Game1.ScreenSize.X / 2f, 208f, Color.Orange * 0.86f, 0.92f);
             }
 
             DrawCenteredText(spriteBatch, pixel, "DEVELOPED BY SABINO SOFTWARE  RELEASED UNDER THE UNLICENSE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 150f, Color.White * 0.66f, 1.08f);
@@ -4394,7 +4399,9 @@ namespace SpaceBurst
             spriteBatch.Draw(pixel, new Rectangle(frameMarginX, frameMarginY, Game1.VirtualWidth - frameMarginX * 2, Game1.VirtualHeight - frameMarginY * 2), Color.Black * 0.75f);
             DrawCenteredText(spriteBatch, pixel, saving ? "SAVE SLOTS" : "LOAD SLOTS", Game1.ScreenSize.X / 2f, 112f, Color.White, 3f);
 
-            SaveSlotSummary[] summaries = PersistentStorage.LoadSaveSlotSummaries();
+            SaveSlotSummary[] summaries = saveSlotSummaries.Length == 3
+                ? saveSlotSummaries
+                : PersistentStorage.LoadSaveSlotSummaries();
             for (int i = 0; i < 3; i++)
             {
                 SaveSlotSummary summary = summaries[i];
@@ -4417,6 +4424,8 @@ namespace SpaceBurst
 #else
             DrawCenteredText(spriteBatch, pixel, saving ? "ENTER TO OVERWRITE SLOT" : "ENTER TO LOAD SLOT", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - UiPx(120), Color.White * 0.75f, 1.4f);
 #endif
+            if (!string.IsNullOrWhiteSpace(PersistentStorage.LastNotice))
+                DrawCenteredText(spriteBatch, pixel, PersistentStorage.LastNotice, Game1.ScreenSize.X / 2f, Game1.VirtualHeight - UiPx(82), Color.Orange, 0.96f);
         }
 
         private void DrawHelp(SpriteBatch spriteBatch, Texture2D pixel)
@@ -4447,21 +4456,27 @@ namespace SpaceBurst
                     break;
                 case 2:
 #if ANDROID
-                    DrawHelpPage(spriteBatch, pixel, "STYLE LADDER\nLEVELS 0 TO 3 IMPROVE THE CURRENT STYLE\nAFTER LEVEL 3 NEW SURGES UNLOCK MORE STYLES\nFURTHER SURGES RAISE STYLE RANKS WITH DIMINISHING RETURNS\nTAP THE TOP WEAPON HUD TO ROTATE OWNED STYLES", 186f);
+                    DrawHelpPage(spriteBatch, pixel, "ARSENAL STACK\nONE CORE WEAPON AND UP TO FOUR SUPPORT WEAPONS FIRE TOGETHER\nTAP THE TOP WEAPON HUD TO SWAP CORE STYLE\nTHE PREVIOUS CORE TAKES THE SUPPORT SLOT YOU SELECTED\nNEW STYLE PAIRS ENTER THE DRAFT POOL EACH CHAPTER", 186f);
 #else
-                    DrawHelpPage(spriteBatch, pixel, "STYLE LADDER\nLEVELS 0 TO 3 IMPROVE THE CURRENT STYLE\nAFTER LEVEL 3 NEW SURGES UNLOCK MORE STYLES\nFURTHER SURGES RAISE STYLE RANKS WITH DIMINISHING RETURNS\nSWAP OWNED STYLES ANY TIME WITH Q AND E", 186f);
+                    DrawHelpPage(spriteBatch, pixel, "ARSENAL STACK\nONE CORE WEAPON AND UP TO FOUR SUPPORT WEAPONS FIRE TOGETHER\nQ AND E SWAP THE CORE WITH A SUPPORT STYLE\nTHE PREVIOUS CORE TAKES THE SUPPORT SLOT YOU SELECTED\nNEW STYLE PAIRS ENTER THE DRAFT POOL EACH CHAPTER", 186f);
 #endif
                     DrawWeaponIcons(spriteBatch, pixel, 410f, 5, 5);
                     break;
                 case 3:
-                    DrawHelpPage(spriteBatch, pixel, "LIVES AND SHIPS\nSHIPS ARE YOUR IN PLACE RESPAWNS\nIF SHIPS HIT ZERO THE NEXT DEATH COSTS A LIFE\nLOSING A LIFE RESTARTS THE WHOLE STAGE\nDEATH ALSO WEAKENS YOUR CURRENT LOADOUT", 186f);
+                    DrawHelpPage(spriteBatch, pixel, "WEAPON EVOLUTIONS\nEVERY STYLE HAS A UNIQUE FINAL FORM\nREACH THE REQUIRED WEAPON LEVEL AND INSTALL ITS LINKED REACTOR\nAN EVOLUTION CARD CAN THEN APPEAR IN LEVEL UP DRAFTS\nEVOLUTIONS CHANGE FIRING BEHAVIOR, NOT JUST DAMAGE NUMBERS", 186f);
                     break;
                 case 4:
+                    DrawHelpPage(spriteBatch, pixel, "LIVES AND SHIPS\nSHIPS ARE YOUR IN PLACE RESPAWNS\nIF SHIPS HIT ZERO THE NEXT DEATH COSTS A LIFE\nLOSING A LIFE RESTARTS THE WHOLE STAGE\nDEATH ALSO WEAKENS YOUR CURRENT LOADOUT", 186f);
+                    break;
+                case 5:
 #if ANDROID
                     DrawHelpPage(spriteBatch, pixel, "FX AND REWIND\nHOLD THE TOP RIGHT REWIND BUTTON TO REWIND 8 SECONDS\nREWIND STARTS SLOW AND ACCELERATES THE LONGER YOU HOLD\nLOADS AND REWINDS DISABLE MEDALS FOR THE RUN\nLOW STANDARD AND NEON VISUAL PRESETS ARE IN OPTIONS", 186f);
 #else
                     DrawHelpPage(spriteBatch, pixel, "FX AND REWIND\nHOLD R TO REWIND 8 SECONDS OF GAMEPLAY\nREWIND STARTS SLOW AND ACCELERATES THE LONGER YOU HOLD\nSTAGE 40 AND BEYOND CAN TOGGLE CHASE VIEW WITH V\nLOW STANDARD AND NEON VISUAL PRESETS ARE IN OPTIONS", 186f);
 #endif
+                    break;
+                case 6:
+                    DrawHelpPage(spriteBatch, pixel, "FIVE CHAPTER CAMPAIGN\nOVERDRIVE  FRACTURE  CRUCIBLE  PARALLAX  EVENT HORIZON\nBOSS ENCOUNTERS CLOSE STAGES 10 20 30 40 AND 50\nHORDE DENSITY, ELITE SURGES, AND PRESSURE RISE BY CHAPTER\nREACH MULTIPLIER 8 14 AND 20 FOR KILL CHAIN REWARDS", 186f, 1.48f);
                     break;
                 case AboutHelpPageIndex:
                     DrawHelpPage(spriteBatch, pixel, AboutHelpText, 186f, 1.34f);
@@ -4542,6 +4557,50 @@ namespace SpaceBurst
             DrawPanel(spriteBatch, pixel, applyBounds, Color.Black * 0.18f, Color.LimeGreen * 0.78f);
             DrawCenteredText(spriteBatch, pixel, "X CANCEL", cancelBounds.Center.X, cancelBounds.Y + UiPx(8), Color.White, 1f);
             DrawCenteredText(spriteBatch, pixel, "V APPLY", applyBounds.Center.X, applyBounds.Y + UiPx(8), Color.White, 1f);
+        }
+
+        private void DrawCampaignComplete(SpriteBatch spriteBatch, Texture2D pixel)
+        {
+            spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), Color.Black * 0.62f);
+            int panelWidth = Math.Min(Game1.VirtualWidth - UiPx(96), UiPx(780));
+            int panelHeight = Math.Min(Game1.VirtualHeight - UiPx(150), UiPx(474));
+            Rectangle panel = new Rectangle(
+                Game1.VirtualWidth / 2 - panelWidth / 2,
+                (Game1.VirtualHeight - panelHeight) / 2 + UiPx(18),
+                panelWidth,
+                panelHeight);
+            DrawPanel(spriteBatch, pixel, panel, new Color(5, 14, 26) * 0.94f, Color.Cyan * 0.72f);
+
+            DrawCenteredText(spriteBatch, pixel, "CAMPAIGN COMPLETE", panel.Center.X, panel.Y + UiPx(30), Color.White, 2.7f);
+            DrawCenteredText(spriteBatch, pixel, "EVENT HORIZON COLLAPSED", panel.Center.X, panel.Y + UiPx(82), Color.Cyan * 0.82f, 1.18f);
+
+            string scoreLine = string.Concat("SCORE ", PlayerStatus.Score.ToString(), "    HIGH ", PlayerStatus.HighScore.ToString());
+            DrawCenteredText(spriteBatch, pixel, scoreLine, panel.Center.X, panel.Y + UiPx(132), Color.White, 1.62f);
+
+            WeaponInventoryState inventory = PlayerStatus.RunProgress.Weapons;
+            string runLine = string.Concat(
+                DifficultyTuning.GetLabel(PlayerStatus.RunProgress.Difficulty),
+                "    LEVEL ", PlayerStatus.RunProgress.RunLevel.ToString(),
+                "    SCRAP ", PlayerStatus.RunProgress.Scrap.ToString());
+            string arsenalLine = string.Concat(
+                "ARSENAL ", inventory.OwnedStyles.Count.ToString(), "/", WeaponCatalog.StyleOrder.Count.ToString(),
+                "    EVOLUTIONS ", inventory.Evolutions.Count.ToString(), "/", WeaponProgressionCatalog.Evolutions.Count.ToString());
+            DrawCenteredText(spriteBatch, pixel, runLine, panel.Center.X, panel.Y + UiPx(186), Color.White * 0.86f, 1.2f);
+            DrawCenteredText(spriteBatch, pixel, arsenalLine, panel.Center.X, panel.Y + UiPx(224), Color.White * 0.86f, 1.2f);
+
+            string medalLine = !PlayerStatus.RunProgress.MedalEligible
+                ? "ASSISTED CLEAR  MEDAL DISABLED"
+                : campaignHadDeath
+                    ? "CAMPAIGN CLEAR MEDAL EARNED"
+                    : "PERFECT CAMPAIGN MEDAL EARNED";
+            Color medalColor = PlayerStatus.RunProgress.MedalEligible ? Color.Orange : Color.White * 0.62f;
+            DrawCenteredText(spriteBatch, pixel, medalLine, panel.Center.X, panel.Y + UiPx(286), medalColor, 1.28f);
+
+#if ANDROID
+            DrawCenteredText(spriteBatch, pixel, "TAP TO RETURN TO TITLE", panel.Center.X, panel.Bottom - UiPx(66), Color.White, 1.28f);
+#else
+            DrawCenteredText(spriteBatch, pixel, "PRESS ENTER TO RETURN TO TITLE", panel.Center.X, panel.Bottom - UiPx(66), Color.White, 1.28f);
+#endif
         }
 
         private void DrawAudioRebuildOverlay(SpriteBatch spriteBatch, Texture2D pixel)
@@ -5171,6 +5230,9 @@ namespace SpaceBurst
                 for (int i = 0; i < save.ScheduledSpawns.Count; i++)
                 {
                     ScheduledSpawnSnapshotData snapshot = save.ScheduledSpawns[i];
+                    if (snapshot?.Group == null || snapshot.SpawnPoint == null || string.IsNullOrWhiteSpace(snapshot.Group.ArchetypeId) || !repository.ArchetypesById.ContainsKey(snapshot.Group.ArchetypeId))
+                        continue;
+
                     scheduledSpawns.Add(new ScheduledSpawn
                     {
                         SpawnAtSeconds = snapshot.SpawnAtSeconds,
@@ -5198,6 +5260,9 @@ namespace SpaceBurst
                 for (int i = 0; i < save.ScheduledEvents.Count; i++)
                 {
                     ScheduledEventSnapshotData snapshot = save.ScheduledEvents[i];
+                    if (snapshot?.Window == null)
+                        continue;
+
                     scheduledEvents.Add(new ScheduledEvent
                     {
                         TriggerAtSeconds = snapshot.TriggerAtSeconds,
@@ -5212,7 +5277,7 @@ namespace SpaceBurst
                 for (int i = 0; i < save.ReentryTickets.Count; i++)
                 {
                     ReentryTicketSnapshotData snapshot = save.ReentryTickets[i];
-                    if (snapshot?.Enemy == null || string.IsNullOrWhiteSpace(snapshot.Enemy.ArchetypeId))
+                    if (snapshot?.Enemy == null || snapshot.SpawnPoint == null || string.IsNullOrWhiteSpace(snapshot.Enemy.ArchetypeId))
                         continue;
 
                     reentryTickets.Add(new ReentryTicket
@@ -5513,6 +5578,18 @@ namespace SpaceBurst
                 default:
                     return 4.4f + intensity;
             }
+        }
+
+        private static float GetAuthoredStageDuration(StageDefinition stage)
+        {
+            if (stage?.Sections == null || stage.Sections.Count == 0)
+                return 0f;
+
+            return stage.Sections
+                .Where(section => section != null)
+                .Select(section => section.StartSeconds + Math.Max(0f, section.DurationSeconds))
+                .DefaultIfEmpty(0f)
+                .Max();
         }
 
         private static float GetEventSpawnInterval(RandomEventType eventType, float intensity)

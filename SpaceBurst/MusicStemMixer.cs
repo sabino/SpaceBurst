@@ -14,6 +14,7 @@ namespace SpaceBurst
         Lead,
         Danger,
         Boss,
+        ReducedMix,
     }
 
     sealed class MusicStemMixer : IDisposable
@@ -70,7 +71,10 @@ namespace SpaceBurst
                 int count = Math.Min(instances.Count, layerVolumes.Length);
                 float scale = MathHelper.Clamp(masterVolume * musicVolume * Blend, 0f, 1f);
                 for (int i = 0; i < count; i++)
-                    instances[i].Volume = MathHelper.Clamp(layerVolumes[i] * scale, 0f, 1f);
+                {
+                    if (instances[i] != null)
+                        instances[i].Volume = MathHelper.Clamp(layerVolumes[i] * scale, 0f, 1f);
+                }
             }
 
             public void Stop()
@@ -82,6 +86,9 @@ namespace SpaceBurst
             {
                 for (int i = 0; i < instances.Count; i++)
                 {
+                    if (instances[i] == null)
+                        continue;
+
                     try
                     {
                         instances[i].Stop();
@@ -101,6 +108,12 @@ namespace SpaceBurst
 
             private void AddLoop(SoundEffect effect)
             {
+                if (effect == null)
+                {
+                    instances.Add(null);
+                    return;
+                }
+
                 SoundEffectInstance instance = effect.CreateInstance();
                 instance.IsLooped = true;
                 instance.Volume = 0f;
@@ -135,18 +148,30 @@ namespace SpaceBurst
         }
 
         private readonly Dictionary<string, ThemeStemSet> themes = new Dictionary<string, ThemeStemSet>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, MusicThemeDefinition> themeDefinitions = new Dictionary<string, MusicThemeDefinition>(StringComparer.OrdinalIgnoreCase);
         private readonly ThemePlayer current = new ThemePlayer();
         private readonly ThemePlayer previous = new ThemePlayer();
         private readonly int sampleRate;
+        private readonly AudioQualityPreset qualityPreset;
 
         public MusicStemMixer(AudioQualityPreset qualityPreset)
         {
+            this.qualityPreset = qualityPreset;
+#if BLAZORGL
+            sampleRate = qualityPreset switch
+            {
+                AudioQualityPreset.Reduced => 11025,
+                AudioQualityPreset.High => 22050,
+                _ => 16000,
+            };
+#else
             sampleRate = qualityPreset switch
             {
                 AudioQualityPreset.Reduced => 22050,
                 AudioQualityPreset.High => 44100,
                 _ => 32000,
             };
+#endif
             RegisterThemes();
         }
 
@@ -188,6 +213,7 @@ namespace SpaceBurst
             }
 
             themes.Clear();
+            themeDefinitions.Clear();
         }
 
         private void RegisterThemes()
@@ -269,8 +295,37 @@ namespace SpaceBurst
 
         private void RegisterTheme(MusicThemeDefinition definition)
         {
+            if (definition != null && !string.IsNullOrWhiteSpace(definition.Id))
+                themeDefinitions[definition.Id] = definition;
+        }
+
+        private ThemeStemSet BuildThemeStemSet(MusicThemeDefinition definition)
+        {
             float durationSeconds = definition.Bars * 4f * 60f / Math.Max(60f, definition.Tempo);
-            themes[definition.Id] = new ThemeStemSet
+#if BLAZORGL
+            int browserBars = qualityPreset switch
+            {
+                AudioQualityPreset.Reduced => 1,
+                AudioQualityPreset.Standard => 2,
+                _ => 4,
+            };
+            durationSeconds = Math.Min(durationSeconds, browserBars * 4f * 60f / Math.Max(60f, definition.Tempo));
+#endif
+            bool reducedLayers = qualityPreset == AudioQualityPreset.Reduced;
+            bool usesBossLayer = definition.Id.EndsWith("-boss", StringComparison.OrdinalIgnoreCase);
+            if (reducedLayers)
+            {
+                // The browser audio bridge has a meaningful fixed cost per
+                // SoundEffect. Bake the reduced preset's musical layers into a
+                // single loop while retaining the richer independent-stem mix
+                // for Standard and High.
+                return new ThemeStemSet
+                {
+                    Pad = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, durationSeconds, MusicStemKind.ReducedMix),
+                };
+            }
+
+            return new ThemeStemSet
             {
                 Drums = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, durationSeconds, MusicStemKind.Drums),
                 Bass = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, durationSeconds, MusicStemKind.Bass),
@@ -278,14 +333,20 @@ namespace SpaceBurst
                 Pulse = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, durationSeconds, MusicStemKind.Pulse),
                 Lead = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, durationSeconds, MusicStemKind.Lead),
                 Danger = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, durationSeconds, MusicStemKind.Danger),
-                Boss = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, durationSeconds, MusicStemKind.Boss),
+                Boss = usesBossLayer ? ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, durationSeconds, MusicStemKind.Boss) : null,
             };
         }
 
         private void SwitchTheme(string themeId)
         {
             if (!themes.TryGetValue(themeId, out ThemeStemSet stems))
-                return;
+            {
+                if (!themeDefinitions.TryGetValue(themeId, out MusicThemeDefinition definition))
+                    return;
+
+                stems = BuildThemeStemSet(definition);
+                themes[themeId] = stems;
+            }
 
             if (current.IsActive && !string.IsNullOrWhiteSpace(current.ThemeId))
             {
