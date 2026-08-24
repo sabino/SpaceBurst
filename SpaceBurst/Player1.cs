@@ -203,7 +203,7 @@ namespace SpaceBurst
             if (ActiveStyle == WeaponStyleId.Drone || PlayerStatus.RunProgress.Weapons.HasSupportWeapon(WeaponStyleId.Drone))
                 UpdateDrones(WeaponStyleId.Drone, command.FireHeld);
 
-            TryAutoFire(command.FireHeld);
+            TryFireWeapons(command.FireHeld);
         }
 
         public override void Draw(SpriteBatch spriteBatch)
@@ -481,10 +481,13 @@ namespace SpaceBurst
             }
         }
 
-        private void TryAutoFire(bool focusHeld)
+        private void TryFireWeapons(bool fireHeld)
         {
-            TryFireCore(focusHeld);
-            TryFireSupportWeapons(focusHeld);
+            if (!fireHeld)
+                return;
+
+            TryFireCore(true);
+            TryFireSupportWeapons(true);
         }
 
         private void TryFireCore(bool focusHeld)
@@ -854,8 +857,11 @@ namespace SpaceBurst
             DrawAuxiliaryModules(spriteBatch, false);
         }
 
-        private void UpdateDrones(WeaponStyleId styleId, bool focusHeld)
+        private void UpdateDrones(WeaponStyleId styleId, bool fireHeld)
         {
+            if (!fireHeld)
+                return;
+
             WeaponLevelDefinition level = ResolveWeaponLevel(styleId);
             if (level.DroneCount <= 0 || droneSupportTimer > 0f)
                 return;
@@ -880,14 +886,14 @@ namespace SpaceBurst
 
                 EntityManager.Add(new Bullet(
                     spawn,
-                    direction * ((level.ProjectileSpeed + 70f) * PlayerStatus.RunProgress.GetProjectileSpeedScale(styleId, focusHeld)),
+                    direction * ((level.ProjectileSpeed + 70f) * PlayerStatus.RunProgress.GetProjectileSpeedScale(styleId, true)),
                     true,
                     Math.Max(1, level.ProjectileDamage + PlayerStatus.RunProgress.GetProjectileDamageBonus(styleId)),
                     level.Impact,
                     WeaponCatalog.CreateProjectileDefinition(WeaponStyleId.Drone, ResolveStyleLevel(styleId), true),
                     0,
                     level.ProjectileLifetimeSeconds,
-                    nearest == null ? 0f : 0.6f + PlayerStatus.RunProgress.GetHomingBonus(styleId, focusHeld),
+                    nearest == null ? 0f : 0.6f + PlayerStatus.RunProgress.GetHomingBonus(styleId, true),
                     0.9f,
                     ProjectileBehavior.DroneBolt,
                     TrailFxStyle.Streak,
@@ -896,7 +902,7 @@ namespace SpaceBurst
                     PlayerStatus.RunProgress.GetChainBonus(styleId),
                     0.08f,
                     combatSpawn,
-                    combatDirection * ((level.ProjectileSpeed + 70f) * PlayerStatus.RunProgress.GetProjectileSpeedScale(styleId, focusHeld))));
+                    combatDirection * ((level.ProjectileSpeed + 70f) * PlayerStatus.RunProgress.GetProjectileSpeedScale(styleId, true))));
             }
         }
 

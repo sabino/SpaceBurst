@@ -51,6 +51,13 @@ namespace SpaceBurst
                 AddLoop(stems.Lead);
                 AddLoop(stems.Danger);
                 AddLoop(stems.Boss);
+
+                // Create every layer before starting any of them. Starting each
+                // stem during construction introduced an audible rhythmic smear
+                // on slower devices because later layers joined several frames
+                // after the drums.
+                for (int i = 0; i < instances.Count; i++)
+                    instances[i]?.Play();
             }
 
             public void TakeOver(ThemePlayer source)
@@ -117,7 +124,6 @@ namespace SpaceBurst
                 SoundEffectInstance instance = effect.CreateInstance();
                 instance.IsLooped = true;
                 instance.Volume = 0f;
-                instance.Play();
                 instances.Add(instance);
             }
         }
@@ -220,7 +226,7 @@ namespace SpaceBurst
         {
             RegisterTheme(CreateSpecialTheme(
                 "title",
-                108,
+                116,
                 45,
                 new[] { 0, 3, 7, 10, 12 },
                 ChainPatterns(new[] { 0, 3, 4, 2 }, new[] { 0, 5, 4, 3 }),
@@ -321,7 +327,7 @@ namespace SpaceBurst
                 // for Standard and High.
                 return new ThemeStemSet
                 {
-                    Pad = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, durationSeconds, MusicStemKind.ReducedMix),
+                    Drums = ProceduralAudioSynth.CreateMusicStem(definition, sampleRate, durationSeconds, MusicStemKind.ReducedMix),
                 };
             }
 
@@ -393,13 +399,13 @@ namespace SpaceBurst
             float danger = MathHelper.Clamp(state.DangerFactor, 0f, 1f);
 
             if (state.FlowState == GameFlowState.Title)
-                return new[] { 0.06f * pause, 0.14f * pause, 0.22f * pause, 0.1f * pause, 0.12f * pause, 0f, 0f };
+                return new[] { 0.17f * pause, 0.19f * pause, 0.075f * pause, 0.13f * pause, 0.075f * pause, 0f, 0f };
 
             if (state.FlowState == GameFlowState.Tutorial)
-                return new[] { 0.08f * pause, 0.16f * pause, 0.18f * pause, 0.1f * pause, 0.08f * pause, 0.04f * pause, 0f };
+                return new[] { 0.15f * pause, 0.19f * pause, 0.085f * pause, 0.12f * pause, 0.07f * pause, 0.035f * pause, 0f };
 
             if (state.FlowState == GameFlowState.GameOver || state.FlowState == GameFlowState.CampaignComplete)
-                return new[] { 0.04f, 0.08f, 0.16f, 0.05f, 0.1f, 0f, 0f };
+                return new[] { 0.09f, 0.12f, 0.1f, 0.07f, 0.085f, 0f, 0f };
 
             int stageNumber = state.CurrentStageNumber > 0 ? state.CurrentStageNumber : Math.Max(1, state.TransitionTargetStageNumber);
             int stageWithinChapter = ((stageNumber - 1) % 10) + 1;
@@ -413,11 +419,11 @@ namespace SpaceBurst
                 float bossLayer = MathHelper.Clamp(0.24f + transition * 0.18f + danger * 0.14f, 0f, 0.52f);
                 return new[]
                 {
-                    (0.16f + escalation * 0.12f + danger * 0.06f) * pause * rewindDuck,
-                    (0.18f + escalation * 0.1f) * pause * rewindDuck,
-                    (0.12f + warpBoost) * pause * (1f - rewind * 0.25f),
-                    (0.12f + escalation * 0.09f + transition * 0.06f) * pause,
-                    (0.1f + escalation * 0.1f + danger * 0.06f) * pause * rewindDuck,
+                    (0.22f + escalation * 0.1f + danger * 0.05f) * pause * rewindDuck,
+                    (0.2f + escalation * 0.09f) * pause * rewindDuck,
+                    (0.07f + warpBoost * 0.55f) * pause * (1f - rewind * 0.25f),
+                    (0.13f + escalation * 0.08f + transition * 0.05f) * pause,
+                    (0.08f + escalation * 0.08f + danger * 0.05f) * pause * rewindDuck,
                     (0.1f + danger * 0.16f + transition * 0.04f) * pause,
                     bossLayer * pause,
                 };
@@ -425,11 +431,11 @@ namespace SpaceBurst
 
             return new[]
             {
-                (0.08f + escalation * 0.16f + danger * 0.05f) * pause * rewindDuck,
-                (0.12f + escalation * 0.14f + danger * 0.04f) * pause * rewindDuck,
-                (0.16f + warpBoost) * pause * (1f - rewind * 0.2f),
-                (0.08f + escalation * 0.12f + transition * 0.05f) * pause,
-                (0.06f + escalation * 0.14f + danger * 0.08f) * pause * rewindDuck,
+                (0.14f + escalation * 0.15f + danger * 0.04f) * pause * rewindDuck,
+                (0.16f + escalation * 0.13f + danger * 0.035f) * pause * rewindDuck,
+                (0.075f + warpBoost * 0.6f) * pause * (1f - rewind * 0.2f),
+                (0.1f + escalation * 0.11f + transition * 0.04f) * pause,
+                (0.055f + escalation * 0.11f + danger * 0.06f) * pause * rewindDuck,
                 (0.02f + escalation * 0.04f + danger * 0.14f + transition * 0.04f) * pause,
                 transition * 0.04f * pause,
             };
@@ -568,25 +574,25 @@ namespace SpaceBurst
             return new MusicThemeDefinition
             {
                 Id = string.Concat(profile.IdPrefix, "-main"),
-                Bars = 8,
+                Bars = 4,
                 ThemeSeed = profile.ThemeSeed + 17,
                 Tempo = profile.BaseTempo,
                 RootMidiNote = profile.RootMidiNote,
                 ScaleOffsets = profile.NormalScale,
-                ChordDegrees = ChainPatterns(profile.ApproachChords, profile.CruiseChords),
-                BassPattern = ChainPatterns(profile.BassMotif, RotatePattern(profile.BassMotif, 2), RotatePattern(TransposePattern(profile.BassMotif, 1), 1), RotatePattern(profile.BassMotif, 5)),
-                PulsePattern = ChainPatterns(profile.PulseMotif, RotatePattern(profile.PulseMotif, 4), RotatePattern(TransposePattern(profile.PulseMotif, 1), 2), RotatePattern(profile.PulseMotif, 8)),
-                LeadPatternA = ChainPatterns(profile.LeadCall, RotatePattern(profile.LeadResponse, 2), RotatePattern(TransposePattern(profile.LeadCall, 1), 4), RotatePattern(profile.LeadResponse, 6)),
-                LeadPatternB = ChainPatterns(profile.LeadResponse, RotatePattern(profile.LeadCall, 2), RotatePattern(TransposePattern(profile.LeadResponse, 1), 4), RotatePattern(profile.LeadCall, 6)),
-                BossPattern = ChainPatterns(profile.BossMotif, RotatePattern(profile.BossMotif, 2), RotatePattern(TransposePattern(profile.BossMotif, 1), 1), RotatePattern(profile.BossMotif, 4)),
+                ChordDegrees = profile.CruiseChords,
+                BassPattern = ChainPatterns(profile.BassMotif, profile.BassMotif, TransposePattern(profile.BassMotif, 1), profile.BassMotif),
+                PulsePattern = ChainPatterns(profile.PulseMotif, profile.PulseMotif, profile.PulseMotif, TransposePattern(profile.PulseMotif, 1)),
+                LeadPatternA = profile.LeadCall,
+                LeadPatternB = profile.LeadResponse,
+                BossPattern = profile.BossMotif,
                 PadChordSteps = new[] { 0, 2, 4 },
                 Brightness = MathHelper.Clamp(profile.Brightness * 1.04f, 0.35f, 0.92f),
                 PulseDrive = MathHelper.Clamp(profile.PulseDrive * 1.08f, 0.18f, 1.1f),
                 PadSpread = MathHelper.Clamp(profile.PadSpread + 0.05f, 0.32f, 0.84f),
-                Swing = profile.Swing,
-                RhythmDensity = 0.58f,
-                Syncopation = MathHelper.Clamp(profile.Syncopation + 0.08f, 0.1f, 0.92f),
-                LeadDensity = 0.68f,
+                Swing = profile.Swing * 0.35f,
+                RhythmDensity = 0.62f,
+                Syncopation = MathHelper.Clamp(profile.Syncopation * 0.45f, 0.06f, 0.28f),
+                LeadDensity = 0.62f,
                 DangerWeight = 0.3f,
                 BossWeight = 0.22f,
                 VariantIntensity = 0.74f,
@@ -600,24 +606,24 @@ namespace SpaceBurst
             return new MusicThemeDefinition
             {
                 Id = string.Concat(profile.IdPrefix, "-boss"),
-                Bars = 8,
+                Bars = 4,
                 ThemeSeed = profile.ThemeSeed + 97,
                 Tempo = profile.BossTempo,
                 RootMidiNote = profile.RootMidiNote - 2,
                 ScaleOffsets = profile.BossScale,
-                ChordDegrees = ChainPatterns(profile.BossChords, RotatePattern(profile.BossChords, 1)),
-                BassPattern = ChainPatterns(RotatePattern(TransposePattern(profile.BassMotif, 1), 1), RotatePattern(TransposePattern(profile.BassMotif, 2), 4), RotatePattern(TransposePattern(profile.BassMotif, 1), 2), RotatePattern(TransposePattern(profile.BassMotif, 3), 5)),
-                PulsePattern = ChainPatterns(RotatePattern(TransposePattern(profile.PulseMotif, 1), 3), RotatePattern(TransposePattern(profile.PulseMotif, 2), 5), RotatePattern(TransposePattern(profile.PulseMotif, 1), 7), RotatePattern(TransposePattern(profile.PulseMotif, 3), 9)),
-                LeadPatternA = ChainPatterns(RotatePattern(TransposePattern(profile.LeadCall, 1), 1), RotatePattern(TransposePattern(profile.LeadResponse, 2), 3), RotatePattern(TransposePattern(profile.LeadCall, 2), 5), RotatePattern(TransposePattern(profile.LeadResponse, 3), 7)),
-                LeadPatternB = ChainPatterns(RotatePattern(TransposePattern(profile.LeadResponse, 2), 1), RotatePattern(TransposePattern(profile.LeadCall, 1), 3), RotatePattern(TransposePattern(profile.LeadResponse, 3), 5), RotatePattern(TransposePattern(profile.LeadCall, 2), 7)),
-                BossPattern = ChainPatterns(profile.BossMotif, RotatePattern(profile.BossMotif, 2), RotatePattern(TransposePattern(profile.BossMotif, 1), 1), RotatePattern(TransposePattern(profile.BossMotif, 2), 3)),
+                ChordDegrees = profile.BossChords,
+                BassPattern = ChainPatterns(TransposePattern(profile.BassMotif, 1), TransposePattern(profile.BassMotif, 1), TransposePattern(profile.BassMotif, 2), TransposePattern(profile.BassMotif, 1)),
+                PulsePattern = ChainPatterns(TransposePattern(profile.PulseMotif, 1), TransposePattern(profile.PulseMotif, 1), TransposePattern(profile.PulseMotif, 2), TransposePattern(profile.PulseMotif, 1)),
+                LeadPatternA = TransposePattern(profile.LeadCall, 1),
+                LeadPatternB = TransposePattern(profile.LeadResponse, 1),
+                BossPattern = profile.BossMotif,
                 PadChordSteps = new[] { 0, 2, 5 },
                 Brightness = MathHelper.Clamp(profile.Brightness * 1.18f, 0.35f, 0.96f),
                 PulseDrive = MathHelper.Clamp(profile.PulseDrive * 1.24f, 0.18f, 1.16f),
                 PadSpread = MathHelper.Clamp(profile.PadSpread + 0.02f, 0.32f, 0.82f),
-                Swing = profile.Swing * 0.5f,
+                Swing = profile.Swing * 0.2f,
                 RhythmDensity = 0.82f,
-                Syncopation = MathHelper.Clamp(profile.Syncopation + 0.18f, 0.1f, 0.96f),
+                Syncopation = MathHelper.Clamp(profile.Syncopation * 0.6f, 0.08f, 0.36f),
                 LeadDensity = 0.82f,
                 DangerWeight = 0.76f,
                 BossWeight = 0.88f,
@@ -648,7 +654,9 @@ namespace SpaceBurst
                 PulseDrive = pulseDrive,
                 PadSpread = padSpread,
                 Swing = swing,
-                RhythmDensity = 0.42f,
+                RhythmDensity = string.Equals(id, "title", StringComparison.OrdinalIgnoreCase)
+                    ? 0.66f
+                    : string.Equals(id, "tutorial", StringComparison.OrdinalIgnoreCase) ? 0.56f : 0.46f,
                 Syncopation = syncopation,
                 LeadDensity = leadDensity,
                 DangerWeight = dangerWeight,
