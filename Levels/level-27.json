@@ -424,5 +424,139 @@
       ]
     }
   ],
-  "Boss": null
+  "Boss": null,
+  "SliceChapterName": "Chapter 3: Crucible",
+  "SliceTargetDurationSeconds": 475,
+  "HordePackets": [
+    {
+      "ArchetypeId": "Carrier",
+      "StartSeconds": 4.0,
+      "Lane": 2,
+      "BurstCount": 2,
+      "CountPerBurst": 2,
+      "SpawnLeadDistance": 324.0,
+      "BurstIntervalSeconds": 1.08,
+      "SpawnIntervalSeconds": 0.1,
+      "SpacingX": 62.0,
+      "SpeedMultiplier": 1.17,
+      "MovePatternOverride": "TurretCarrier",
+      "FirePatternOverride": "SpreadPulse",
+      "Amplitude": 68.0,
+      "Frequency": 0.96,
+      "IgnoreHostileCap": false
+    },
+    {
+      "ArchetypeId": "Walker",
+      "StartSeconds": 13.96,
+      "Lane": 4,
+      "BurstCount": 3,
+      "CountPerBurst": 4,
+      "SpawnLeadDistance": 324.0,
+      "BurstIntervalSeconds": 1.08,
+      "SpawnIntervalSeconds": 0.1,
+      "SpacingX": 62.0,
+      "SpeedMultiplier": 1.18,
+      "MovePatternOverride": "StraightFlyIn",
+      "FirePatternOverride": "None",
+      "Amplitude": 68.0,
+      "Frequency": 1.01,
+      "IgnoreHostileCap": false
+    },
+    {
+      "ArchetypeId": "Bulwark",
+      "StartSeconds": 23.92,
+      "Lane": 1,
+      "BurstCount": 2,
+      "CountPerBurst": 1,
+      "SpawnLeadDistance": 324.0,
+      "BurstIntervalSeconds": 1.08,
+      "SpawnIntervalSeconds": 0.1,
+      "SpacingX": 62.0,
+      "SpeedMultiplier": 1.2,
+      "MovePatternOverride": "RetreatBackfire",
+      "FirePatternOverride": "ForwardPulse",
+      "Amplitude": 68.0,
+      "Frequency": 1.06,
+      "IgnoreHostileCap": false
+    },
+    {
+      "ArchetypeId": "Destroyer",
+      "StartSeconds": 33.89,
+      "Lane": 3,
+      "BurstCount": 2,
+      "CountPerBurst": 3,
+      "SpawnLeadDistance": 324.0,
+      "BurstIntervalSeconds": 1.08,
+      "SpawnIntervalSeconds": 0.1,
+      "SpacingX": 62.0,
+      "SpeedMultiplier": 1.21,
+      "MovePatternOverride": "Dive",
+      "FirePatternOverride": "ForwardPulse",
+      "Amplitude": 68.0,
+      "Frequency": 1.11,
+      "IgnoreHostileCap": false
+    },
+    {
+      "ArchetypeId": "Interceptor",
+      "StartSeconds": 43.85,
+      "Lane": 0,
+      "BurstCount": 3,
+      "CountPerBurst": 5,
+      "SpawnLeadDistance": 324.0,
+      "BurstIntervalSeconds": 1.08,
+      "SpawnIntervalSeconds": 0.1,
+      "SpacingX": 62.0,
+      "SpeedMultiplier": 1.23,
+      "MovePatternOverride": "SineWave",
+      "FirePatternOverride": "None",
+      "Amplitude": 68.0,
+      "Frequency": 1.16,
+      "IgnoreHostileCap": false
+    }
+  ],
+  "EliteBursts": [],
+  "KillChainEvents": [
+    {
+      "TriggerMultiplier": 8,
+      "Label": "CHAIN DRIVE",
+      "BonusXp": 5.4,
+      "BonusScrap": 1,
+      "BonusRewindPercent": 0.06,
+      "AccentColor": "#73F3E8"
+    },
+    {
+      "TriggerMultiplier": 14,
+      "Label": "REACTOR REDLINE",
+      "BonusXp": 8.0,
+      "BonusScrap": 2,
+      "BonusRewindPercent": 0.08,
+      "AccentColor": "#56F0FF"
+    },
+    {
+      "TriggerMultiplier": 20,
+      "Label": "MAXIMUM BURST",
+      "BonusXp": 12.2,
+      "BonusScrap": 3,
+      "BonusRewindPercent": 0.12,
+      "AccentColor": "#FFB347"
+    }
+  ],
+  "PresentationCues": [
+    {
+      "Kind": "Warning",
+      "StartSeconds": 4.5,
+      "DurationSeconds": 1.6,
+      "Label": "SHIFT CORRIDOR",
+      "AccentColor": "#FFB347",
+      "Intensity": 1.0
+    },
+    {
+      "Kind": "PaletteSpike",
+      "StartSeconds": 36.0,
+      "DurationSeconds": 2.0,
+      "Label": "CRUCIBLE HEAT CRITICAL",
+      "AccentColor": "#FFB347",
+      "Intensity": 1.15
+    }
+  ]
 }

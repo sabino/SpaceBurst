@@ -39,6 +39,21 @@
   <ItemGroup>
     <Content Include="..\Levels\**\*.json" Link="wwwroot\Levels\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\LICENSE" Link="wwwroot\LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\SpaceBurst\Icon.ico" Link="wwwroot\favicon.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <Target Name="FixLinkedStaticWebAssetContentRoots" AfterTargets="ResolveProjectStaticWebAssets">
+    <ItemGroup>
+      <StaticWebAsset Update="$(MSBuildProjectDirectory)/../Levels/**/*.json">
+        <ContentRoot>$(MSBuildProjectDirectory)/../</ContentRoot>
+      </StaticWebAsset>
+      <StaticWebAsset Update="$(MSBuildProjectDirectory)/../LICENSE">
+        <ContentRoot>$(MSBuildProjectDirectory)/../</ContentRoot>
+      </StaticWebAsset>
+      <StaticWebAsset Update="$(MSBuildProjectDirectory)/../SpaceBurst/Icon.ico">
+        <ContentRoot>$(MSBuildProjectDirectory)/../SpaceBurst/</ContentRoot>
+      </StaticWebAsset>
+    </ItemGroup>
+  </Target>
 
 </Project>

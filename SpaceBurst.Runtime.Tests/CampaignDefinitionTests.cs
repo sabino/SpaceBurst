@@ -36,31 +36,66 @@ namespace SpaceBurst.Runtime.Tests
         }
 
         [Fact]
-        public void OverdriveSliceStagesCarryContinuousChapterPacing()
+        public void ArchetypeValidation_ReportsNullEntriesInsteadOfThrowing()
+        {
+            var catalog = new EnemyArchetypeCatalogDefinition
+            {
+                Archetypes = new List<EnemyArchetypeDefinition> { null },
+            };
+
+            List<ValidationIssue> issues = LevelValidator.ValidateArchetypes(catalog);
+
+            Assert.Contains(issues, issue => issue.Path == "Archetypes[0]" && issue.Message.Contains("cannot be null"));
+        }
+
+        [Fact]
+        public void CampaignChaptersCarryProgressivePacingAndReachableRewards()
         {
             string repoRoot = FindRepositoryRoot();
             string levelsDirectory = Path.Combine(repoRoot, "Levels");
-            List<StageDefinition> sliceStages = new();
-
-            for (int stageNumber = 1; stageNumber <= 10; stageNumber++)
-                sliceStages.Add(LevelSerializer.LoadLevelFromFile(Path.Combine(levelsDirectory, $"level-{stageNumber:00}.json")));
-
-            Assert.All(sliceStages, stage =>
+            var expectedChapters = new[]
             {
-                Assert.Equal("Chapter 1: Overdrive", stage.SliceChapterName);
-                Assert.Equal(720f, stage.SliceTargetDurationSeconds);
-                Assert.True(stage.HordePackets.Count >= (stage.StageNumber == 10 ? 7 : 5));
-                Assert.True(stage.KillChainEvents.Count >= 3);
-                Assert.True(stage.PresentationCues.Count >= 1);
-            });
+                (Name: "Chapter 1: Overdrive", TargetSeconds: 720f),
+                (Name: "Chapter 2: Fracture", TargetSeconds: 435f),
+                (Name: "Chapter 3: Crucible", TargetSeconds: 475f),
+                (Name: "Chapter 4: Parallax", TargetSeconds: 455f),
+                (Name: "Chapter 5: Event Horizon", TargetSeconds: 465f),
+            };
+            List<StageDefinition> stages = Enumerable.Range(1, 50)
+                .Select(stageNumber => LevelSerializer.LoadLevelFromFile(Path.Combine(levelsDirectory, $"level-{stageNumber:00}.json")))
+                .ToList();
+            List<int> modernChapterHordeCounts = new();
 
-            float authoredDuration = sliceStages.Sum(stage => stage.Sections.Max(section => section.StartSeconds + section.DurationSeconds));
-            Assert.True(authoredDuration >= 715f);
-            Assert.Contains(sliceStages[3].PresentationCues, cue => cue.Label == "4 MINUTE ESCALATION");
-            Assert.Contains(sliceStages[6].PresentationCues, cue => cue.Label == "8 MINUTE REDLINE");
-            Assert.Contains(sliceStages[8].EliteBursts, burst => burst.WarningText == "PURSUIT DREADNOUGHT");
-            Assert.NotNull(sliceStages[9].Boss);
-            Assert.Equal("Pursuit Dreadnought", sliceStages[9].Boss.DisplayName);
+            for (int chapterIndex = 0; chapterIndex < expectedChapters.Length; chapterIndex++)
+            {
+                List<StageDefinition> chapterStages = stages.Skip(chapterIndex * 10).Take(10).ToList();
+                (string expectedName, float expectedTargetSeconds) = expectedChapters[chapterIndex];
+
+                Assert.All(chapterStages, stage =>
+                {
+                    Assert.Equal(expectedName, stage.SliceChapterName);
+                    Assert.Equal(expectedTargetSeconds, stage.SliceTargetDurationSeconds);
+                    Assert.True(stage.HordePackets.Count >= (stage.StageNumber % 10 == 0 ? 3 : 4));
+                    Assert.Equal(new[] { 8, 14, 20 }, stage.KillChainEvents.Select(chain => chain.TriggerMultiplier));
+                    Assert.True(stage.PresentationCues.Count >= 2);
+                    Assert.Equal(
+                        stage.PresentationCues.OrderBy(cue => cue.StartSeconds).Select(cue => cue.StartSeconds),
+                        stage.PresentationCues.Select(cue => cue.StartSeconds));
+                });
+
+                float authoredDuration = chapterStages.Sum(stage => stage.Sections.Max(section => section.StartSeconds + section.DurationSeconds));
+                Assert.InRange(MathF.Abs(authoredDuration - expectedTargetSeconds), 0f, MathF.Max(10f, expectedTargetSeconds * 0.03f));
+                Assert.True(chapterStages.Sum(stage => stage.EliteBursts.Count) >= 5);
+
+                if (chapterIndex > 0)
+                    modernChapterHordeCounts.Add(chapterStages.Sum(stage => stage.HordePackets.Count));
+            }
+
+            Assert.Equal(modernChapterHordeCounts.OrderBy(count => count), modernChapterHordeCounts);
+            Assert.Contains(stages[3].PresentationCues, cue => cue.Label == "4 MINUTE ESCALATION");
+            Assert.Contains(stages[6].PresentationCues, cue => cue.Label == "8 MINUTE REDLINE");
+            Assert.Contains(stages[8].EliteBursts, burst => burst.WarningText == "PURSUIT DREADNOUGHT");
+            Assert.Equal("Pursuit Dreadnought", stages[9].Boss.DisplayName);
         }
 
         [Fact]

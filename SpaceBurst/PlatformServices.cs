@@ -223,8 +223,19 @@ namespace SpaceBurst
         {
             EnsureInitialized();
             string path = MapPath(logicalPath);
-            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? baseDirectory);
-            File.WriteAllText(path, contents ?? string.Empty);
+            string directory = Path.GetDirectoryName(path) ?? baseDirectory;
+            Directory.CreateDirectory(directory);
+            string temporaryPath = Path.Combine(directory, string.Concat(Path.GetFileName(path), ".tmp-", Guid.NewGuid().ToString("N")));
+            try
+            {
+                File.WriteAllText(temporaryPath, contents ?? string.Empty);
+                File.Move(temporaryPath, path, true);
+            }
+            finally
+            {
+                if (File.Exists(temporaryPath))
+                    File.Delete(temporaryPath);
+            }
         }
 
         public void Delete(string logicalPath)

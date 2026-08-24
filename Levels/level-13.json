@@ -316,5 +316,122 @@
       ]
     }
   ],
-  "Boss": null
+  "Boss": null,
+  "SliceChapterName": "Chapter 2: Fracture",
+  "SliceTargetDurationSeconds": 435,
+  "HordePackets": [
+    {
+      "ArchetypeId": "Carrier",
+      "StartSeconds": 4.0,
+      "Lane": 3,
+      "BurstCount": 2,
+      "CountPerBurst": 1,
+      "SpawnLeadDistance": 306.0,
+      "BurstIntervalSeconds": 1.16,
+      "SpawnIntervalSeconds": 0.1,
+      "SpacingX": 64.0,
+      "SpeedMultiplier": 1.12,
+      "MovePatternOverride": "TurretCarrier",
+      "FirePatternOverride": "SpreadPulse",
+      "Amplitude": 60.0,
+      "Frequency": 0.96,
+      "IgnoreHostileCap": false
+    },
+    {
+      "ArchetypeId": "Bulwark",
+      "StartSeconds": 14.7,
+      "Lane": 0,
+      "BurstCount": 2,
+      "CountPerBurst": 1,
+      "SpawnLeadDistance": 306.0,
+      "BurstIntervalSeconds": 1.16,
+      "SpawnIntervalSeconds": 0.1,
+      "SpacingX": 64.0,
+      "SpeedMultiplier": 1.14,
+      "MovePatternOverride": "RetreatBackfire",
+      "FirePatternOverride": "ForwardPulse",
+      "Amplitude": 60.0,
+      "Frequency": 1.01,
+      "IgnoreHostileCap": false
+    },
+    {
+      "ArchetypeId": "Interceptor",
+      "StartSeconds": 25.4,
+      "Lane": 2,
+      "BurstCount": 3,
+      "CountPerBurst": 4,
+      "SpawnLeadDistance": 306.0,
+      "BurstIntervalSeconds": 1.16,
+      "SpawnIntervalSeconds": 0.1,
+      "SpacingX": 64.0,
+      "SpeedMultiplier": 1.15,
+      "MovePatternOverride": "SineWave",
+      "FirePatternOverride": "None",
+      "Amplitude": 60.0,
+      "Frequency": 1.06,
+      "IgnoreHostileCap": false
+    },
+    {
+      "ArchetypeId": "Walker",
+      "StartSeconds": 36.1,
+      "Lane": 4,
+      "BurstCount": 3,
+      "CountPerBurst": 3,
+      "SpawnLeadDistance": 306.0,
+      "BurstIntervalSeconds": 1.16,
+      "SpawnIntervalSeconds": 0.1,
+      "SpacingX": 64.0,
+      "SpeedMultiplier": 1.16,
+      "MovePatternOverride": "StraightFlyIn",
+      "FirePatternOverride": "None",
+      "Amplitude": 60.0,
+      "Frequency": 1.11,
+      "IgnoreHostileCap": false
+    }
+  ],
+  "EliteBursts": [],
+  "KillChainEvents": [
+    {
+      "TriggerMultiplier": 8,
+      "Label": "CHAIN DRIVE",
+      "BonusXp": 4.6,
+      "BonusScrap": 1,
+      "BonusRewindPercent": 0.06,
+      "AccentColor": "#73F3E8"
+    },
+    {
+      "TriggerMultiplier": 14,
+      "Label": "REACTOR REDLINE",
+      "BonusXp": 7.0,
+      "BonusScrap": 1,
+      "BonusRewindPercent": 0.08,
+      "AccentColor": "#56F0FF"
+    },
+    {
+      "TriggerMultiplier": 20,
+      "Label": "MAXIMUM BURST",
+      "BonusXp": 10.8,
+      "BonusScrap": 2,
+      "BonusRewindPercent": 0.12,
+      "AccentColor": "#FFB347"
+    }
+  ],
+  "PresentationCues": [
+    {
+      "Kind": "Warning",
+      "StartSeconds": 4.5,
+      "DurationSeconds": 1.6,
+      "Label": "ION RELAY",
+      "AccentColor": "#73F3E8",
+      "Intensity": 0.96
+    },
+    {
+      "Kind": "PaletteSpike",
+      "StartSeconds": 30.0,
+      "DurationSeconds": 2.0,
+      "Label": "FRACTURE PRESSURE RISING",
+      "AccentColor": "#73F3E8",
+      "Intensity": 1.1
+    }
+  ]
 }

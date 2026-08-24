@@ -13,9 +13,10 @@ License: **The Unlicense**
 
 ## Features
 
-- 50-stage campaign with boss fights on stages 10, 20, 30, 40, and 50.
+- Five progressively denser 10-stage chapters, with boss fights on stages 10, 20, 30, 40, and 50.
+- Authored horde packets, elite surges, presentation beats, and reachable kill-chain rewards throughout all 50 stages.
 - Deterministic rewind, save slots, and transition-time upgrade drafts.
-- Ten weapon styles with style-specific power cores and progression.
+- Ten chapter-gated weapon styles, a core-plus-four-support loadout, and ten distinct weapon evolutions.
 - Procedural art, feedback effects, chapter-aware music, and runtime-generated audio.
 - Sabino Software falling-pixel splash intro with randomized launch palette/background, fade-in, and skip interaction.
 - Desktop, Linux, Android, and browser packaging paths.
@@ -46,6 +47,7 @@ License: **The Unlicense**
 ## Saves, Rewind, and Progression
 
 - Three local save slots are available from the pause flow and title screen.
+- Run saves use a versioned integrity stamp, atomic replacement, and a last-known-good backup for recovery.
 - Rewind stores up to 8 seconds of deterministic gameplay state.
 - `Ships` give in-place respawns.
 - `Lives` restart the current stage once ships are exhausted.
@@ -69,7 +71,7 @@ Prerequisite: install the .NET 8 SDK.
 ```powershell
 dotnet restore
 dotnet build SpaceBurst.sln
-dotnet test SpaceBurst.Runtime.Tests/SpaceBurst.Runtime.Tests.csproj
+dotnet test SpaceBurst.sln
 .\build-all.ps1
 ```
 

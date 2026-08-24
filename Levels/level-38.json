@@ -438,5 +438,170 @@
       ]
     }
   ],
-  "Boss": null
+  "Boss": null,
+  "SliceChapterName": "Chapter 4: Parallax",
+  "SliceTargetDurationSeconds": 455,
+  "HordePackets": [
+    {
+      "ArchetypeId": "Bulwark",
+      "StartSeconds": 4.0,
+      "Lane": 3,
+      "BurstCount": 2,
+      "CountPerBurst": 2,
+      "SpawnLeadDistance": 342.0,
+      "BurstIntervalSeconds": 1.0,
+      "SpawnIntervalSeconds": 0.1,
+      "SpacingX": 60.0,
+      "SpeedMultiplier": 1.22,
+      "MovePatternOverride": "RetreatBackfire",
+      "FirePatternOverride": "ForwardPulse",
+      "Amplitude": 76.0,
+      "Frequency": 0.96,
+      "IgnoreHostileCap": false
+    },
+    {
+      "ArchetypeId": "Walker",
+      "StartSeconds": 11.52,
+      "Lane": 0,
+      "BurstCount": 3,
+      "CountPerBurst": 5,
+      "SpawnLeadDistance": 342.0,
+      "BurstIntervalSeconds": 1.0,
+      "SpawnIntervalSeconds": 0.1,
+      "SpacingX": 60.0,
+      "SpeedMultiplier": 1.23,
+      "MovePatternOverride": "StraightFlyIn",
+      "FirePatternOverride": "AimedShot",
+      "Amplitude": 76.0,
+      "Frequency": 1.01,
+      "IgnoreHostileCap": false
+    },
+    {
+      "ArchetypeId": "Carrier",
+      "StartSeconds": 19.04,
+      "Lane": 2,
+      "BurstCount": 2,
+      "CountPerBurst": 3,
+      "SpawnLeadDistance": 342.0,
+      "BurstIntervalSeconds": 1.0,
+      "SpawnIntervalSeconds": 0.1,
+      "SpacingX": 60.0,
+      "SpeedMultiplier": 1.25,
+      "MovePatternOverride": "TurretCarrier",
+      "FirePatternOverride": "SpreadPulse",
+      "Amplitude": 76.0,
+      "Frequency": 1.06,
+      "IgnoreHostileCap": false
+    },
+    {
+      "ArchetypeId": "Destroyer",
+      "StartSeconds": 26.56,
+      "Lane": 4,
+      "BurstCount": 2,
+      "CountPerBurst": 3,
+      "SpawnLeadDistance": 342.0,
+      "BurstIntervalSeconds": 1.0,
+      "SpawnIntervalSeconds": 0.1,
+      "SpacingX": 60.0,
+      "SpeedMultiplier": 1.26,
+      "MovePatternOverride": "Dive",
+      "FirePatternOverride": "SpreadPulse",
+      "Amplitude": 76.0,
+      "Frequency": 1.11,
+      "IgnoreHostileCap": false
+    },
+    {
+      "ArchetypeId": "Interceptor",
+      "StartSeconds": 34.08,
+      "Lane": 1,
+      "BurstCount": 3,
+      "CountPerBurst": 5,
+      "SpawnLeadDistance": 342.0,
+      "BurstIntervalSeconds": 1.0,
+      "SpawnIntervalSeconds": 0.1,
+      "SpacingX": 60.0,
+      "SpeedMultiplier": 1.28,
+      "MovePatternOverride": "SineWave",
+      "FirePatternOverride": "None",
+      "Amplitude": 76.0,
+      "Frequency": 1.16,
+      "IgnoreHostileCap": false
+    },
+    {
+      "ArchetypeId": "Bulwark",
+      "StartSeconds": 41.6,
+      "Lane": 3,
+      "BurstCount": 2,
+      "CountPerBurst": 2,
+      "SpawnLeadDistance": 342.0,
+      "BurstIntervalSeconds": 1.0,
+      "SpawnIntervalSeconds": 0.1,
+      "SpacingX": 60.0,
+      "SpeedMultiplier": 1.3,
+      "MovePatternOverride": "RetreatBackfire",
+      "FirePatternOverride": "ForwardPulse",
+      "Amplitude": 76.0,
+      "Frequency": 1.21,
+      "IgnoreHostileCap": false
+    }
+  ],
+  "EliteBursts": [
+    {
+      "WarningText": "PARALLAX HUNTER",
+      "StartSeconds": 30.0,
+      "ArchetypeId": "Bulwark",
+      "EliteCount": 2,
+      "TargetY": 0.58,
+      "SpawnLeadDistance": 362.0,
+      "SpeedMultiplier": 1.28,
+      "MovePatternOverride": "RetreatBackfire",
+      "FirePatternOverride": "ForwardPulse",
+      "ScrapReward": 3,
+      "RewindRefillPercent": 0.24
+    }
+  ],
+  "KillChainEvents": [
+    {
+      "TriggerMultiplier": 8,
+      "Label": "CHAIN DRIVE",
+      "BonusXp": 6.2,
+      "BonusScrap": 1,
+      "BonusRewindPercent": 0.06,
+      "AccentColor": "#73F3E8"
+    },
+    {
+      "TriggerMultiplier": 14,
+      "Label": "REACTOR REDLINE",
+      "BonusXp": 9.0,
+      "BonusScrap": 2,
+      "BonusRewindPercent": 0.08,
+      "AccentColor": "#56F0FF"
+    },
+    {
+      "TriggerMultiplier": 20,
+      "Label": "MAXIMUM BURST",
+      "BonusXp": 13.6,
+      "BonusScrap": 3,
+      "BonusRewindPercent": 0.12,
+      "AccentColor": "#FFB347"
+    }
+  ],
+  "PresentationCues": [
+    {
+      "Kind": "Warning",
+      "StartSeconds": 4.5,
+      "DurationSeconds": 1.6,
+      "Label": "WAKE PRESSURE",
+      "AccentColor": "#B57CFF",
+      "Intensity": 1.04
+    },
+    {
+      "Kind": "PaletteSpike",
+      "StartSeconds": 34.0,
+      "DurationSeconds": 2.0,
+      "Label": "PARALLAX SHIFT DETECTED",
+      "AccentColor": "#B57CFF",
+      "Intensity": 1.2
+    }
+  ]
 }

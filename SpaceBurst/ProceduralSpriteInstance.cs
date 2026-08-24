@@ -235,7 +235,16 @@ namespace SpaceBurst
                 }
             }
 
-            mask = new MaskGrid(width, height, occupied, core);
+            // A restored mask contains only the cells that survived damage. Keep
+            // the pristine definition counts so integrity ratios do not reset to
+            // 100% merely because the save's remaining cells became a new grid.
+            mask = new MaskGrid(
+                width,
+                height,
+                occupied,
+                core,
+                mask.InitialOccupiedCount,
+                mask.InitialCoreCount);
             RebuildTexture();
         }
 

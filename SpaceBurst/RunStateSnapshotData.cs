@@ -264,6 +264,10 @@ namespace SpaceBurst
 
     sealed class RunSaveData
     {
+        public const int CurrentSchemaVersion = 2;
+
+        public int SchemaVersion { get; set; }
+        public string IntegrityHash { get; set; } = string.Empty;
         public SaveSlotSummary Summary { get; set; } = new SaveSlotSummary();
         public int CurrentStageNumber { get; set; }
         public int CurrentSectionIndex { get; set; }

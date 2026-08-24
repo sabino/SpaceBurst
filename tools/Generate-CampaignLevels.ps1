@@ -479,6 +479,176 @@ function Get-SectionEventWindows
     return ,@($windows)
 }
 
+function Get-ChapterName
+{
+    param([int]$Chapter)
+
+    switch ([math]::Clamp($Chapter, 1, 5))
+    {
+        1 { return "Chapter 1: Overdrive" }
+        2 { return "Chapter 2: Fracture" }
+        3 { return "Chapter 3: Crucible" }
+        4 { return "Chapter 4: Parallax" }
+        default { return "Chapter 5: Event Horizon" }
+    }
+}
+
+function Get-ChapterTargetDuration
+{
+    param([int]$Chapter)
+
+    switch ([math]::Clamp($Chapter, 1, 5))
+    {
+        1 { return 720 }
+        2 { return 435 }
+        3 { return 475 }
+        4 { return 455 }
+        default { return 465 }
+    }
+}
+
+function Get-StageAuthoredDuration
+{
+    param([object[]]$Sections)
+
+    if ($null -eq $Sections -or $Sections.Count -eq 0)
+    {
+        return 0
+    }
+
+    return [double](($Sections | ForEach-Object { $_.StartSeconds + $_.DurationSeconds } | Measure-Object -Maximum).Maximum)
+}
+
+function Get-ProgressiveHordePackets
+{
+    param(
+        [int]$Stage,
+        [double]$DurationSeconds,
+        [bool]$BossStage
+    )
+
+    $chapter = [int][math]::Ceiling($Stage / 10)
+    $packetCount = if ($BossStage) { if ($Stage -eq 50) { 4 } else { 3 } } elseif ($chapter -ge 4) { 6 } elseif ($chapter -eq 3) { 5 } else { 4 }
+    $sequences = @(
+        @("Interceptor", "Walker", "Destroyer", "Carrier", "Bulwark"),
+        @("Destroyer", "Interceptor", "Carrier", "Walker", "Bulwark"),
+        @("Carrier", "Destroyer", "Interceptor", "Bulwark", "Walker"),
+        @("Bulwark", "Interceptor", "Carrier", "Destroyer", "Walker")
+    )
+    $sequence = $sequences[[math]::Clamp($chapter - 2, 0, $sequences.Count - 1)]
+    $packets = @()
+    $firstTime = 4.0
+    $lastTime = [math]::Max($firstTime + 4, $DurationSeconds - 6.0)
+    $spacing = if ($packetCount -le 1) { 0 } else { ($lastTime - $firstTime) / ($packetCount - 1) }
+
+    for ($packetIndex = 0; $packetIndex -lt $packetCount; $packetIndex++)
+    {
+        $archetypeId = $sequence[($Stage + $packetIndex) % $sequence.Count]
+        $lane = ($Stage + $packetIndex * 2) % 5
+        $burstCount = if ($archetypeId -eq "Interceptor" -or $archetypeId -eq "Walker") { 3 } else { 2 }
+        $countPerBurst = switch ($archetypeId)
+        {
+            "Interceptor" { 3 + [math]::Min(2, $chapter - 1) }
+            "Walker" { 3 + [math]::Min(2, $chapter - 2) }
+            "Destroyer" { 2 + [math]::Min(1, $chapter - 2) }
+            "Carrier" { 2 + [math]::Min(1, $chapter - 3) }
+            default { 1 + [math]::Min(1, $chapter - 3) }
+        }
+        $countPerBurst = [math]::Max(1, [int]$countPerBurst)
+        $moveOverride = switch ($archetypeId)
+        {
+            "Interceptor" { "SineWave" }
+            "Walker" { "StraightFlyIn" }
+            "Carrier" { "TurretCarrier" }
+            "Bulwark" { "RetreatBackfire" }
+            default { "Dive" }
+        }
+        $fireOverride = switch ($archetypeId)
+        {
+            "Interceptor" { "None" }
+            "Walker" { if ($chapter -ge 4) { "AimedShot" } else { "None" } }
+            "Carrier" { "SpreadPulse" }
+            "Bulwark" { "ForwardPulse" }
+            default { if ($chapter -ge 4) { "SpreadPulse" } else { "ForwardPulse" } }
+        }
+
+        $packets += New-HordePacket -ArchetypeId $archetypeId -StartSeconds ($firstTime + $packetIndex * $spacing) -Lane $lane -BurstCount $burstCount -CountPerBurst $countPerBurst -SpawnLeadDistance (270 + $chapter * 18) -BurstIntervalSeconds ([math]::Max(0.82, 1.32 - $chapter * 0.08)) -SpawnIntervalSeconds 0.1 -SpacingX ([math]::Max(50, 68 - $chapter * 2)) -SpeedMultiplier (1.02 + $chapter * 0.05 + $packetIndex * 0.015) -MovePatternOverride $moveOverride -FirePatternOverride $fireOverride -Amplitude (44 + $chapter * 8) -Frequency (0.96 + $packetIndex * 0.05)
+    }
+
+    return ,@($packets)
+}
+
+function Get-ProgressiveEliteBursts
+{
+    param(
+        [int]$Stage,
+        [double]$DurationSeconds,
+        [bool]$BossStage
+    )
+
+    if (-not $BossStage -and $Stage % 2 -ne 0)
+    {
+        return ,@()
+    }
+
+    $chapter = [int][math]::Ceiling($Stage / 10)
+    $archetypeId = if ($chapter -eq 2) { "Destroyer" } elseif ($chapter -eq 3) { "Carrier" } else { "Bulwark" }
+    $warningText = switch ($chapter)
+    {
+        2 { "FRACTURE VANGUARD" }
+        3 { "CRUCIBLE EXECUTOR" }
+        4 { "PARALLAX HUNTER" }
+        default { "HORIZON WARDEN" }
+    }
+    $moveOverride = if ($archetypeId -eq "Carrier") { "TurretCarrier" } elseif ($archetypeId -eq "Bulwark") { "RetreatBackfire" } else { "Dive" }
+    $fireOverride = if ($archetypeId -eq "Carrier") { "SpreadPulse" } else { "ForwardPulse" }
+    $eliteCount = if ($BossStage -or $chapter -ge 4) { 2 } else { 1 }
+    $burst = New-EliteBurst -WarningText $warningText -StartSeconds ([math]::Max(8, $DurationSeconds * 0.62)) -ArchetypeId $archetypeId -EliteCount $eliteCount -TargetY (0.42 + ($Stage % 3) * 0.08) -SpawnLeadDistance (330 + $chapter * 8) -SpeedMultiplier (1.08 + $chapter * 0.05) -MovePatternOverride $moveOverride -FirePatternOverride $fireOverride -ScrapReward ([math]::Min(3, $chapter - 1)) -RewindRefillPercent ([math]::Min(0.28, 0.14 + $chapter * 0.025))
+    return ,@($burst)
+}
+
+function Get-ProgressiveKillChainEvents
+{
+    param([int]$Chapter)
+
+    return ,@(
+        (New-KillChainEvent -TriggerMultiplier 8 -Label "CHAIN DRIVE" -BonusXp (3 + $Chapter * 0.8) -BonusScrap 1 -BonusRewindPercent 0.06 -AccentColor "#73F3E8"),
+        (New-KillChainEvent -TriggerMultiplier 14 -Label "REACTOR REDLINE" -BonusXp (5 + $Chapter) -BonusScrap ([math]::Min(2, $Chapter - 1)) -BonusRewindPercent 0.08 -AccentColor "#56F0FF"),
+        (New-KillChainEvent -TriggerMultiplier 20 -Label "MAXIMUM BURST" -BonusXp (8 + $Chapter * 1.4) -BonusScrap ([math]::Min(3, $Chapter)) -BonusRewindPercent 0.12 -AccentColor "#FFB347")
+    )
+}
+
+function Get-ProgressivePresentationCues
+{
+    param(
+        [int]$Stage,
+        [string]$StageName,
+        [double]$DurationSeconds,
+        [bool]$BossStage
+    )
+
+    $chapter = [int][math]::Ceiling($Stage / 10)
+    $chapterName = Get-ChapterName -Chapter $chapter
+    $chapterAccents = @("#56F0FF", "#73F3E8", "#FFB347", "#B57CFF", "#FF7A59")
+    $accent = $chapterAccents[$chapter - 1]
+    $cues = @()
+    if ($Stage % 10 -eq 1)
+    {
+        $cues += New-PresentationCue -Kind "ChapterBeat" -StartSeconds 1 -DurationSeconds 2.4 -Label $chapterName.ToUpperInvariant() -AccentColor $accent -Intensity (1 + $chapter * 0.04)
+    }
+
+    $cues += New-PresentationCue -Kind "Warning" -StartSeconds 4.5 -DurationSeconds 1.6 -Label $StageName.ToUpperInvariant() -AccentColor $accent -Intensity (0.88 + $chapter * 0.04)
+    $pressureLabel = switch ($chapter)
+    {
+        2 { "FRACTURE PRESSURE RISING" }
+        3 { "CRUCIBLE HEAT CRITICAL" }
+        4 { "PARALLAX SHIFT DETECTED" }
+        default { "EVENT HORIZON CLOSING" }
+    }
+    $cues += New-PresentationCue -Kind ($(if ($BossStage) { "BossSignal" } else { "PaletteSpike" })) -StartSeconds ([math]::Max(9, $DurationSeconds * 0.72)) -DurationSeconds 2 -Label $pressureLabel -AccentColor $accent -Intensity (1 + $chapter * 0.05)
+    return ,@($cues)
+}
+
 $archetypeCatalog = [ordered]@{
     Archetypes = @(
         (New-Archetype -Id "Walker" -DisplayName "Walker" -RenderScale 1 -MoveSpeed 190 -HitPoints 6 -ScoreValue 80 -SpawnLeadDistance 220 -FireIntervalSeconds 0 -MovementAmplitude 28 -MovementFrequency 1 -MovePattern "StraightFlyIn" -FirePattern "None" -Sprite (New-Sprite -Id "WalkerSprite" -PixelScale 4 -PrimaryColor "#CFEFFF" -SecondaryColor "#65A7C5" -AccentColor "#F4B860" -Rows @("....##......","..######....",".##++++##...","##++CC++##..","##++++++##..",".##+**+##...","..######....","....##......","............") -CoreRows @("............","............","............","....XXXX....","....XXXX....","............","............","............","............")) -ContactDamage 2 -ProjectileDamage 1 -DamageRadius 1 -IntegrityThresholdPercent 55 -DestroyOnCoreBreach $true -ShowDurabilityBar $false),
@@ -614,8 +784,8 @@ for ($stage = 1; $stage -le 50; $stage++)
 
         $killChainEvents = @(
             (New-KillChainEvent -TriggerMultiplier 8 -Label "KILL CHAIN" -BonusXp (2.5 + $stage * 0.2) -BonusScrap 1 -BonusRewindPercent 0.06 -AccentColor "#73F3E8"),
-            (New-KillChainEvent -TriggerMultiplier 16 -Label "REACTOR SPIKE" -BonusXp (4 + $stage * 0.25) -BonusScrap 1 -BonusRewindPercent 0.08 -AccentColor "#56F0FF"),
-            (New-KillChainEvent -TriggerMultiplier 28 -Label "OVERDRIVE" -BonusXp (6 + $stage * 0.3) -BonusScrap 2 -BonusRewindPercent 0.1 -AccentColor "#FFB347")
+            (New-KillChainEvent -TriggerMultiplier 14 -Label "REACTOR SPIKE" -BonusXp (4 + $stage * 0.25) -BonusScrap 1 -BonusRewindPercent 0.08 -AccentColor "#56F0FF"),
+            (New-KillChainEvent -TriggerMultiplier 20 -Label "OVERDRIVE" -BonusXp (6 + $stage * 0.3) -BonusScrap 2 -BonusRewindPercent 0.1 -AccentColor "#FFB347")
         )
 
         $presentationCues = @()
@@ -624,6 +794,7 @@ for ($stage = 1; $stage -le 50; $stage++)
             $presentationCues += New-PresentationCue -Kind "ChapterBeat" -StartSeconds 1 -DurationSeconds 2.2 -Label "CHAPTER 1: OVERDRIVE" -AccentColor "#56F0FF" -Intensity 1.1
         }
         $presentationCues += New-PresentationCue -Kind "Warning" -StartSeconds 8 -DurationSeconds 1.5 -Label $name.ToUpperInvariant() -AccentColor "#6EC1FF" -Intensity 0.95
+        $presentationCues += New-PresentationCue -Kind "Reward" -StartSeconds ($(if ($stage -eq 10) { 62 } else { 48 })) -DurationSeconds 1.8 -Label "OVERDRIVE WINDOW" -AccentColor "#73F3E8" -Intensity 1.0
         if ($stage -eq 4)
         {
             $presentationCues += New-PresentationCue -Kind "BossSignal" -StartSeconds 50 -DurationSeconds 2 -Label "4 MINUTE ESCALATION" -AccentColor "#FFB347" -Intensity 1.05
@@ -636,6 +807,8 @@ for ($stage = 1; $stage -le 50; $stage++)
         {
             $presentationCues += New-PresentationCue -Kind "BossSignal" -StartSeconds 74 -DurationSeconds 2.4 -Label "CORE BREACH WINDOW" -AccentColor "#FFD166" -Intensity 1.2
         }
+
+        $presentationCues = @($presentationCues | Sort-Object { [double]$_['StartSeconds'] })
 
         $boss = $null
         if ($stage -eq 10)
@@ -838,6 +1011,14 @@ for ($stage = 1; $stage -le 50; $stage++)
             Boss = $null
         }
     }
+
+    $authoredDuration = Get-StageAuthoredDuration -Sections $stageObject.Sections
+    $stageObject.SliceChapterName = Get-ChapterName -Chapter $chapter
+    $stageObject.SliceTargetDurationSeconds = Get-ChapterTargetDuration -Chapter $chapter
+    $stageObject.HordePackets = Get-ProgressiveHordePackets -Stage $stage -DurationSeconds $authoredDuration -BossStage $isBossStage
+    $stageObject.EliteBursts = Get-ProgressiveEliteBursts -Stage $stage -DurationSeconds $authoredDuration -BossStage $isBossStage
+    $stageObject.KillChainEvents = Get-ProgressiveKillChainEvents -Chapter $chapter
+    $stageObject.PresentationCues = Get-ProgressivePresentationCues -Stage $stage -StageName $name -DurationSeconds $authoredDuration -BossStage $isBossStage
 
     $fileName = "level-{0}.json" -f $stage.ToString("00")
     Write-JsonFile -Path (Join-Path $levelsDir $fileName) -Object $stageObject

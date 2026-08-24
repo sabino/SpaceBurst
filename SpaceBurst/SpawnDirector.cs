@@ -72,6 +72,8 @@ namespace SpaceBurst
             if (stage == null || repository?.ArchetypesById == null)
                 return;
 
+            NormalizeTimelineCursors(stage, stageElapsedSeconds);
+
             while (nextPresentationCueIndex < stage.PresentationCues.Count &&
                 stage.PresentationCues[nextPresentationCueIndex].StartSeconds <= stageElapsedSeconds)
             {
@@ -145,6 +147,16 @@ namespace SpaceBurst
             };
         }
 
+        public bool HasPendingCombat(StageDefinition stage)
+        {
+            if (stage == null)
+                return false;
+
+            return nextHordePacketIndex < (stage.HordePackets?.Count ?? 0)
+                || nextEliteBurstIndex < (stage.EliteBursts?.Count ?? 0)
+                || queuedHordePackets.Count > 0;
+        }
+
         public void RestoreSnapshot(SpawnDirectorSnapshotData snapshot)
         {
             nextHordePacketIndex = Math.Max(0, snapshot?.NextHordePacketIndex ?? 0);
@@ -169,6 +181,9 @@ namespace SpaceBurst
                 for (int i = 0; i < snapshot.PendingHordeBursts.Count; i++)
                 {
                     PendingHordePacketBurstSnapshotData queued = snapshot.PendingHordeBursts[i];
+                    if (queued == null)
+                        continue;
+
                     queuedHordePackets.Add(new QueuedHordePacketBurst
                     {
                         PacketIndex = Math.Max(0, queued.PacketIndex),
@@ -177,6 +192,18 @@ namespace SpaceBurst
                     });
                 }
             }
+        }
+
+        private void NormalizeTimelineCursors(StageDefinition stage, float stageElapsedSeconds)
+        {
+            if (nextHordePacketIndex > stage.HordePackets.Count)
+                nextHordePacketIndex = stage.HordePackets.TakeWhile(packet => packet.StartSeconds <= stageElapsedSeconds).Count();
+            if (nextEliteBurstIndex > stage.EliteBursts.Count)
+                nextEliteBurstIndex = stage.EliteBursts.TakeWhile(burst => burst.StartSeconds <= stageElapsedSeconds).Count();
+            if (nextPresentationCueIndex > stage.PresentationCues.Count)
+                nextPresentationCueIndex = stage.PresentationCues.TakeWhile(cue => cue.StartSeconds <= stageElapsedSeconds).Count();
+
+            triggeredKillChainIndices.RemoveWhere(index => index < 0 || index >= stage.KillChainEvents.Count);
         }
 
         private void QueueHordePacket(HordePacketDefinition packet, int packetIndex, float stageElapsedSeconds)

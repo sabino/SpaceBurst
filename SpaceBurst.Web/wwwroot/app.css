@@ -13,6 +13,11 @@ body {
     font-family: "Segoe UI", sans-serif;
 }
 
+::selection {
+    color: #050812;
+    background: #73f3e8;
+}
+
 .canvas-holder {
     position: fixed;
     inset: 0;
@@ -37,21 +42,157 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #000;
+    background:
+        radial-gradient(circle at 18% 22%, rgba(86, 240, 255, 0.16), transparent 28%),
+        radial-gradient(circle at 82% 72%, rgba(255, 179, 71, 0.13), transparent 30%),
+        #03050b;
 }
 
-.loading-card {
+.loading-console {
+    width: min(28rem, calc(100vw - 3rem));
     text-align: center;
     letter-spacing: 0.08em;
 }
 
+.loading-mark {
+    display: flex;
+    height: 2.5rem;
+    margin: 0 auto 1.35rem;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 0.35rem;
+}
+
+.loading-mark span {
+    width: 0.42rem;
+    height: 0.85rem;
+    background: #73f3e8;
+    box-shadow: 0 0 1rem rgba(115, 243, 232, 0.34);
+    animation: system-pulse 1.2s cubic-bezier(0.16, 1, 0.3, 1) infinite alternate;
+}
+
+.loading-mark span:nth-child(2),
+.loading-mark span:nth-child(4) {
+    height: 1.55rem;
+    animation-delay: -0.35s;
+}
+
+.loading-mark span:nth-child(3) {
+    height: 2.25rem;
+    background: #ffb347;
+    box-shadow: 0 0 1rem rgba(255, 179, 71, 0.3);
+    animation-delay: -0.7s;
+}
+
 .loading-title {
-    margin-bottom: 0.6rem;
-    font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.66);
+    margin-bottom: 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 650;
+    color: #b9c8db;
 }
 
 .loading-copy {
     font-size: 1rem;
-    color: rgba(255, 255, 255, 0.9);
+    font-weight: 700;
+    color: #f4f8ff;
+}
+
+.loading-rail {
+    height: 0.22rem;
+    margin-top: 1.5rem;
+    overflow: hidden;
+    background: rgba(185, 200, 219, 0.14);
+}
+
+.loading-rail span {
+    display: block;
+    width: 42%;
+    height: 100%;
+    background: #73f3e8;
+    box-shadow: 0 0 0.8rem rgba(115, 243, 232, 0.48);
+    animation: rail-scan 1.35s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+#blazor-error-ui {
+    position: fixed;
+    z-index: 1000;
+    right: 1rem;
+    bottom: 1rem;
+    left: 1rem;
+    display: none;
+    min-height: 3.5rem;
+    padding: 0.8rem 1rem;
+    align-items: center;
+    gap: 1rem;
+    color: #fff6e8;
+    background: rgba(42, 12, 14, 0.97);
+    box-shadow: 0 0.65rem 2.5rem rgba(0, 0, 0, 0.46);
+}
+
+#blazor-error-ui.show {
+    display: flex;
+}
+
+#blazor-error-ui .error-copy {
+    flex: 1;
+    font-size: 0.82rem;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+}
+
+#blazor-error-ui a,
+#blazor-error-ui button {
+    border: 0;
+    padding: 0.55rem 0.7rem;
+    color: #14090a;
+    background: #ffb347;
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 750;
+    letter-spacing: 0.06em;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+#blazor-error-ui .dismiss {
+    color: #fff6e8;
+    background: transparent;
+}
+
+#blazor-error-ui a:focus-visible,
+#blazor-error-ui button:focus-visible {
+    outline: 0.18rem solid #73f3e8;
+    outline-offset: 0.18rem;
+}
+
+@keyframes system-pulse {
+    from { transform: scaleY(0.62); opacity: 0.58; }
+    to { transform: scaleY(1); opacity: 1; }
+}
+
+@keyframes rail-scan {
+    from { transform: translateX(-110%); }
+    to { transform: translateX(340%); }
+}
+
+@media (max-width: 38rem) {
+    #blazor-error-ui {
+        flex-wrap: wrap;
+    }
+
+    #blazor-error-ui .error-copy {
+        flex-basis: 100%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .loading-mark span,
+    .loading-rail span {
+        animation: none;
+    }
+
+    .loading-rail span {
+        width: 100%;
+        opacity: 0.72;
+    }
 }

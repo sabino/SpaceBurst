@@ -422,7 +422,10 @@ namespace SpaceBurst
             WeaponInventoryState inventory = PlayerStatus.RunProgress.Weapons;
             DeterministicRngState rng = Game1.Instance?.GameplayRandom ?? fallbackGameplayRandom;
 
-            WeaponStyleId nextLocked = WeaponCatalog.StyleOrder.FirstOrDefault(style => !inventory.OwnsStyle(style));
+            int currentStageNumber = GetCurrentStageNumber();
+            WeaponStyleId nextLocked = WeaponProgressionCatalog
+                .GetAvailableStyles(currentStageNumber)
+                .FirstOrDefault(style => !inventory.OwnsStyle(style));
             if (nextLocked != 0 && !inventory.OwnsStyle(nextLocked) && rng.NextDouble() < 0.24)
                 return nextLocked;
 

@@ -38,7 +38,7 @@ namespace SpaceBurst
         public float MasterVolume { get; set; } = 1f;
         public float MusicVolume { get; set; } = 0.8f;
         public float SfxVolume { get; set; } = 0.95f;
-#if ANDROID
+#if ANDROID || BLAZORGL
         public AudioQualityPreset AudioQualityPreset { get; set; } = AudioQualityPreset.Reduced;
         public ScreenShakeStrength ScreenShakeStrength { get; set; } = ScreenShakeStrength.Reduced;
 #else

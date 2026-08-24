@@ -416,9 +416,21 @@ namespace SpaceBurst
                     supportFireCooldowns[entry.Key] = Math.Max(0f, entry.Value);
             }
             hullDestroyedQueued = snapshot.HullDestroyedQueued;
-            sprite?.RestoreMaskSnapshot(snapshot.HullMask);
-            authoritativeHullRatio = snapshot.HullIntegrityRatio > 0f ? snapshot.HullIntegrityRatio : 1f;
-            SyncAuthoritativeHullRatio();
+            bool hasHullMask = snapshot.HullMask?.OccupiedRows != null && snapshot.HullMask.OccupiedRows.Count > 0;
+            if (hasHullMask)
+            {
+                sprite?.RestoreMaskSnapshot(snapshot.HullMask);
+                SyncAuthoritativeHullRatio();
+            }
+            else
+            {
+                float restoredHullRatio = float.IsFinite(snapshot.HullIntegrityRatio)
+                    ? MathHelper.Clamp(snapshot.HullIntegrityRatio, 0f, 1f)
+                    : 1f;
+                ApplyHullIntegrityRatio(restoredHullRatio);
+                if (snapshot.HullDestroyedQueued && restoredHullRatio <= 0f)
+                    authoritativeHullRatio = 0f;
+            }
             RestoreEntityId(snapshot.EntityId);
             ClampToArena();
         }
@@ -498,7 +510,7 @@ namespace SpaceBurst
             if (cooldown > 0f)
                 return;
 
-            cooldown = level.FireIntervalSeconds * PlayerStatus.RunProgress.GetFireIntervalScale(focusHeld) * (primaryWeapon ? 1f : 1.08f);
+            cooldown = level.FireIntervalSeconds * PlayerStatus.RunProgress.GetFireIntervalScale(styleId, focusHeld) * (primaryWeapon ? 1f : 1.08f);
 
             switch (level.FireMode)
             {
@@ -675,7 +687,7 @@ namespace SpaceBurst
                 : CombatPosition + shotDirection * (30f + forwardOffset) + ResolveCombatSpreadOffset(direction, shotDirection, lateralOffset, lateralFactor);
             int styleLevel = ResolveStyleLevel(styleId);
             ProceduralSpriteDefinition projectile = WeaponCatalog.CreateProjectileDefinition(styleId, styleLevel, true);
-            float speedScale = PlayerStatus.RunProgress.GetProjectileSpeedScale(false);
+            float speedScale = PlayerStatus.RunProgress.GetProjectileSpeedScale(styleId, false);
             float effectiveSpeed = level.ProjectileSpeed * speedScale;
             EntityManager.Add(new Bullet(
                 spawnPoint,
@@ -686,13 +698,13 @@ namespace SpaceBurst
                 projectile,
                 level.Pierce ? Math.Max(1, level.PierceCount) : 0,
                 level.ProjectileLifetimeSeconds,
-                homingStrength + PlayerStatus.RunProgress.GetHomingBonus(false),
+                homingStrength + PlayerStatus.RunProgress.GetHomingBonus(styleId, false),
                 level.ProjectileScale * scale,
                 level.ProjectileBehavior,
                 level.TrailFxStyle,
                 level.ImpactFxStyle,
                 level.ExplosionRadius + PlayerStatus.RunProgress.GetExplosionRadiusBonus(styleId),
-                level.ChainCount + PlayerStatus.RunProgress.GetChainBonus(),
+                level.ChainCount + PlayerStatus.RunProgress.GetChainBonus(styleId),
                 level.HomingDelaySeconds,
                 combatSpawnPoint,
                 shotDirection * effectiveSpeed));
@@ -868,23 +880,23 @@ namespace SpaceBurst
 
                 EntityManager.Add(new Bullet(
                     spawn,
-                    direction * ((level.ProjectileSpeed + 70f) * PlayerStatus.RunProgress.GetProjectileSpeedScale(focusHeld)),
+                    direction * ((level.ProjectileSpeed + 70f) * PlayerStatus.RunProgress.GetProjectileSpeedScale(styleId, focusHeld)),
                     true,
                     Math.Max(1, level.ProjectileDamage + PlayerStatus.RunProgress.GetProjectileDamageBonus(styleId)),
                     level.Impact,
                     WeaponCatalog.CreateProjectileDefinition(WeaponStyleId.Drone, ResolveStyleLevel(styleId), true),
                     0,
                     level.ProjectileLifetimeSeconds,
-                    nearest == null ? 0f : 0.6f + PlayerStatus.RunProgress.GetHomingBonus(focusHeld),
+                    nearest == null ? 0f : 0.6f + PlayerStatus.RunProgress.GetHomingBonus(styleId, focusHeld),
                     0.9f,
                     ProjectileBehavior.DroneBolt,
                     TrailFxStyle.Streak,
                     ImpactFxStyle.Drone,
                     0f,
-                    PlayerStatus.RunProgress.GetChainBonus(),
+                    PlayerStatus.RunProgress.GetChainBonus(styleId),
                     0.08f,
                     combatSpawn,
-                    combatDirection * ((level.ProjectileSpeed + 70f) * PlayerStatus.RunProgress.GetProjectileSpeedScale(focusHeld))));
+                    combatDirection * ((level.ProjectileSpeed + 70f) * PlayerStatus.RunProgress.GetProjectileSpeedScale(styleId, focusHeld))));
             }
         }
 
@@ -1087,6 +1099,56 @@ namespace SpaceBurst
                 baseLevel.ChainCount += 1;
             }
 
+            if (styleId == WeaponStyleId.Spread && PlayerStatus.RunProgress.HasEvolution(EvolutionId.NovaFan))
+            {
+                baseLevel.ProjectileCount += 3;
+                baseLevel.SpreadDegrees += 18f;
+                baseLevel.ProjectileScale *= 1.08f;
+            }
+
+            if (styleId == WeaponStyleId.Laser && PlayerStatus.RunProgress.HasEvolution(EvolutionId.PrismLance))
+            {
+                baseLevel.BeamCount += 1;
+                baseLevel.BeamSpacing = Math.Max(18f, baseLevel.BeamSpacing);
+                baseLevel.BeamTickDamage += 1;
+                baseLevel.BeamThickness += 3f;
+            }
+
+            if (styleId == WeaponStyleId.Plasma && PlayerStatus.RunProgress.HasEvolution(EvolutionId.ChronoNova))
+            {
+                baseLevel.ProjectileCount += 1;
+                baseLevel.SpreadDegrees = Math.Max(16f, baseLevel.SpreadDegrees);
+                baseLevel.ProjectileLifetimeSeconds *= 1.2f;
+            }
+
+            if (styleId == WeaponStyleId.Rail && PlayerStatus.RunProgress.HasEvolution(EvolutionId.VoidLance))
+            {
+                baseLevel.Pierce = true;
+                baseLevel.PierceCount += 4;
+                baseLevel.ProjectileScale *= 1.18f;
+            }
+
+            if (styleId == WeaponStyleId.Arc && PlayerStatus.RunProgress.HasEvolution(EvolutionId.TempestCircuit))
+            {
+                baseLevel.ProjectileCount += 1;
+                baseLevel.SpreadDegrees = Math.Max(28f, baseLevel.SpreadDegrees);
+            }
+
+            if (styleId == WeaponStyleId.Blade && PlayerStatus.RunProgress.HasEvolution(EvolutionId.AegisStorm))
+            {
+                baseLevel.ProjectileCount += 2;
+                baseLevel.Pierce = true;
+                baseLevel.PierceCount = Math.Max(2, baseLevel.PierceCount);
+                baseLevel.ProjectileLifetimeSeconds *= 1.22f;
+            }
+
+            if (styleId == WeaponStyleId.Fortress && PlayerStatus.RunProgress.HasEvolution(EvolutionId.CitadelNova))
+            {
+                baseLevel.ProjectileCount += 2;
+                baseLevel.SpreadDegrees = Math.Max(24f, baseLevel.SpreadDegrees);
+                baseLevel.ProjectileScale *= 1.16f;
+            }
+
             return baseLevel;
         }
 
@@ -1106,7 +1168,7 @@ namespace SpaceBurst
                 HomingDelaySeconds = baseLevel.HomingDelaySeconds,
                 ExplosionRadius = baseLevel.ExplosionRadius,
                 ChainCount = baseLevel.ChainCount,
-                DroneCount = baseLevel.DroneCount + PlayerStatus.RunProgress.GetDroneBonus(),
+                DroneCount = baseLevel.DroneCount,
                 DroneIntervalSeconds = baseLevel.DroneIntervalSeconds,
                 BeamDurationSeconds = baseLevel.BeamDurationSeconds,
                 BeamLength = baseLevel.BeamLength,
