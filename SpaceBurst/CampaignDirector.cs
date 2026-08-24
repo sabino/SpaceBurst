@@ -614,6 +614,11 @@ namespace SpaceBurst
             return true;
         }
 
+        internal void OpenOptionsForCapture()
+        {
+            OpenOptions(GameFlowState.Title);
+        }
+
         public void Update()
         {
             UpdateDeveloperToolsCode();
@@ -671,7 +676,7 @@ namespace SpaceBurst
                     DrawTitle(spriteBatch, pixel);
                     break;
                 case GameFlowState.DifficultySelect:
-                    DrawBackdrop(spriteBatch, pixel, 0.92f, "SEAMLESS CAMPAIGN WITH REWIND");
+                    DrawBackdrop(spriteBatch, pixel, 0.92f);
                     DrawDifficultySelect(spriteBatch, pixel);
                     break;
                 case GameFlowState.Options:
@@ -962,7 +967,7 @@ namespace SpaceBurst
             int wheelDelta = Input.ConsumeUiPointerScrollWheelDelta();
             if (wheelDelta != 0 && (viewport.Contains(pointer) || GetOptionScrollbarBounds(viewport).Contains(pointer)))
             {
-                optionsScrollOffset -= Math.Sign(wheelDelta) * UiPx(42);
+                optionsScrollOffset -= Math.Sign(wheelDelta) * OptionsPx(46);
                 ClampOptionsScroll();
                 optionBounds = GetOptionRowBounds(viewport, rows.Length);
             }
@@ -1047,12 +1052,12 @@ namespace SpaceBurst
 
                 if (UiPointerInteraction.DidCapturedControlActivate(capturedControlId, PointerControlOptionsScrollbarUp, GetOptionScrollbarButtonBounds(viewport, true), true, !activateOnRelease, pointer, releasePointer))
                 {
-                    optionsScrollOffset -= UiPx(96);
+                    optionsScrollOffset -= OptionsPx(104);
                     ClampOptionsScroll();
                 }
                 else if (UiPointerInteraction.DidCapturedControlActivate(capturedControlId, PointerControlOptionsScrollbarDown, GetOptionScrollbarButtonBounds(viewport, false), true, !activateOnRelease, pointer, releasePointer))
                 {
-                    optionsScrollOffset += UiPx(96);
+                    optionsScrollOffset += OptionsPx(104);
                     ClampOptionsScroll();
                 }
                 else if (UiPointerInteraction.DidCapturedControlActivate(capturedControlId, PointerControlOptionsScrollbarTrack, GetOptionScrollbarTrackBounds(viewport), true, !activateOnRelease, pointer, releasePointer))
@@ -3186,20 +3191,20 @@ namespace SpaceBurst
                 : (includeQuit ? 7 : 6);
             var buttons = new List<UiButton>
             {
-                CreateButton("START CAMPAIGN", 0, total),
+                CreateTitleButton("START CAMPAIGN", 0, total),
             };
 
             int nextIndex = 1;
             if (!options.TutorialCompleted)
-                buttons.Add(CreateButton("START WITHOUT TUTORIAL", nextIndex++, total));
+                buttons.Add(CreateTitleButton("START WITHOUT TUTORIAL", nextIndex++, total));
 
-            buttons.Add(CreateButton("LOAD GAME", nextIndex++, total));
-            buttons.Add(CreateButton("OPTIONS", nextIndex++, total));
-            buttons.Add(CreateButton("HELP", nextIndex++, total));
-            buttons.Add(CreateButton("ABOUT / LEGAL", nextIndex++, total));
+            buttons.Add(CreateTitleButton("LOAD GAME", nextIndex++, total));
+            buttons.Add(CreateTitleButton("OPTIONS", nextIndex++, total));
+            buttons.Add(CreateTitleButton("HELP", nextIndex++, total));
+            buttons.Add(CreateTitleButton("ABOUT / LEGAL", nextIndex++, total));
 
             if (includeQuit)
-                buttons.Add(CreateButton("QUIT", nextIndex, total));
+                buttons.Add(CreateTitleButton("QUIT", nextIndex, total));
 
             return buttons;
         }
@@ -3211,37 +3216,59 @@ namespace SpaceBurst
             int total = tutorialPause ? 7 : includeDeveloperEntries ? 8 : 6;
             var entries = new List<PauseMenuEntry>
             {
-                new PauseMenuEntry(PauseMenuAction.Resume, CreateButton("RESUME", 0, total)),
-                new PauseMenuEntry(PauseMenuAction.SaveGame, CreateButton("SAVE GAME", 1, total)),
-                new PauseMenuEntry(PauseMenuAction.LoadGame, CreateButton("LOAD GAME", 2, total)),
-                new PauseMenuEntry(PauseMenuAction.Options, CreateButton("OPTIONS", 3, total)),
-                new PauseMenuEntry(PauseMenuAction.Help, CreateButton("HELP", 4, total)),
+                new PauseMenuEntry(PauseMenuAction.Resume, CreatePauseButton("RESUME", 0, total)),
+                new PauseMenuEntry(PauseMenuAction.SaveGame, CreatePauseButton("SAVE GAME", 1, total)),
+                new PauseMenuEntry(PauseMenuAction.LoadGame, CreatePauseButton("LOAD GAME", 2, total)),
+                new PauseMenuEntry(PauseMenuAction.Options, CreatePauseButton("OPTIONS", 3, total)),
+                new PauseMenuEntry(PauseMenuAction.Help, CreatePauseButton("HELP", 4, total)),
             };
 
             int nextIndex = 5;
             if (includeDeveloperEntries)
             {
-                entries.Add(new PauseMenuEntry(PauseMenuAction.DeveloperStage, CreateButton(string.Concat("DEV STAGE ", currentStageNumber.ToString("00")), nextIndex++, total)));
-                entries.Add(new PauseMenuEntry(PauseMenuAction.DeveloperDetail, CreateButton(GetDeveloperDetailLabel(), nextIndex++, total)));
+                entries.Add(new PauseMenuEntry(PauseMenuAction.DeveloperStage, CreatePauseButton(string.Concat("DEV STAGE ", currentStageNumber.ToString("00")), nextIndex++, total)));
+                entries.Add(new PauseMenuEntry(PauseMenuAction.DeveloperDetail, CreatePauseButton(GetDeveloperDetailLabel(), nextIndex++, total)));
             }
 
             if (tutorialPause)
-                entries.Add(new PauseMenuEntry(PauseMenuAction.SkipTutorial, CreateButton("SKIP TUTORIAL", nextIndex++, total)));
+                entries.Add(new PauseMenuEntry(PauseMenuAction.SkipTutorial, CreatePauseButton("SKIP TUTORIAL", nextIndex++, total)));
 
-            entries.Add(new PauseMenuEntry(PauseMenuAction.QuitToTitle, CreateButton("QUIT TO TITLE", total - 1, total)));
+            entries.Add(new PauseMenuEntry(PauseMenuAction.QuitToTitle, CreatePauseButton("QUIT TO TITLE", total - 1, total)));
             return entries;
         }
 
-        private UiButton CreateButton(string text, int index, int total)
+        private UiButton CreateTitleButton(string text, int index, int total)
         {
-            float uiScale = Game1.Instance != null ? Game1.Instance.UiLayoutScale : 1f;
-            Vector2 center = Game1.ScreenSize / 2f;
-            int width = Math.Max(440, (int)MathF.Round(440f * uiScale));
-            int height = (int)MathF.Round((total >= 6 ? 48f : 54f) * uiScale);
-            int spacing = (int)MathF.Round((total >= 6 ? 12f : 18f) * uiScale);
-            int x = (int)center.X - width / 2;
-            int totalHeight = total * height + (total - 1) * spacing;
-            int top = (Game1.VirtualHeight - totalHeight) / 2 + (int)MathF.Round(34f * uiScale);
+            Rectangle safe = Game1.SafeUiBounds;
+            int regionTop = safe.Y + (int)MathF.Round(safe.Height * 0.25f);
+            int regionBottom = safe.Y + (int)MathF.Round(safe.Height * 0.745f);
+            return CreateBoundedMenuButton(text, index, total, regionTop, regionBottom, 560, 40, 8);
+        }
+
+        private UiButton CreatePauseButton(string text, int index, int total)
+        {
+            Rectangle safe = Game1.SafeUiBounds;
+            int regionTop = safe.Y + (int)MathF.Round(safe.Height * 0.285f);
+            int regionBottom = safe.Y + (int)MathF.Round(safe.Height * 0.84f);
+            return CreateBoundedMenuButton(text, index, total, regionTop, regionBottom, 520, 42, 9);
+        }
+
+        private UiButton CreateBoundedMenuButton(string text, int index, int total, int regionTop, int regionBottom, int baseWidth, int baseHeight, int baseGap)
+        {
+            Rectangle safe = Game1.SafeUiBounds;
+            float uiScale = GetScopedUiScale(0.85f, 1.35f);
+            int availableHeight = Math.Max(baseHeight, regionBottom - regionTop);
+            int minimumGap = Math.Max(4, (int)MathF.Round(baseGap * 0.62f));
+            int desiredHeight = Math.Max(32, (int)MathF.Round(baseHeight * uiScale));
+            int desiredGap = Math.Max(minimumGap, (int)MathF.Round(baseGap * uiScale));
+            int height = Math.Min(desiredHeight, Math.Max(32, (availableHeight - minimumGap * Math.Max(0, total - 1)) / Math.Max(1, total)));
+            int spacing = total <= 1
+                ? 0
+                : Math.Max(minimumGap, Math.Min(desiredGap, (availableHeight - height * total) / (total - 1)));
+            int totalHeight = total * height + Math.Max(0, total - 1) * spacing;
+            int top = regionTop + Math.Max(0, (availableHeight - totalHeight) / 2);
+            int width = Math.Clamp((int)MathF.Round(baseWidth * Math.Min(uiScale, 1.25f)), 420, Math.Max(420, safe.Width - 64));
+            int x = safe.Center.X - width / 2;
             int y = top + index * (height + spacing);
             return new UiButton(new Rectangle(x, y, width, height), text);
         }
@@ -3250,6 +3277,17 @@ namespace SpaceBurst
         {
             float uiScale = Game1.Instance != null ? Game1.Instance.UiLayoutScale : 1f;
             return Math.Max(1, (int)MathF.Round(value * uiScale));
+        }
+
+        private int OptionsPx(int value)
+        {
+            return Math.Max(1, (int)MathF.Round(value * GetScopedUiScale(0.85f, 1.25f)));
+        }
+
+        private float GetScopedUiScale(float minimum, float maximum)
+        {
+            float uiScale = Game1.Instance != null ? Game1.Instance.UiLayoutScale : 1f;
+            return MathHelper.Clamp(uiScale, minimum, maximum);
         }
 
         private OptionsData CloneOptions(OptionsData source)
@@ -3362,25 +3400,27 @@ namespace SpaceBurst
         private Rectangle GetOptionsFrameBounds()
         {
             Rectangle safeBounds = Game1.SafeUiBounds;
-            int horizontalMargin = UiPx(36);
-            int verticalMargin = UiPx(24);
+            int horizontalMargin = Math.Min(OptionsPx(24), Math.Max(10, safeBounds.Width / 12));
+            int verticalMargin = Math.Min(OptionsPx(18), Math.Max(8, safeBounds.Height / 12));
             return new Rectangle(
                 safeBounds.X + horizontalMargin,
                 safeBounds.Y + verticalMargin,
-                Math.Max(UiPx(820), safeBounds.Width - horizontalMargin * 2),
-                Math.Max(UiPx(520), safeBounds.Height - verticalMargin * 2));
+                Math.Max(1, safeBounds.Width - horizontalMargin * 2),
+                Math.Max(1, safeBounds.Height - verticalMargin * 2));
         }
 
         private Rectangle GetOptionsListViewportBounds()
         {
             Rectangle frame = GetOptionsFrameBounds();
-            int headerHeight = UiPx(108);
-            int footerHeight = UiPx(156);
+            int headerHeight = OptionsPx(84);
+            int footerHeight = OptionsPx(150);
+            int leftInset = OptionsPx(18);
+            int rightInset = OptionsPx(44);
             return new Rectangle(
-                frame.X + UiPx(18),
+                frame.X + leftInset,
                 frame.Y + headerHeight,
-                frame.Width - UiPx(54),
-                Math.Max(UiPx(180), frame.Height - headerHeight - footerHeight));
+                Math.Max(1, frame.Width - leftInset - rightInset),
+                Math.Max(1, frame.Height - headerHeight - footerHeight));
         }
 
         private Rectangle[] GetOptionRowBounds()
@@ -3390,11 +3430,11 @@ namespace SpaceBurst
 
         private Rectangle[] GetOptionRowBounds(Rectangle viewport, int rowCount)
         {
-            int rowHeight = UiPx(40);
-            int rowStep = UiPx(46);
-            int rowWidth = viewport.Width - UiPx(18);
+            int rowHeight = OptionsPx(46);
+            int rowStep = OptionsPx(52);
+            int rowWidth = viewport.Width;
             int rowX = viewport.X;
-            int top = viewport.Y + UiPx(8) - (int)MathF.Round(optionsScrollOffset);
+            int top = viewport.Y + OptionsPx(6) - (int)MathF.Round(optionsScrollOffset);
             var bounds = new Rectangle[rowCount];
             for (int i = 0; i < rowCount; i++)
                 bounds[i] = new Rectangle(rowX, top + i * rowStep, rowWidth, rowHeight);
@@ -3405,10 +3445,10 @@ namespace SpaceBurst
         private float GetOptionsMaxScroll()
         {
             Rectangle viewport = GetOptionsListViewportBounds();
-            int rowHeight = UiPx(40);
-            int rowStep = UiPx(46);
+            int rowHeight = OptionsPx(46);
+            int rowStep = OptionsPx(52);
             int rowCount = GetOptionRows().Length;
-            int contentHeight = UiPx(16) + rowCount * rowStep - (rowStep - rowHeight);
+            int contentHeight = OptionsPx(12) + rowCount * rowStep - (rowStep - rowHeight);
             return MathF.Max(0f, contentHeight - viewport.Height);
         }
 
@@ -3420,12 +3460,12 @@ namespace SpaceBurst
         private (Rectangle discardBounds, Rectangle applyBounds) GetOptionActionBounds()
         {
             Rectangle frame = GetOptionsFrameBounds();
-            int buttonWidth = UiPx(200);
-            int buttonHeight = UiPx(40);
-            int gap = UiPx(24);
+            int buttonWidth = Math.Min(OptionsPx(220), Math.Max(120, (frame.Width - OptionsPx(72)) / 2));
+            int buttonHeight = OptionsPx(42);
+            int gap = OptionsPx(24);
             int totalWidth = buttonWidth * 2 + gap;
             int x = frame.Center.X - totalWidth / 2;
-            int y = frame.Bottom - UiPx(54);
+            int y = frame.Bottom - buttonHeight - OptionsPx(12);
             return
             (
                 new Rectangle(x, y, buttonWidth, buttonHeight),
@@ -3435,13 +3475,13 @@ namespace SpaceBurst
 
         private Rectangle GetOptionScrollbarBounds(Rectangle viewport)
         {
-            return new Rectangle(viewport.Right + UiPx(8), viewport.Y, UiPx(16), viewport.Height);
+            return new Rectangle(viewport.Right + OptionsPx(8), viewport.Y, OptionsPx(18), viewport.Height);
         }
 
         private Rectangle GetOptionScrollbarButtonBounds(Rectangle viewport, bool isUp)
         {
             Rectangle scrollbar = GetOptionScrollbarBounds(viewport);
-            int buttonHeight = UiPx(24);
+            int buttonHeight = OptionsPx(28);
             return isUp
                 ? new Rectangle(scrollbar.X, scrollbar.Y, scrollbar.Width, buttonHeight)
                 : new Rectangle(scrollbar.X, scrollbar.Bottom - buttonHeight, scrollbar.Width, buttonHeight);
@@ -3454,9 +3494,9 @@ namespace SpaceBurst
             Rectangle downButton = GetOptionScrollbarButtonBounds(viewport, false);
             return new Rectangle(
                 scrollbar.X,
-                upButton.Bottom + UiPx(4),
+                upButton.Bottom + OptionsPx(4),
                 scrollbar.Width,
-                Math.Max(UiPx(32), downButton.Y - upButton.Bottom - UiPx(8)));
+                Math.Max(OptionsPx(32), downButton.Y - upButton.Bottom - OptionsPx(8)));
         }
 
         private Rectangle GetOptionScrollbarThumbBounds(Rectangle viewport)
@@ -3464,7 +3504,7 @@ namespace SpaceBurst
             Rectangle trackBounds = GetOptionScrollbarTrackBounds(viewport);
             float maxScroll = GetOptionsMaxScroll();
             float thumbRatio = viewport.Height / Math.Max((float)viewport.Height, viewport.Height + maxScroll);
-            int thumbHeight = Math.Max(UiPx(42), (int)MathF.Round(trackBounds.Height * thumbRatio));
+            int thumbHeight = Math.Min(trackBounds.Height, Math.Max(OptionsPx(42), (int)MathF.Round(trackBounds.Height * thumbRatio)));
             float scrollRatio = maxScroll <= 0f ? 0f : optionsScrollOffset / maxScroll;
             int thumbY = trackBounds.Y + (int)MathF.Round((trackBounds.Height - thumbHeight) * scrollRatio);
             return new Rectangle(trackBounds.X, thumbY, trackBounds.Width, thumbHeight);
@@ -3473,29 +3513,39 @@ namespace SpaceBurst
         private Rectangle GetOptionsDescriptionBounds()
         {
             Rectangle frame = GetOptionsFrameBounds();
-            return new Rectangle(frame.X + UiPx(18), frame.Bottom - UiPx(112), frame.Width - UiPx(36), UiPx(34));
+            int footerHeight = OptionsPx(150);
+            return new Rectangle(frame.X + OptionsPx(18), frame.Bottom - footerHeight + OptionsPx(8), frame.Width - OptionsPx(36), OptionsPx(40));
         }
 
         private Rectangle GetOptionsControlsHintBounds()
         {
-            Rectangle frame = GetOptionsFrameBounds();
-            return new Rectangle(frame.X + UiPx(18), frame.Bottom - UiPx(84), frame.Width - UiPx(36), UiPx(22));
+            Rectangle description = GetOptionsDescriptionBounds();
+            return new Rectangle(description.X, description.Bottom + OptionsPx(7), description.Width, OptionsPx(20));
         }
 
         private Rectangle GetOptionSliderTrackBounds(Rectangle rowBounds)
         {
-            int width = Math.Min(UiPx(250), rowBounds.Width / 4);
-            return new Rectangle(rowBounds.Right - width - UiPx(18), rowBounds.Y + UiPx(13), width, UiPx(14));
+            int controlWidth = Math.Min(OptionsPx(420), Math.Max(220, rowBounds.Width * 46 / 100));
+            int valueWidth = OptionsPx(92);
+            int trackX = rowBounds.Right - controlWidth + valueWidth;
+            int trackWidth = Math.Max(80, controlWidth - valueWidth - OptionsPx(18));
+            int trackHeight = OptionsPx(12);
+            return new Rectangle(trackX, rowBounds.Center.Y - trackHeight / 2, trackWidth, trackHeight);
         }
 
         private Rectangle GetOptionStepperLeftBounds(Rectangle rowBounds)
         {
-            return new Rectangle(rowBounds.Right - UiPx(96), rowBounds.Y + UiPx(6), UiPx(38), rowBounds.Height - UiPx(12));
+            int buttonSize = OptionsPx(36);
+            int rightInset = OptionsPx(14);
+            int gap = OptionsPx(8);
+            return new Rectangle(rowBounds.Right - rightInset - buttonSize * 2 - gap, rowBounds.Center.Y - buttonSize / 2, buttonSize, buttonSize);
         }
 
         private Rectangle GetOptionStepperRightBounds(Rectangle rowBounds)
         {
-            return new Rectangle(rowBounds.Right - UiPx(48), rowBounds.Y + UiPx(6), UiPx(38), rowBounds.Height - UiPx(12));
+            int buttonSize = OptionsPx(36);
+            int rightInset = OptionsPx(14);
+            return new Rectangle(rowBounds.Right - rightInset - buttonSize, rowBounds.Center.Y - buttonSize / 2, buttonSize, buttonSize);
         }
 
         private (Rectangle leftBounds, Rectangle rightBounds, Rectangle tutorialBounds) GetHelpActionBounds()
@@ -3946,7 +3996,7 @@ namespace SpaceBurst
                 return;
 
             Rectangle selectedBounds = optionBounds[optionsSelection];
-            int margin = UiPx(6);
+            int margin = OptionsPx(6);
             int visibleTop = viewport.Y + margin;
             int visibleBottom = viewport.Bottom - margin;
 
@@ -3960,6 +4010,9 @@ namespace SpaceBurst
 
         private int ResolveHoveredOptionIndex(IReadOnlyList<Rectangle> optionBounds, Vector2 pointer)
         {
+            if (!GetOptionsListViewportBounds().Contains(pointer))
+                return -1;
+
             for (int i = 0; i < optionBounds.Count; i++)
             {
                 if (optionBounds[i].Contains(pointer))
@@ -3992,6 +4045,9 @@ namespace SpaceBurst
                 if (trackBounds.Contains(pointer))
                     return PointerControlOptionsScrollbarTrack;
             }
+
+            if (!viewport.Contains(pointer))
+                return PointerControlNone;
 
             for (int i = 0; i < optionBounds.Length; i++)
             {
@@ -4066,7 +4122,7 @@ namespace SpaceBurst
             spriteBatch.Draw(radial, new Vector2(Game1.VirtualWidth * 0.56f, Game1.VirtualHeight * 0.72f), null, Color.Lerp(titleIntroGlowColorA, titleIntroGlowColorB, 0.5f) * 0.08f, 0f, origin, 3.2f, SpriteEffects.None, 0f);
         }
 
-        private void DrawBackdrop(SpriteBatch spriteBatch, Texture2D pixel, float strength, string headline = "")
+        private void DrawBackdrop(SpriteBatch spriteBatch, Texture2D pixel, float strength)
         {
             Rectangle full = new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight);
             Color baseColor = Color.Lerp(new Color(4, 8, 18), new Color(10, 18, 36), MathHelper.Clamp(strength, 0f, 1f));
@@ -4103,15 +4159,13 @@ namespace SpaceBurst
                 spriteBatch.Draw(radial, new Vector2(Game1.VirtualWidth * 0.62f, Game1.VirtualHeight * 0.72f), null, new Color(90, 140, 200) * 0.05f, 0f, origin, 3.1f, SpriteEffects.None, 0f);
             }
 
-            if (!string.IsNullOrEmpty(headline))
-                DrawCenteredText(spriteBatch, pixel, headline, Game1.ScreenSize.X / 2f, 26f, Color.White * 0.2f, 1.1f);
         }
         private void DrawTitle(SpriteBatch spriteBatch, Texture2D pixel)
         {
             if (titleIntroActive)
                 DrawIntroBackdrop(spriteBatch, pixel);
             else
-                DrawBackdrop(spriteBatch, pixel, 0.92f, "SEAMLESS CAMPAIGN WITH REWIND");
+                DrawBackdrop(spriteBatch, pixel, 0.92f);
 
             if (titleIntroActive)
             {
@@ -4119,33 +4173,43 @@ namespace SpaceBurst
                 return;
             }
 
-            int shellMarginX = UiPx(150);
-            int shellMarginY = UiPx(62);
-            Rectangle shell = new Rectangle(shellMarginX, shellMarginY, Game1.VirtualWidth - shellMarginX * 2, Game1.VirtualHeight - shellMarginY * 2);
-            DrawPanel(spriteBatch, pixel, shell, Color.Black * 0.18f, Color.White * 0.15f);
+            Rectangle safe = Game1.SafeUiBounds;
+            int shellInsetX = Math.Clamp(safe.Width / 80, 12, 24);
+            int shellInsetY = Math.Clamp(safe.Height / 40, 12, 20);
+            Rectangle shell = new Rectangle(safe.X + shellInsetX, safe.Y + shellInsetY, safe.Width - shellInsetX * 2, safe.Height - shellInsetY * 2);
+            DrawPanel(spriteBatch, pixel, shell, Color.Black * 0.24f, Color.White * 0.18f);
 
-            DrawCenteredText(spriteBatch, pixel, "SPACEBURST", Game1.ScreenSize.X / 2f, 88f, Color.White, 4f);
-            DrawCenteredText(spriteBatch, pixel, "PROCEDURAL SIDE SCROLLER", Game1.ScreenSize.X / 2f, 148f, Color.White * 0.7f, 1.9f);
-            DrawCenteredText(spriteBatch, pixel, string.Concat("HIGH ", PlayerStatus.HighScore.ToString()), Game1.ScreenSize.X / 2f, 186f, Color.White * 0.84f, 1.7f);
+            Rectangle titleBounds = new Rectangle(shell.X + 32, safe.Y + 40, shell.Width - 64, 46);
+            Rectangle subtitleBounds = new Rectangle(shell.X + 32, safe.Y + 94, shell.Width - 64, 20);
+            Rectangle scoreBounds = new Rectangle(shell.X + 32, safe.Y + 122, shell.Width - 64, 18);
+            DrawTextCenteredInBounds(spriteBatch, pixel, "SPACEBURST", titleBounds, Color.White, 3.8f, 2.4f);
+            DrawTextCenteredInBounds(spriteBatch, pixel, "PROCEDURAL SIDE SCROLLER", subtitleBounds, Color.White * 0.74f, 1.5f, 1f);
+            DrawTextCenteredInBounds(spriteBatch, pixel, string.Concat("HIGH SCORE  ", PlayerStatus.HighScore.ToString()), scoreBounds, Color.White * 0.82f, 1.15f, 0.9f);
+
+            if (!options.TutorialCompleted)
+            {
+                Rectangle tutorialBounds = new Rectangle(shell.X + 32, safe.Y + 145, shell.Width - 64, 18);
+                DrawTextCenteredInBounds(spriteBatch, pixel, "FIRST RUN INCLUDES A SHORT TUTORIAL", tutorialBounds, Color.Orange * 0.92f, 1.02f, 0.82f);
+            }
 
             List<UiButton> buttons = GetTitleButtons();
             for (int i = 0; i < buttons.Count; i++)
                 DrawButton(spriteBatch, pixel, buttons[i], i == titleSelection);
 
-            if (!options.TutorialCompleted)
-            {
-                DrawCenteredText(spriteBatch, pixel, "FIRST START INCLUDES THE TUTORIAL  SKIP OPTION BELOW", Game1.ScreenSize.X / 2f, 208f, Color.Orange * 0.86f, 0.92f);
-            }
-
-            DrawCenteredText(spriteBatch, pixel, "DEVELOPED BY SABINO SOFTWARE  RELEASED UNDER THE UNLICENSE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 150f, Color.White * 0.66f, 1.08f);
+            int footerTop = safe.Y + (int)MathF.Round(safe.Height * 0.76f);
+            spriteBatch.Draw(pixel, new Rectangle(shell.X + 28, footerTop, shell.Width - 56, 2), Color.White * 0.14f);
+            Rectangle creditBounds = new Rectangle(shell.X + 28, footerTop + 12, shell.Width - 56, 18);
+            Rectangle medalBounds = new Rectangle(shell.X + 28, footerTop + 38, shell.Width - 56, 20);
+            Rectangle controlsBounds = new Rectangle(shell.X + 28, footerTop + 68, shell.Width - 56, 20);
+            DrawTextCenteredInBounds(spriteBatch, pixel, "SABINO SOFTWARE  /  THE UNLICENSE", creditBounds, Color.White * 0.68f, 1.02f, 0.82f);
             string medalText = medals.CampaignClear
                 ? (medals.PerfectCampaign ? "PERFECT CAMPAIGN MEDAL UNLOCKED" : "CAMPAIGN CLEAR MEDAL UNLOCKED")
                 : "NO CAMPAIGN MEDALS YET";
-            DrawCenteredText(spriteBatch, pixel, medalText, Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 116f, Color.White * 0.65f, 1.35f);
+            DrawTextCenteredInBounds(spriteBatch, pixel, medalText, medalBounds, Color.White * 0.72f, 1.15f, 0.9f);
 #if ANDROID
-            DrawCenteredText(spriteBatch, pixel, "TAP A BUTTON TO NAVIGATE  HELP AND LEGAL ARE BELOW", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 82f, Color.White * 0.58f, 1.15f);
+            DrawTextCenteredInBounds(spriteBatch, pixel, "TAP A BUTTON TO SELECT", controlsBounds, Color.White * 0.64f, 1.02f, 0.82f);
 #else
-            DrawCenteredText(spriteBatch, pixel, "ENTER CONFIRM  F1 HELP  ARROWS OR POINTER NAVIGATE", Game1.ScreenSize.X / 2f, Game1.VirtualHeight - 82f, Color.White * 0.58f, 1.15f);
+            DrawTextCenteredInBounds(spriteBatch, pixel, "ARROWS OR POINTER NAVIGATE  /  ENTER CONFIRMS  /  F1 HELP", controlsBounds, Color.White * 0.64f, 1.02f, 0.82f);
 #endif
         }
 
@@ -4277,63 +4341,77 @@ namespace SpaceBurst
             Rectangle descriptionBounds = GetOptionsDescriptionBounds();
             Rectangle hintBounds = GetOptionsControlsHintBounds();
             if (slotReturnState == GameFlowState.Title)
-                DrawBackdrop(spriteBatch, pixel, 0.8f, "CONFIGURE VISUALS AND DISPLAY");
+                DrawBackdrop(spriteBatch, pixel, 0.8f);
             else
                 spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), Color.Black * 0.55f);
 
-            spriteBatch.Draw(pixel, frameBounds, Color.Black * 0.78f);
+            DrawPanel(spriteBatch, pixel, frameBounds, Color.Black * 0.84f, Color.White * 0.2f);
             string headerText = optionsSection == OptionMenuSection.ThreeDGameplay ? "OPTIONS / 3D GAMEPLAY" : "OPTIONS";
-            DrawCenteredText(spriteBatch, pixel, headerText, frameBounds.Center.X, frameBounds.Y + UiPx(22), Color.White, optionsSection == OptionMenuSection.ThreeDGameplay ? 2.35f : 3f);
+            string subtitleText = optionsSection == OptionMenuSection.ThreeDGameplay
+                ? "CHASE VIEW MOVEMENT AND AIM ASSIST"
+                : "DISPLAY  /  READABILITY  /  AUDIO  /  GAMEPLAY";
+            Rectangle headerBounds = new Rectangle(frameBounds.X + OptionsPx(24), frameBounds.Y + OptionsPx(12), frameBounds.Width - OptionsPx(48), OptionsPx(34));
+            Rectangle subtitleBounds = new Rectangle(frameBounds.X + OptionsPx(24), headerBounds.Bottom + OptionsPx(4), frameBounds.Width - OptionsPx(48), OptionsPx(18));
+            DrawTextCenteredInBounds(spriteBatch, pixel, headerText, headerBounds, Color.White, optionsSection == OptionMenuSection.ThreeDGameplay ? 2.35f : 2.75f, 1.7f);
+            DrawTextCenteredInBounds(spriteBatch, pixel, subtitleText, subtitleBounds, Color.White * 0.66f, 1.02f, 0.82f);
+            spriteBatch.Draw(pixel, new Rectangle(viewport.X, viewport.Y - OptionsPx(6), viewport.Width, 2), Color.White * 0.12f);
             OptionRowDefinition[] rows = GetOptionRows();
             Rectangle[] rowBounds = GetOptionRowBounds(viewport, rows.Length);
             for (int i = 0; i < rows.Length; i++)
             {
                 Rectangle row = rowBounds[i];
-                if (row.Bottom < viewport.Y || row.Y > viewport.Bottom)
+                if (row.Y < viewport.Y || row.Bottom > viewport.Bottom)
                     continue;
 
                 bool selected = i == optionsSelection;
-                DrawPanel(spriteBatch, pixel, row, selected ? Color.White * 0.1f : Color.White * 0.04f, selected ? Color.Orange : Color.White * 0.16f);
+                DrawPanel(spriteBatch, pixel, row, selected ? Color.White * 0.12f : Color.White * 0.045f, selected ? Color.Orange : Color.White * 0.17f);
+                if (selected)
+                    spriteBatch.Draw(pixel, new Rectangle(row.X, row.Y, OptionsPx(4), row.Height), Color.Orange * 0.95f);
 
-                Rectangle labelBounds = new Rectangle(row.X + UiPx(14), row.Y + UiPx(6), row.Width - UiPx(360), row.Height - UiPx(12));
-                Rectangle valueBounds = new Rectangle(row.Right - UiPx(280), row.Y + UiPx(6), UiPx(160), row.Height - UiPx(12));
-                float labelScale = ScaleTextToFit(rows[i].Label, labelBounds.Width, 1.02f, 0.76f);
-                float valueScale = ScaleTextToFit(rows[i].Value, valueBounds.Width, 0.98f, 0.72f);
-                BitmapFontRenderer.Draw(spriteBatch, pixel, rows[i].Label, new Vector2(labelBounds.X, labelBounds.Y + UiPx(2)), Color.White, labelScale);
+                int controlWidth = Math.Min(OptionsPx(420), Math.Max(220, row.Width * 46 / 100));
+                int controlStart = row.Right - controlWidth;
+                Rectangle labelBounds = new Rectangle(row.X + OptionsPx(16), row.Y + OptionsPx(5), Math.Max(90, controlStart - row.X - OptionsPx(30)), row.Height - OptionsPx(10));
+                float labelScale = ScaleTextToFitBounds(rows[i].Label, labelBounds.Width, labelBounds.Height, 1.24f, 0.9f);
+                DrawTextVerticallyCentered(spriteBatch, pixel, rows[i].Label, labelBounds, selected ? Color.White : Color.White * 0.9f, labelScale);
 
                 if (IsSliderOptionRow(i))
                 {
                     Rectangle trackBounds = GetOptionSliderTrackBounds(row);
-                    spriteBatch.Draw(pixel, trackBounds, Color.White * 0.1f);
+                    Rectangle valueBounds = new Rectangle(controlStart, row.Y + OptionsPx(5), OptionsPx(82), row.Height - OptionsPx(10));
+                    float valueScale = ScaleTextToFitBounds(rows[i].Value, valueBounds.Width, valueBounds.Height, 1.12f, 0.86f);
+                    DrawTextVerticallyCentered(spriteBatch, pixel, rows[i].Value, valueBounds, Color.White * 0.86f, valueScale);
+                    spriteBatch.Draw(pixel, trackBounds, Color.White * 0.13f);
                     int fillWidth = (int)MathF.Round(trackBounds.Width * MathHelper.Clamp(GetSliderRatioForOption(i), 0f, 1f));
                     if (fillWidth > 0)
-                        spriteBatch.Draw(pixel, new Rectangle(trackBounds.X, trackBounds.Y, fillWidth, trackBounds.Height), Color.Orange * 0.8f);
+                        spriteBatch.Draw(pixel, new Rectangle(trackBounds.X, trackBounds.Y, fillWidth, trackBounds.Height), Color.Orange * 0.9f);
 
-                    Rectangle knob = new Rectangle(trackBounds.X + Math.Max(0, fillWidth - UiPx(6)), trackBounds.Y - UiPx(3), UiPx(12), trackBounds.Height + UiPx(6));
+                    int knobWidth = OptionsPx(10);
+                    Rectangle knob = new Rectangle(trackBounds.X + Math.Clamp(fillWidth - knobWidth / 2, 0, Math.Max(0, trackBounds.Width - knobWidth)), trackBounds.Y - OptionsPx(4), knobWidth, trackBounds.Height + OptionsPx(8));
                     spriteBatch.Draw(pixel, knob, Color.White);
-                    if (!string.IsNullOrEmpty(rows[i].Value))
-                        BitmapFontRenderer.Draw(spriteBatch, pixel, rows[i].Value, new Vector2(valueBounds.X, valueBounds.Y + UiPx(2)), Color.White * 0.9f, valueScale);
                 }
                 else
                 {
                     Rectangle leftBounds = GetOptionStepperLeftBounds(row);
                     Rectangle rightBounds = GetOptionStepperRightBounds(row);
-                    if (!string.IsNullOrEmpty(rows[i].Value))
-                        BitmapFontRenderer.Draw(spriteBatch, pixel, rows[i].Value, new Vector2(valueBounds.X, valueBounds.Y + UiPx(2)), Color.White * 0.9f, valueScale);
+                    Rectangle valueBounds = new Rectangle(controlStart, row.Y + OptionsPx(5), Math.Max(40, leftBounds.X - controlStart - OptionsPx(12)), row.Height - OptionsPx(10));
+                    float valueScale = ScaleTextToFitBounds(rows[i].Value, valueBounds.Width, valueBounds.Height, 1.12f, 0.84f);
+                    bool isAction = rows[i].ControlKind == OptionRowControlKind.Submenu || rows[i].ControlKind == OptionRowControlKind.Action;
+                    if (!isAction && !string.IsNullOrEmpty(rows[i].Value))
+                        DrawTextVerticallyCentered(spriteBatch, pixel, rows[i].Value, valueBounds, Color.White * 0.86f, valueScale);
 
-                    string leftText = rows[i].ControlKind == OptionRowControlKind.Submenu || rows[i].ControlKind == OptionRowControlKind.Action ? string.Empty : "-";
-                    string rightText = rows[i].ControlKind switch
+                    if (isAction)
                     {
-                        OptionRowControlKind.Submenu => "OPEN",
-                        OptionRowControlKind.Action => "GO",
-                        _ => "+",
-                    };
-
-                    DrawPanel(spriteBatch, pixel, leftBounds, Color.Black * 0.18f, Color.White * 0.12f);
-                    DrawPanel(spriteBatch, pixel, rightBounds, Color.Black * 0.18f, Color.White * 0.12f);
-                    if (!string.IsNullOrEmpty(leftText))
-                        DrawCenteredText(spriteBatch, pixel, leftText, leftBounds.Center.X, leftBounds.Y + UiPx(3), Color.White * 0.78f, 0.95f);
-                    DrawCenteredText(spriteBatch, pixel, rightText, rightBounds.Center.X, rightBounds.Y + UiPx(3), Color.White * 0.78f, rightText.Length > 1 ? 0.7f : 0.95f);
+                        Rectangle actionBounds = Rectangle.Union(leftBounds, rightBounds);
+                        DrawPanel(spriteBatch, pixel, actionBounds, Color.White * 0.06f, Color.White * 0.24f);
+                        DrawTextCenteredInBounds(spriteBatch, pixel, rows[i].ControlKind == OptionRowControlKind.Submenu ? "OPEN" : "GO", actionBounds, Color.White * 0.88f, 1f, 0.82f);
+                    }
+                    else
+                    {
+                        DrawPanel(spriteBatch, pixel, leftBounds, Color.White * 0.055f, Color.White * 0.22f);
+                        DrawPanel(spriteBatch, pixel, rightBounds, Color.White * 0.055f, Color.White * 0.22f);
+                        DrawHorizontalChevron(spriteBatch, pixel, leftBounds, false, Color.White * 0.86f);
+                        DrawHorizontalChevron(spriteBatch, pixel, rightBounds, true, Color.White * 0.86f);
+                    }
                 }
             }
 
@@ -4348,32 +4426,33 @@ namespace SpaceBurst
                 DrawPanel(spriteBatch, pixel, upBounds, Color.Black * 0.22f, Color.White * 0.18f);
                 DrawPanel(spriteBatch, pixel, downBounds, Color.Black * 0.22f, Color.White * 0.18f);
                 spriteBatch.Draw(pixel, trackBounds, Color.White * 0.08f);
-                spriteBatch.Draw(pixel, thumbBounds, Color.White * 0.52f);
-                DrawCenteredText(spriteBatch, pixel, "^", upBounds.Center.X, upBounds.Y + UiPx(2), Color.White * 0.8f, 0.9f);
-                DrawCenteredText(spriteBatch, pixel, "v", downBounds.Center.X, downBounds.Y + UiPx(2), Color.White * 0.8f, 0.9f);
+                spriteBatch.Draw(pixel, thumbBounds, Color.White * 0.58f);
+                DrawVerticalChevron(spriteBatch, pixel, upBounds, false, Color.White * 0.88f);
+                DrawVerticalChevron(spriteBatch, pixel, downBounds, true, Color.White * 0.88f);
             }
 
             DrawPanel(spriteBatch, pixel, descriptionBounds, Color.Black * 0.24f, Color.White * 0.14f);
             string selectedDescription = rows.Length > 0 && optionsSelection >= 0 && optionsSelection < rows.Length
                 ? rows[optionsSelection].Description
                 : "ADJUST OPTIONS FOR THE CURRENT PLATFORM.";
-            float descriptionScale = ScaleTextToFit(selectedDescription, descriptionBounds.Width - UiPx(18), 0.84f, 0.64f);
-            BitmapFontRenderer.Draw(spriteBatch, pixel, selectedDescription, new Vector2(descriptionBounds.X + UiPx(10), descriptionBounds.Y + UiPx(8)), Color.White * 0.74f, descriptionScale);
+            Rectangle descriptionTextBounds = new Rectangle(descriptionBounds.X + OptionsPx(12), descriptionBounds.Y + OptionsPx(5), descriptionBounds.Width - OptionsPx(24), descriptionBounds.Height - OptionsPx(10));
+            float descriptionScale = ScaleTextToFitBounds(selectedDescription, descriptionTextBounds.Width, descriptionTextBounds.Height, 1f, 0.82f);
+            DrawTextVerticallyCentered(spriteBatch, pixel, selectedDescription, descriptionTextBounds, Color.White * 0.78f, descriptionScale);
 
             string hintText =
 #if ANDROID
-                "DRAG THE LIST OR SCROLLBAR. DRAG SLIDERS. RELEASE ON A CONTROL TO APPLY IT. ANDROID BACK DISCARDS.";
+                "DRAG TO SCROLL  /  TAP OR DRAG TO ADJUST  /  BACK DISCARDS";
 #else
-                "ARROWS NAVIGATE. WHEEL OR DRAG SCROLLS. CLICK-RELEASE ACTIVATES. ENTER ADJUSTS THE SELECTED ROW.";
+                "ARROWS SELECT  /  LEFT RIGHT ADJUST  /  ENTER CONFIRMS  /  POINTER AND WHEEL SUPPORTED";
 #endif
-            float hintScale = ScaleTextToFit(hintText, hintBounds.Width, 0.76f, 0.58f);
-            DrawCenteredText(spriteBatch, pixel, hintText, hintBounds.Center.X, hintBounds.Y + UiPx(2), Color.White * 0.62f, hintScale);
+            float hintScale = ScaleTextToFitBounds(hintText, hintBounds.Width, hintBounds.Height, 0.96f, 0.78f);
+            DrawTextCenteredInBounds(spriteBatch, pixel, hintText, hintBounds, Color.White * 0.66f, hintScale, hintScale);
 
             (Rectangle discardBounds, Rectangle applyBounds) = GetOptionActionBounds();
             DrawPanel(spriteBatch, pixel, discardBounds, Color.Black * 0.22f, Color.Orange * 0.85f);
             DrawPanel(spriteBatch, pixel, applyBounds, Color.Black * 0.18f, Color.LimeGreen * 0.78f);
-            DrawCenteredText(spriteBatch, pixel, "X DISCARD", discardBounds.Center.X, discardBounds.Y + UiPx(8), Color.White, 1.02f);
-            DrawCenteredText(spriteBatch, pixel, "V APPLY", applyBounds.Center.X, applyBounds.Y + UiPx(8), Color.White, 1.02f);
+            DrawTextCenteredInBounds(spriteBatch, pixel, "DISCARD", discardBounds, Color.White, 1.2f, 0.9f);
+            DrawTextCenteredInBounds(spriteBatch, pixel, "APPLY", applyBounds, Color.White, 1.2f, 0.9f);
 #if ANDROID
             if (audioQualityDialogOpen)
                 DrawAudioQualityDialog(spriteBatch, pixel);
@@ -4392,7 +4471,7 @@ namespace SpaceBurst
             int frameMarginX = UiPx(90);
             int frameMarginY = UiPx(90);
             if (slotReturnState == GameFlowState.Title)
-                DrawBackdrop(spriteBatch, pixel, 0.74f, saving ? "STORE A RUN SNAPSHOT" : "RESTORE A RUN SNAPSHOT");
+                DrawBackdrop(spriteBatch, pixel, 0.74f);
             else
                 spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), Color.Black * 0.55f);
 
@@ -4431,7 +4510,7 @@ namespace SpaceBurst
         private void DrawHelp(SpriteBatch spriteBatch, Texture2D pixel)
         {
             if (helpReturnState == GameFlowState.Title)
-                DrawBackdrop(spriteBatch, pixel, 0.78f, "RUN THE TUTORIAL AGAIN FROM PAGE 1 OR OPEN ABOUT / LEGAL");
+                DrawBackdrop(spriteBatch, pixel, 0.78f);
             else
                 spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), Color.Black * 0.55f);
 
@@ -5044,9 +5123,8 @@ namespace SpaceBurst
             Color border = selected ? Color.Orange : Color.White * 0.35f;
 
             DrawPanel(spriteBatch, pixel, button.Bounds, fill, border);
-            Vector2 textSize = BitmapFontRenderer.Measure(button.Text, 1.8f);
-            Vector2 textPosition = new Vector2(button.Bounds.Center.X - textSize.X / 2f, button.Bounds.Center.Y - textSize.Y / 2f);
-            BitmapFontRenderer.Draw(spriteBatch, pixel, button.Text, textPosition, Color.White, 1.8f);
+            Rectangle textBounds = new Rectangle(button.Bounds.X + 14, button.Bounds.Y + 6, Math.Max(1, button.Bounds.Width - 28), Math.Max(1, button.Bounds.Height - 12));
+            DrawTextCenteredInBounds(spriteBatch, pixel, button.Text, textBounds, Color.White, 1.65f, 0.9f);
         }
 
         private static float ScaleTextToFit(string text, float maxWidth, float preferredScale, float minimumScale)
@@ -5060,6 +5138,73 @@ namespace SpaceBurst
 
             float ratio = maxWidth / measuredWidth;
             return MathHelper.Clamp(preferredScale * ratio, minimumScale, preferredScale);
+        }
+
+        private static float ScaleTextToFitBounds(string text, float maxWidth, float maxHeight, float preferredScale, float minimumScale)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return preferredScale;
+
+            Vector2 preferredSize = BitmapFontRenderer.Measure(text, preferredScale);
+            if (preferredSize.X <= maxWidth && preferredSize.Y <= maxHeight)
+                return preferredScale;
+
+            float widthRatio = preferredSize.X <= 0f ? 1f : maxWidth / preferredSize.X;
+            float heightRatio = preferredSize.Y <= 0f ? 1f : maxHeight / preferredSize.Y;
+            float scale = Math.Max(minimumScale, preferredScale * Math.Min(widthRatio, heightRatio) * 0.98f);
+            Vector2 minimumSize = BitmapFontRenderer.Measure(text, scale);
+            if (minimumSize.X > maxWidth || minimumSize.Y > maxHeight)
+            {
+                float secondWidthRatio = minimumSize.X <= 0f ? 1f : maxWidth / minimumSize.X;
+                float secondHeightRatio = minimumSize.Y <= 0f ? 1f : maxHeight / minimumSize.Y;
+                scale = Math.Max(0.1f, scale * Math.Min(secondWidthRatio, secondHeightRatio) * 0.98f);
+            }
+
+            return Math.Min(preferredScale, scale);
+        }
+
+        private static void DrawTextCenteredInBounds(SpriteBatch spriteBatch, Texture2D pixel, string text, Rectangle bounds, Color color, float preferredScale, float minimumScale)
+        {
+            float scale = ScaleTextToFitBounds(text, bounds.Width, bounds.Height, preferredScale, minimumScale);
+            Vector2 size = BitmapFontRenderer.Measure(text, scale);
+            Vector2 position = new Vector2(bounds.Center.X - size.X / 2f, bounds.Center.Y - size.Y / 2f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, text, position, color, scale);
+        }
+
+        private static void DrawTextVerticallyCentered(SpriteBatch spriteBatch, Texture2D pixel, string text, Rectangle bounds, Color color, float scale)
+        {
+            Vector2 size = BitmapFontRenderer.Measure(text, scale);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, text, new Vector2(bounds.X, bounds.Center.Y - size.Y / 2f), color, scale);
+        }
+
+        private static void DrawHorizontalChevron(SpriteBatch spriteBatch, Texture2D pixel, Rectangle bounds, bool pointsRight, Color color)
+        {
+            int arm = Math.Max(3, Math.Min(bounds.Width, bounds.Height) / 7);
+            int thickness = Math.Max(2, arm / 3);
+            int centerX = bounds.Center.X;
+            int centerY = bounds.Center.Y;
+            int direction = pointsRight ? 1 : -1;
+            for (int i = 0; i <= arm; i++)
+            {
+                int x = centerX - direction * arm + direction * i;
+                spriteBatch.Draw(pixel, new Rectangle(x - thickness / 2, centerY - arm + i - thickness / 2, thickness, thickness), color);
+                spriteBatch.Draw(pixel, new Rectangle(x - thickness / 2, centerY + arm - i - thickness / 2, thickness, thickness), color);
+            }
+        }
+
+        private static void DrawVerticalChevron(SpriteBatch spriteBatch, Texture2D pixel, Rectangle bounds, bool pointsDown, Color color)
+        {
+            int arm = Math.Max(3, Math.Min(bounds.Width, bounds.Height) / 7);
+            int thickness = Math.Max(2, arm / 3);
+            int centerX = bounds.Center.X;
+            int centerY = bounds.Center.Y;
+            int direction = pointsDown ? 1 : -1;
+            for (int i = 0; i <= arm; i++)
+            {
+                int y = centerY - direction * arm + direction * i;
+                spriteBatch.Draw(pixel, new Rectangle(centerX - arm + i - thickness / 2, y - thickness / 2, thickness, thickness), color);
+                spriteBatch.Draw(pixel, new Rectangle(centerX + arm - i - thickness / 2, y - thickness / 2, thickness, thickness), color);
+            }
         }
 
         private void DrawCenteredText(SpriteBatch spriteBatch, Texture2D pixel, string text, float x, float y, Color color, float scale)

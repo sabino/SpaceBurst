@@ -7,6 +7,14 @@ namespace SpaceBurst
     static class ProceduralAudioSynth
     {
         private static readonly float[] MidiFrequencies = BuildMidiFrequencies();
+        private static readonly int[] UiConfirmNotes = { 76, 83 };
+        private static readonly int[] UiCancelNotes = { 67, 60 };
+        private static readonly int[] PickupNotes = { 72, 76, 79 };
+        private static readonly int[] PickupBrightNotes = { 76, 81, 84 };
+        private static readonly int[] UpgradeNotes = { 60, 64, 67, 72 };
+        private static readonly int[] BossCueNotes = { 45, 45, 40 };
+        private static readonly int[] PlayerDamageNotes = { 48, 43, 36 };
+        private static readonly int[] RewindStartNotes = { 52, 59, 64 };
 
         public static SoundEffect CreateEffect(int sampleRate, float durationSeconds, SynthPatchDefinition patch)
         {
@@ -18,6 +26,16 @@ namespace SpaceBurst
         {
             byte[] pcm = RenderMonoPcm(sampleRate, durationSeconds, t => RenderStemSample(theme, kind, t, durationSeconds));
             return new SoundEffect(pcm, sampleRate, AudioChannels.Mono);
+        }
+
+        internal static float RenderEffectPreviewSample(float time, float durationSeconds, SynthPatchDefinition patch)
+        {
+            return RenderPatchSample(time, durationSeconds, patch);
+        }
+
+        internal static float RenderMusicPreviewSample(MusicThemeDefinition theme, MusicStemKind kind, float time, float durationSeconds)
+        {
+            return RenderStemSample(theme, kind, time, durationSeconds);
         }
 
         public static SynthPatchDefinition PulseShotPatch(float colorShift = 0f)
@@ -170,6 +188,9 @@ namespace SpaceBurst
 
         private static float RenderPatchSample(float time, float durationSeconds, SynthPatchDefinition patch)
         {
+            if (TryRenderAuthoredEffect(time, durationSeconds, patch, out float authoredSample))
+                return authoredSample;
+
             float frequency = GetPatchFrequency(patch.Name, time);
             float vibrato = patch.VibratoDepth <= 0f ? 0f : OscillatorSin(time * patch.VibratoFrequency * MathF.Tau) * patch.VibratoDepth;
             float sweep = 1f + patch.SweepAmount * (1f - MathHelper.Clamp(time / MathF.Max(durationSeconds, 0.001f), 0f, 1f));
@@ -180,6 +201,149 @@ namespace SpaceBurst
             float waveformB = SampleWaveform(patch.SecondaryWaveform, frequencyB, time, 0.5f);
             float noise = patch.NoiseMix <= 0f ? 0f : (HashNoise(time * 4800f) * 2f - 1f) * patch.NoiseMix;
             return ApplyDrive((waveformA * 0.68f + waveformB * 0.28f + noise) * envelope, patch.Drive) * 0.7f;
+        }
+
+        private static bool TryRenderAuthoredEffect(float time, float durationSeconds, SynthPatchDefinition patch, out float sample)
+        {
+            switch (patch.Name)
+            {
+                case "UiConfirm":
+                    sample = RenderNoteSequence(time, durationSeconds, UiConfirmNotes, SynthWaveform.Pulse, 0.54f, 1f + patch.Detune * 0.2f);
+                    return true;
+                case "UiCancel":
+                    sample = RenderNoteSequence(time, durationSeconds, UiCancelNotes, SynthWaveform.Square, 0.48f, 1f + patch.Detune * 0.2f);
+                    return true;
+                case "Pickup":
+                    sample = RenderNoteSequence(time, durationSeconds, PickupNotes, SynthWaveform.Pulse, 0.54f, 1f + patch.Detune * 0.2f);
+                    return true;
+                case "PickupBright":
+                    sample = RenderNoteSequence(time, durationSeconds, PickupBrightNotes, SynthWaveform.Pulse, 0.58f, 1f + patch.Detune * 0.2f);
+                    return true;
+                case "Upgrade":
+                    sample = RenderNoteSequence(time, durationSeconds, UpgradeNotes, SynthWaveform.Pulse, 0.62f, 1f + patch.Detune * 0.2f);
+                    return true;
+                case "BossCue":
+                    sample = RenderNoteSequence(time, durationSeconds, BossCueNotes, SynthWaveform.Square, 0.66f, 1f + patch.Detune * 0.2f);
+                    return true;
+                case "PlayerDamage":
+                    sample = RenderNoteSequence(time, durationSeconds, PlayerDamageNotes, SynthWaveform.Saw, 0.62f, 1f + patch.Detune * 0.2f);
+                    return true;
+                case "RewindStart":
+                    sample = RenderNoteSequence(time, durationSeconds, RewindStartNotes, SynthWaveform.Triangle, 0.5f, 1f + patch.Detune * 0.2f);
+                    return true;
+                case "Impact":
+                    sample = RenderImpact(time, durationSeconds, patch);
+                    return true;
+                case "Explosion":
+                    sample = RenderExplosion(time, durationSeconds, patch);
+                    return true;
+                case "Transition":
+                    sample = RenderTransition(time, durationSeconds);
+                    return true;
+                case "Pulse":
+                    sample = RenderWeaponCue(time, durationSeconds, 920f, 520f, SynthWaveform.Pulse, 0.2f, 0.025f, patch);
+                    return true;
+                case "Spread":
+                    sample = RenderWeaponCue(time, durationSeconds, 390f, 210f, SynthWaveform.Square, 0.5f, 0.14f, patch);
+                    return true;
+                case "Laser":
+                    sample = RenderWeaponCue(time, durationSeconds, 620f, 1040f, SynthWaveform.Saw, 0.5f, 0.015f, patch);
+                    return true;
+                case "Plasma":
+                    sample = RenderWeaponCue(time, durationSeconds, 280f, 180f, SynthWaveform.Sine, 0.5f, 0.01f, patch);
+                    return true;
+                case "Missile":
+                    sample = RenderWeaponCue(time, durationSeconds, 210f, 92f, SynthWaveform.Saw, 0.5f, 0.18f, patch);
+                    return true;
+                case "Rail":
+                    sample = RenderWeaponCue(time, durationSeconds, 1320f, 360f, SynthWaveform.Pulse, 0.16f, 0.02f, patch);
+                    return true;
+                case "Arc":
+                    sample = RenderWeaponCue(time, durationSeconds, 560f, 760f, SynthWaveform.Square, 0.5f, 0.12f, patch);
+                    return true;
+                case "Blade":
+                    sample = RenderWeaponCue(time, durationSeconds, 820f, 430f, SynthWaveform.Triangle, 0.5f, 0.025f, patch);
+                    return true;
+                case "Drone":
+                    sample = RenderWeaponCue(time, durationSeconds, 720f, 560f, SynthWaveform.Pulse, 0.28f, 0.015f, patch);
+                    return true;
+                case "Fortress":
+                    sample = RenderWeaponCue(time, durationSeconds, 250f, 138f, SynthWaveform.Square, 0.5f, 0.055f, patch);
+                    return true;
+                case "EnemyShot":
+                    sample = RenderWeaponCue(time, durationSeconds, 330f, 155f, SynthWaveform.Square, 0.5f, 0.09f, patch);
+                    return true;
+                default:
+                    sample = 0f;
+                    return false;
+            }
+        }
+
+        private static float RenderNoteSequence(float time, float durationSeconds, int[] midiNotes, SynthWaveform waveform, float gain, float pitchScale)
+        {
+            float safeDuration = Math.Max(0.001f, durationSeconds);
+            float noteDuration = safeDuration / Math.Max(1, midiNotes.Length);
+            int noteIndex = Math.Clamp((int)(time / noteDuration), 0, midiNotes.Length - 1);
+            float localTime = Math.Max(0f, time - noteIndex * noteDuration);
+            float notePhase = MathHelper.Clamp(localTime / noteDuration, 0f, 1f);
+            float attack = MathHelper.Clamp(localTime / 0.004f, 0f, 1f);
+            float release = 1f - MathHelper.Clamp((notePhase - 0.68f) / 0.32f, 0f, 1f);
+            float frequency = MidiToFrequency(midiNotes[noteIndex]) * pitchScale;
+            float primary = SampleWaveform(waveform, frequency, localTime, 0.24f) * 0.72f;
+            float octave = SampleWaveform(SynthWaveform.Sine, frequency * 2f, localTime, 0.5f) * 0.2f;
+            float sub = SampleWaveform(SynthWaveform.Triangle, frequency * 0.5f, localTime, 0.5f) * 0.08f;
+            return ApplyDrive((primary + octave + sub) * attack * release, 1.08f) * gain;
+        }
+
+        private static float RenderWeaponCue(float time, float durationSeconds, float startFrequency, float endFrequency, SynthWaveform waveform, float pulseWidth, float noiseMix, SynthPatchDefinition patch)
+        {
+            float safeDuration = Math.Max(0.001f, durationSeconds);
+            float progress = MathHelper.Clamp(time / safeDuration, 0f, 1f);
+            float detuneScale = 1f + patch.Detune * 1.8f;
+            float cycles = (startFrequency * time + 0.5f * (endFrequency - startFrequency) * time * time / safeDuration) * detuneScale;
+            float currentFrequency = MathHelper.Lerp(startFrequency, endFrequency, progress) * detuneScale;
+            float phaseTime = cycles / Math.Max(1f, currentFrequency);
+            float primary = SampleWaveform(waveform, currentFrequency, phaseTime, pulseWidth) * 0.76f;
+            float harmonic = SampleWaveform(SynthWaveform.Sine, currentFrequency * 2f, phaseTime, 0.5f) * 0.18f;
+            float noise = (HashNoise(time * 13200f + patch.Detune * 91f) * 2f - 1f) * noiseMix;
+            float attack = MathHelper.Clamp(time / 0.0025f, 0f, 1f);
+            float envelope = attack * MathF.Pow(Math.Max(0f, 1f - progress), 1.35f);
+            return ApplyDrive((primary + harmonic + noise) * envelope, Math.Max(1f, patch.Drive)) * 0.64f;
+        }
+
+        private static float RenderImpact(float time, float durationSeconds, SynthPatchDefinition patch)
+        {
+            float progress = MathHelper.Clamp(time / Math.Max(0.001f, durationSeconds), 0f, 1f);
+            float envelope = MathHelper.Clamp(time / 0.0015f, 0f, 1f) * MathF.Pow(1f - progress, 2.6f);
+            float variation = MathF.Abs(patch.SweepAmount + 0.1f);
+            float click = (HashNoise(time * 18000f + variation * 970f) * 2f - 1f) * 0.58f;
+            float body = OscillatorSin(time * (165f + variation * 420f) * MathF.Tau) * 0.54f;
+            return ApplyDrive((click + body) * envelope, 1.18f) * 0.68f;
+        }
+
+        private static float RenderExplosion(float time, float durationSeconds, SynthPatchDefinition patch)
+        {
+            float safeDuration = Math.Max(0.001f, durationSeconds);
+            float progress = MathHelper.Clamp(time / safeDuration, 0f, 1f);
+            float attack = MathHelper.Clamp(time / 0.004f, 0f, 1f);
+            float envelope = attack * MathF.Pow(1f - progress, 1.7f);
+            float color = MathHelper.Clamp(1f + (MathF.Abs(patch.SweepAmount) - 0.36f) * 1.2f, 0.88f, 1.12f);
+            float cycles = 104f * color * time + 0.5f * (38f * color - 104f * color) * time * time / safeDuration;
+            float thump = OscillatorSin(cycles * MathF.Tau) * 0.68f;
+            float crack = (HashNoise(time * 11800f + color * 31f) * 2f - 1f) * 0.46f;
+            float rumble = (HashNoise(time * 2100f + color * 17f) * 2f - 1f) * 0.28f;
+            return ApplyDrive((thump + crack + rumble) * envelope, 1.3f) * 0.72f;
+        }
+
+        private static float RenderTransition(float time, float durationSeconds)
+        {
+            float safeDuration = Math.Max(0.001f, durationSeconds);
+            float progress = MathHelper.Clamp(time / safeDuration, 0f, 1f);
+            float envelope = MathF.Sin(progress * MathF.PI);
+            float cycles = 160f * time + 0.5f * (620f - 160f) * time * time / safeDuration;
+            float tone = OscillatorSin(cycles * MathF.Tau) * 0.34f;
+            float air = (HashNoise(time * (3200f + progress * 9200f)) * 2f - 1f) * 0.44f;
+            return ApplyDrive((tone + air) * envelope, 1.08f) * 0.56f;
         }
 
         private static float RenderStemSample(MusicThemeDefinition theme, MusicStemKind kind, float time, float durationSeconds)
@@ -222,32 +386,31 @@ namespace SpaceBurst
             float time,
             float beatInBar)
         {
-            float drums = RenderDrums(theme, barIndex, barSixteenth, sixteenthPhase, time) * 0.48f;
-            float bass = RenderBass(theme, chordDegree, barIndex, barEighth, eighthPhase, time) * 0.56f;
-            float pad = RenderPad(theme, chordDegree, time, beatInBar) * 0.78f;
-            float pulse = RenderPulse(theme, chordDegree, barIndex, barSixteenth, sixteenthPhase, time) * 0.42f;
+            float drums = RenderDrums(theme, barIndex, barSixteenth, sixteenthPhase, time) * 0.78f;
+            float bass = RenderBass(theme, chordDegree, barIndex, barEighth, eighthPhase, time) * 0.68f;
+            float pad = RenderPad(theme, chordDegree, time, beatInBar) * 0.28f;
+            float pulse = RenderPulse(theme, chordDegree, barIndex, barSixteenth, sixteenthPhase, time) * 0.5f;
             float boss = theme.Id.EndsWith("-boss", StringComparison.OrdinalIgnoreCase)
-                ? RenderBoss(theme, chordDegree, barIndex, barEighth, eighthPhase, time) * 0.5f
+                ? RenderBoss(theme, chordDegree, barIndex, barEighth, eighthPhase, time) * 0.46f
                 : 0f;
-            return Math.Clamp((drums + bass + pad + pulse + boss) * 0.62f, -1f, 1f);
+            return Math.Clamp((drums + bass + pad + pulse + boss) * 0.66f, -1f, 1f);
         }
 
         private static float RenderDrums(MusicThemeDefinition theme, int barIndex, int barSixteenth, float sixteenthPhase, float time)
         {
-            bool kickHit = barSixteenth == 0
-                || (barSixteenth == 8 && theme.RhythmDensity > 0.34f)
-                || (barSixteenth == 4 && theme.Syncopation > 0.38f && PatternChance(theme.ThemeSeed, barIndex, 4) > 0.35f)
-                || (barSixteenth == 12 && theme.RhythmDensity > 0.7f && PatternChance(theme.ThemeSeed, barIndex, 12) > 0.42f);
+            bool kickHit = barSixteenth == 0 || barSixteenth == 8
+                || (barSixteenth == 12 && theme.RhythmDensity >= 0.78f && (barIndex & 1) == 1);
             bool snareHit = barSixteenth == 4 || barSixteenth == 12;
-            bool ghostHit = (barSixteenth == 10 || barSixteenth == 14) && theme.Syncopation > 0.48f && PatternChance(theme.ThemeSeed + 13, barIndex, barSixteenth) > 0.55f;
-            bool hatHit = (barSixteenth % 2 == 0 && theme.RhythmDensity > 0.2f)
-                || (barSixteenth % 2 == 1 && theme.RhythmDensity > 0.58f && PatternChance(theme.ThemeSeed + 29, barIndex, barSixteenth) > 0.32f);
+            bool ghostHit = barSixteenth == 14 && theme.RhythmDensity >= 0.82f && (barIndex & 1) == 1;
+            bool hatHit = (barSixteenth & 1) == 0 || (theme.RhythmDensity >= 0.72f && (barSixteenth & 3) == 3);
+            float sixteenthSeconds = 60f / Math.Max(40f, theme.Tempo) * 0.25f;
+            float localSeconds = sixteenthPhase * sixteenthSeconds;
 
-            float kick = kickHit ? DrumKick(sixteenthPhase) : 0f;
-            float snare = snareHit ? DrumSnare(sixteenthPhase) : 0f;
-            float ghost = ghostHit ? DrumSnare(sixteenthPhase) * 0.26f : 0f;
-            float hat = hatHit ? DrumHat(sixteenthPhase, theme.RhythmDensity) : 0f;
-            return Math.Clamp(kick + snare + ghost + hat, -1f, 1f) * 0.8f;
+            float kick = kickHit ? DrumKick(localSeconds) : 0f;
+            float snare = snareHit ? DrumSnare(localSeconds) : 0f;
+            float ghost = ghostHit ? DrumSnare(localSeconds) * 0.2f : 0f;
+            float hat = hatHit ? DrumHat(localSeconds, theme.RhythmDensity) : 0f;
+            return Math.Clamp(kick + snare + ghost + hat, -1f, 1f) * 0.86f;
         }
 
         private static float RenderBass(MusicThemeDefinition theme, int chordDegree, int barIndex, int barEighth, float eighthPhase, float time)
@@ -310,8 +473,8 @@ namespace SpaceBurst
             if (patternValue <= -99)
                 return 0f;
 
-            float gateChance = PatternChance(theme.ThemeSeed + 41, barIndex, barEighth);
-            if (gateChance > theme.LeadDensity)
+            int phraseStep = barIndex * 8 + barEighth;
+            if (theme.LeadDensity < 0.4f && phraseStep % 4 == 3)
                 return 0f;
 
             int note = GetScaleNote(theme, chordDegree + patternValue, theme.LeadOctave);
@@ -363,24 +526,34 @@ namespace SpaceBurst
             return ApplyDrive((body + edge + sub) * gate, 1.18f + theme.BossWeight * 0.2f) * 0.24f;
         }
 
-        private static float DrumKick(float phase)
+        private static float DrumKick(float localSeconds)
         {
-            float pitch = MathHelper.Lerp(90f, 34f, MathHelper.Clamp(phase * 1.8f, 0f, 1f));
-            return OscillatorSin(phase * pitch) * Decay(phase * 10f) * 0.9f;
+            const float startFrequency = 118f;
+            const float endFrequency = 42f;
+            const float sweepSeconds = 0.14f;
+            float sweepTime = Math.Min(localSeconds, sweepSeconds);
+            float cycles = startFrequency * sweepTime + 0.5f * (endFrequency - startFrequency) * sweepTime * sweepTime / sweepSeconds;
+            if (localSeconds > sweepSeconds)
+                cycles += endFrequency * (localSeconds - sweepSeconds);
+
+            float click = localSeconds < 0.008f ? (1f - localSeconds / 0.008f) * 0.16f : 0f;
+            return (OscillatorSin(cycles * MathF.Tau) * 0.92f + click) * Decay(localSeconds * 18f);
         }
 
-        private static float DrumSnare(float phase)
+        private static float DrumSnare(float localSeconds)
         {
-            float envelope = Decay(phase * 14f);
-            float tone = OscillatorSin(phase * 210f) * 0.18f;
-            float noise = (HashNoise(phase * 12000f) * 2f - 1f) * 0.82f;
-            return (tone + noise) * envelope * 0.44f;
+            float envelope = Decay(localSeconds * 24f);
+            float tone = OscillatorSin(localSeconds * 190f * MathF.Tau) * 0.24f;
+            float noise = (HashNoise(localSeconds * 13800f) * 2f - 1f) * 0.76f;
+            return (tone + noise) * envelope * 0.48f;
         }
 
-        private static float DrumHat(float phase, float density)
+        private static float DrumHat(float localSeconds, float density)
         {
-            float color = 0.06f + density * 0.05f;
-            return (HashNoise(phase * 18000f) * 2f - 1f) * Decay(phase * (22f + density * 12f)) * color;
+            float color = 0.07f + density * 0.045f;
+            float brightNoise = HashNoise(localSeconds * 21000f) * 2f - 1f;
+            float darkNoise = HashNoise(localSeconds * 9400f + 0.37f) * 2f - 1f;
+            return (brightNoise - darkNoise * 0.55f) * Decay(localSeconds * (54f + density * 18f)) * color;
         }
 
         private static float ApplySwing(float beatInBar, float swingAmount)

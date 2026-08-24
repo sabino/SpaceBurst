@@ -47,6 +47,7 @@ namespace SpaceBurst
         private int virtualHeight = VirtualBaseHeight;
         private readonly string capturePath;
         private readonly string captureMode;
+        private readonly DesktopDisplayMode startupDisplayMode;
         private bool capturePrepared;
         private bool captureCompleted;
         private float captureDelaySeconds = 1.2f;
@@ -272,6 +273,9 @@ namespace SpaceBurst
             captureMode = PlatformServices.Capabilities.SupportsScreenCapture
                 ? Environment.GetEnvironmentVariable("SPACEBURST_CAPTURE_MODE") ?? string.Empty
                 : string.Empty;
+            startupDisplayMode = string.IsNullOrWhiteSpace(capturePath)
+                ? startupOptions.DisplayMode
+                : DesktopDisplayMode.Windowed;
             graphics = new GraphicsDeviceManager(this);
             Content.RootDirectory = "Content";
 
@@ -283,7 +287,7 @@ namespace SpaceBurst
             {
                 graphics.HardwareModeSwitch = false;
                 Window.AllowUserResizing = true;
-                ConfigureDesktopDisplayMode(startupOptions.DisplayMode, false);
+                ConfigureDesktopDisplayMode(startupDisplayMode, false);
             }
 #endif
         }
@@ -292,7 +296,7 @@ namespace SpaceBurst
         {
 #if !ANDROID
             if (PlatformServices.Capabilities.SupportsWindowedDisplayModes)
-                ConfigureDesktopDisplayMode(startupOptions.DisplayMode, true);
+                ConfigureDesktopDisplayMode(startupDisplayMode, true);
 
             if (PlatformServices.Capabilities.SupportsTextInput)
                 Window.TextInput += OnWindowTextInput;
@@ -948,6 +952,11 @@ namespace SpaceBurst
                 captureDelaySeconds = 5.5f;
                 if (int.TryParse(mode.Substring(5), out int slotNumber) && slotNumber > 0)
                     campaignDirector.LoadRunSlotForCapture(slotNumber);
+            }
+            else if (string.Equals(mode, "options", StringComparison.Ordinal))
+            {
+                captureDelaySeconds = 1.2f;
+                campaignDirector.OpenOptionsForCapture();
             }
             else
             {
