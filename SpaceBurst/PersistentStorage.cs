@@ -170,6 +170,14 @@ namespace SpaceBurst
                     options.HasMigrated3DHorizontalDefault = true;
                 }
 
+                bool migratedAudioMixDefault = root.TryGetProperty(nameof(OptionsData.HasMigratedAudioMixDefault), out JsonElement audioMixMigration)
+                    && audioMixMigration.ValueKind == JsonValueKind.True;
+                bool hasPersistedAudioMix = root.TryGetProperty(nameof(OptionsData.MusicVolume), out _)
+                    && root.TryGetProperty(nameof(OptionsData.SfxVolume), out _);
+                MigrateAudioMixDefaults(options, migratedAudioMixDefault, hasPersistedAudioMix);
+
+                NormalizeAudioVolumes(options);
+
                 return options;
             }
             catch
@@ -185,7 +193,33 @@ namespace SpaceBurst
 
             options.UiScalePercent = UiScaleHelper.ClampUiScalePercent(options.UiScalePercent);
             options.TouchControlsOpacity = UiScaleHelper.ClampTouchControlsOpacity(options.TouchControlsOpacity);
+            options.HasMigratedAudioMixDefault = true;
+            NormalizeAudioVolumes(options);
             SaveFile(OptionsKey, options);
+        }
+
+        internal static void MigrateAudioMixDefaults(OptionsData options, bool migrationRecorded, bool hasPersistedAudioMix)
+        {
+            if (options == null)
+                return;
+
+            if (!migrationRecorded
+                && hasPersistedAudioMix
+                && MathF.Abs(options.MusicVolume - OptionsData.LegacyDefaultMusicVolume) <= 0.001f
+                && MathF.Abs(options.SfxVolume - OptionsData.LegacyDefaultSfxVolume) <= 0.001f)
+            {
+                options.MusicVolume = OptionsData.DefaultMusicVolume;
+                options.SfxVolume = OptionsData.DefaultSfxVolume;
+            }
+
+            options.HasMigratedAudioMixDefault = true;
+        }
+
+        private static void NormalizeAudioVolumes(OptionsData options)
+        {
+            options.MasterVolume = Math.Clamp(options.MasterVolume, 0f, 1f);
+            options.MusicVolume = Math.Clamp(options.MusicVolume, 0f, 1f);
+            options.SfxVolume = Math.Clamp(options.SfxVolume, 0f, 1f);
         }
 
         public static MedalProgress LoadMedals()

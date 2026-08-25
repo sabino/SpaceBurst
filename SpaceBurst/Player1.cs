@@ -318,12 +318,12 @@ namespace SpaceBurst
             {
                 case PickupKind.XpShard:
                     PlayerStatus.RunProgress.AddXp(pickup.Amount);
-                    TriggerPickupFeedback(new Color(86, 240, 255), 0.44f + pickup.Amount * 0.06f, true);
+                    TriggerPickupFeedback(new Color(86, 240, 255), 0.44f + pickup.Amount * 0.06f, true, FeedbackEventType.Pickup);
                     break;
 
                 case PickupKind.ScrapCache:
                     PlayerStatus.RunProgress.AddScrap(pickup.Amount);
-                    TriggerPickupFeedback(new Color(255, 176, 87), 0.5f + pickup.Amount * 0.08f, true);
+                    TriggerPickupFeedback(new Color(255, 176, 87), 0.5f + pickup.Amount * 0.08f, true, FeedbackEventType.Pickup);
                     break;
 
                 default:
@@ -348,7 +348,11 @@ namespace SpaceBurst
 
             invulnerabilityTimer = Math.Max(invulnerabilityTimer, 0.2f);
             Color accent = ColorUtil.ParseHex(style.AccentColor, Color.Orange);
-            TriggerPickupFeedback(accent, immediateUpgrade ? 0.9f : 0.55f, immediateUpgrade);
+            TriggerPickupFeedback(
+                accent,
+                immediateUpgrade ? 0.9f : 0.55f,
+                immediateUpgrade,
+                immediateUpgrade ? FeedbackEventType.Upgrade : FeedbackEventType.Pickup);
         }
 
         public void RefreshLoadout()
@@ -435,12 +439,12 @@ namespace SpaceBurst
             ClampToArena();
         }
 
-        private void TriggerPickupFeedback(Color accent, float intensity, bool major)
+        private void TriggerPickupFeedback(Color accent, float intensity, bool majorVisual, FeedbackEventType feedbackType)
         {
             invulnerabilityTimer = Math.Max(invulnerabilityTimer, 0.2f);
-            EntityManager.SpawnShockwave(Position, accent * (major ? 0.28f : 0.18f), 10f, major ? 74f : 52f, major ? 0.22f : 0.18f);
-            EntityManager.SpawnFlash(Position, accent * 0.22f, 14f, major ? 66f : 54f, 0.14f);
-            Game1.Instance.Feedback?.Handle(new FeedbackEvent(major ? FeedbackEventType.Upgrade : FeedbackEventType.Pickup, Position, intensity, ActiveStyle, major));
+            EntityManager.SpawnShockwave(Position, accent * (majorVisual ? 0.28f : 0.18f), 10f, majorVisual ? 74f : 52f, majorVisual ? 0.22f : 0.18f);
+            EntityManager.SpawnFlash(Position, accent * 0.22f, 14f, majorVisual ? 66f : 54f, 0.14f);
+            Game1.Instance.Feedback?.Handle(new FeedbackEvent(feedbackType, Position, intensity, ActiveStyle, majorVisual));
         }
 
         internal void BeginChaseEntryRecenter()

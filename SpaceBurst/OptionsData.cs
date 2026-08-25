@@ -2,6 +2,11 @@ namespace SpaceBurst
 {
     sealed class OptionsData
     {
+        internal const float LegacyDefaultMusicVolume = 0.8f;
+        internal const float LegacyDefaultSfxVolume = 0.95f;
+        internal const float DefaultMusicVolume = 0.9f;
+        internal const float DefaultSfxVolume = 0.7f;
+
         public bool ShowHelpHints { get; set; } = true;
         public bool TutorialCompleted { get; set; }
         public bool AutoUpgradeDraft { get; set; }
@@ -36,8 +41,9 @@ namespace SpaceBurst
         public bool EnableShockwaves { get; set; } = true;
         public bool EnableNeonOutlines { get; set; } = true;
         public float MasterVolume { get; set; } = 1f;
-        public float MusicVolume { get; set; } = 0.8f;
-        public float SfxVolume { get; set; } = 0.95f;
+        public float MusicVolume { get; set; } = DefaultMusicVolume;
+        public float SfxVolume { get; set; } = DefaultSfxVolume;
+        public bool HasMigratedAudioMixDefault { get; set; } = true;
 #if ANDROID || BLAZORGL
         public AudioQualityPreset AudioQualityPreset { get; set; } = AudioQualityPreset.Reduced;
         public ScreenShakeStrength ScreenShakeStrength { get; set; } = ScreenShakeStrength.Reduced;

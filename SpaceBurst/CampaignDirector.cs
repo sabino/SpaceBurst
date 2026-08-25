@@ -3313,6 +3313,7 @@ namespace SpaceBurst
                 MasterVolume = source.MasterVolume,
                 MusicVolume = source.MusicVolume,
                 SfxVolume = source.SfxVolume,
+                HasMigratedAudioMixDefault = source.HasMigratedAudioMixDefault,
                 AudioQualityPreset = source.AudioQualityPreset,
                 ScreenShakeStrength = source.ScreenShakeStrength,
                 DeveloperToolsUnlocked = source.DeveloperToolsUnlocked,
@@ -3340,6 +3341,7 @@ namespace SpaceBurst
             target.MasterVolume = source.MasterVolume;
             target.MusicVolume = source.MusicVolume;
             target.SfxVolume = source.SfxVolume;
+            target.HasMigratedAudioMixDefault = source.HasMigratedAudioMixDefault;
             target.AudioQualityPreset = source.AudioQualityPreset;
             target.ScreenShakeStrength = source.ScreenShakeStrength;
             target.DeveloperToolsUnlocked = source.DeveloperToolsUnlocked;
