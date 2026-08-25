@@ -36,6 +36,11 @@ namespace SpaceBurst
 
     sealed class AudioDirector : System.IDisposable
     {
+        internal const float PickupCueVolume = 0.11f;
+        internal const float HighlightPickupCueVolume = 0.16f;
+        internal const float UpgradeCueVolume = 0.18f;
+        private const float PickupCueCooldownSeconds = 0.055f;
+
         private readonly System.Collections.Generic.Dictionary<WeaponStyleId, GeneratedSoundBank> weaponBanks = new System.Collections.Generic.Dictionary<WeaponStyleId, GeneratedSoundBank>();
         private readonly System.Lazy<GeneratedSoundBank> explosionBank;
         private readonly System.Lazy<GeneratedSoundBank> impactBank;
@@ -58,6 +63,7 @@ namespace SpaceBurst
         private float musicVolume;
         private float sfxVolume;
         private float rewindAmount;
+        private float pickupCueCooldown;
         private bool musicAvailable = true;
 
         public AudioDirector(AudioQualityPreset qualityPreset)
@@ -113,6 +119,7 @@ namespace SpaceBurst
             this.masterVolume = MathHelper.Clamp(masterVolume, 0f, 1f);
             this.musicVolume = MathHelper.Clamp(musicVolume, 0f, 1f);
             this.sfxVolume = MathHelper.Clamp(sfxVolume, 0f, 1f);
+            pickupCueCooldown = System.Math.Max(0f, pickupCueCooldown - System.Math.Max(0f, deltaSeconds));
 
             if (musicAvailable)
             {
@@ -183,12 +190,18 @@ namespace SpaceBurst
 
         public void PlayPickup(WeaponStyleId styleId, bool immediate)
         {
-            PlaySafely(pickupBank, immediate ? 0.34f : 0.22f, immediate ? 0.14f : 0.06f, 0f);
+            // Magnetized rewards often arrive in the same frame. Coalesce that
+            // burst so several pickup voices cannot stack into a clipped spike.
+            if (pickupCueCooldown > 0f)
+                return;
+
+            pickupCueCooldown = PickupCueCooldownSeconds;
+            PlaySafely(pickupBank, immediate ? HighlightPickupCueVolume : PickupCueVolume, immediate ? 0.1f : 0.04f, 0f);
         }
 
         public void PlayUpgrade(WeaponStyleId styleId)
         {
-            PlaySafely(upgradeBank, 0.34f, 0.12f, 0f);
+            PlaySafely(upgradeBank, UpgradeCueVolume, 0.08f, 0f);
         }
 
         public void PlayPlayerDamaged()
