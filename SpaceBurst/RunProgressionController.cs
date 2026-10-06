@@ -39,7 +39,7 @@ namespace SpaceBurst
             AddPassiveCards(pool, progress);
             AddSupportUpgradeCards(pool, progress);
             pool.Add(CreateRewindCard(progress));
-            pool.Add(CreateScrapCacheCard(progress.RunLevel >= 6 ? 3 : 2));
+            pool.Add(CreateScrapCacheCard(progress, progress.RunLevel >= 6 ? 3 : 2));
 
             while (cards.Count < 3 && pool.Count > 0)
             {
@@ -98,7 +98,7 @@ namespace SpaceBurst
                     return true;
 
                 case UpgradeCardType.ScrapCache:
-                    progress.AddScrap(Math.Max(1, card.RewardAmount));
+                    PlayerStatus.GrantShips(progress.AddScrap(Math.Max(1, card.RewardAmount)));
                     return true;
 
                 case UpgradeCardType.MobilityTuning:
@@ -112,7 +112,7 @@ namespace SpaceBurst
 
                 case UpgradeCardType.LuckyCore:
                     progress.ApplyEconomyUpgrade();
-                    progress.AddScrap(1);
+                    PlayerStatus.GrantShips(progress.AddScrap(1));
                     return true;
 
                 default:
@@ -292,15 +292,15 @@ namespace SpaceBurst
             };
         }
 
-        private static UpgradeDraftCard CreateScrapCacheCard(int amount)
+        private static UpgradeDraftCard CreateScrapCacheCard(PlayerRunProgress progress, int amount)
         {
             return new UpgradeDraftCard
             {
                 Type = UpgradeCardType.ScrapCache,
                 Title = "SALVAGE CACHE",
-                Subtitle = "REWARD",
-                Description = "BANK EXTRA SCRAP FOR FUTURE SHIP FRAMES",
-                PreviewText = "SCRAP",
+                Subtitle = "SPARE SHIP",
+                Description = "EVERY 5 SCRAP BUILDS A SPARE SHIP FOR AN IN PLACE RESPAWN",
+                PreviewText = string.Concat("NEXT SHIP IN ", (PlayerRunProgress.ScrapPerShip - progress.ScrapTowardNextShip).ToString()),
                 DeltaText = string.Concat("+", amount.ToString(), " SCRAP"),
                 BadgeText = "CACHE",
                 AccentColor = "#FFB347",

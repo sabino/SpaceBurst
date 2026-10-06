@@ -6,6 +6,48 @@ namespace SpaceBurst.Tests
     public sealed class PlayerRunProgressTests
     {
         [Fact]
+        public void ScrapRewards_CrossThresholdsAndPreservePartialProgressThroughSave()
+        {
+            var progress = new PlayerRunProgress();
+            Assert.Equal(0, progress.AddScrap(4));
+            var restored = new PlayerRunProgress();
+            restored.RestoreSnapshot(progress.CaptureSnapshot());
+            Assert.Equal(4, restored.ScrapTowardNextShip);
+            Assert.Equal(1, restored.AddScrap(1));
+            Assert.Equal(2, restored.AddScrap(11));
+            Assert.Equal(1, restored.ScrapTowardNextShip);
+            Assert.Equal(0, restored.AddScrap(0));
+            Assert.Equal(0, restored.AddScrap(-5));
+            var historical = new PlayerRunProgress();
+            historical.RestoreSnapshot(new PlayerRunProgressSnapshotData { Scrap = 51 });
+            Assert.Equal(0, historical.AddScrap(3));
+            Assert.Equal(1, historical.AddScrap(1));
+            Assert.Equal(199988, historical.AddScrap(int.MaxValue));
+            Assert.Equal(999999, historical.Scrap);
+            Assert.Equal(0, historical.AddScrap(1));
+        }
+
+        [Fact]
+        public void LegacyCharges_ConvertOnceAtStageBoundaryWithoutUnlockingFutureWeapons()
+        {
+            var progress = new PlayerRunProgress();
+            progress.AddUpgradeCharge(WeaponStyleId.Fortress, 2);
+            progress.AddUpgradeCharge(WeaponStyleId.Laser, 1);
+            var restored = new PlayerRunProgress();
+            restored.RestoreSnapshot(progress.CaptureSnapshot());
+            restored.ApplyStageDefaults(new StageDefinition());
+            Assert.Equal(0, restored.StoredUpgradeCharges);
+            Assert.Equal(2, restored.RunLevel);
+            Assert.Equal(1f, restored.RunXp);
+            Assert.Equal(1, restored.PendingLevelUps);
+            Assert.False(restored.Weapons.OwnsStyle(WeaponStyleId.Fortress));
+            Assert.False(restored.Weapons.OwnsStyle(WeaponStyleId.Laser));
+            restored.ApplyStageDefaults(new StageDefinition());
+            Assert.Equal(1f, restored.RunXp);
+            Assert.Equal(1, restored.PendingLevelUps);
+        }
+
+        [Fact]
         public void StageChangesAndSaveRestore_PreserveReserveUpgrades()
         {
             var stage = new StageDefinition { ShipsPerLife = 2 };

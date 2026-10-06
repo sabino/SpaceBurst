@@ -109,7 +109,7 @@ namespace SpaceBurst
 
                 triggeredKillChainIndices.Add(i);
                 PlayerStatus.RunProgress.AddXp(definition.BonusXp);
-                PlayerStatus.RunProgress.AddScrap(definition.BonusScrap);
+                PlayerStatus.GrantShips(PlayerStatus.RunProgress.AddScrap(definition.BonusScrap));
                 if (definition.BonusRewindPercent > 0f)
                     rewindMeterSeconds = Math.Min(rewindCapacitySeconds, rewindMeterSeconds + rewindCapacitySeconds * definition.BonusRewindPercent);
                 SetWarning(
