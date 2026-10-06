@@ -39,6 +39,8 @@ SpaceBurst is a playable shooter foundation with a substantial campaign, a compl
 | C12 | P1 | Dense stacks overlap the player with beams and many large bright friendly projectiles. Live upgraded stage-41 render demonstrates weak player salience. | Clear player silhouette and threat hierarchy under maximum stacks. |
 | C13 | P2 | UI terminology mixes cores/charges, run XP, levels/ranks, scrap, hull, ships/lives, pity, and chain. README promises transition-time charge drafts, while normal drafts open immediately on XP level-up. | Match help/README to current mechanics; explain each resource where it matters. |
 | C14 | P2 | CI covers publishing and small tests, without game-host assertions for saves/rewind/progression. | Run real graphics-backed regressions and campaign liveness checks. |
+| C15 | P1 | Legal upgrade sequences reduce movement 1.8→1.4, rewind efficiency 0.65→0.60, drop chance 0.28→0.24, and reserves 7→6 because paths use inconsistent caps. Reproduced with production progress methods. | Upgrades never reduce an existing stat, regardless of order. |
+| C16 | P1 | Tutorial rewind restores an earlier tutorial step as well as the world. A prompt-following keyboard run alternated FIRE/REWIND and failed to finish within 180 simulated seconds. | Preserve the rewind instruction until fulfilled; finish the tutorial with any of its three draft choices. |
 
 ## Balance and release questions requiring measurements
 
@@ -83,3 +85,6 @@ Each implementation lands through a focused PR, local verification, all PR CI jo
 - Readability pass renders friendly fire below ships and hostile shots above them, reduces friendly shot/beam brightness and trail emissions, and avoids friendly projectile depth writes in 3D. Side view has a stable post-bloom player locator and crisp hostile-shot contours. Controlled scenes at stages 1, 21, and 41 were reviewed with Low and Neon presets, including 3D. Collision geometry and projectile scale are unchanged. These samples are presentation checks, not proof of fair human dodging or device performance.
 
 ![Dense friendly stack with stable player locator and three injected hostile shots](../media/audit/readability-after.png)
+
+- PR #24 merged after all five CI jobs passed: quieter/layered friendly fire, stable side-view player locator, and crisp hostile-shot contours. Human readability and 3D/device acceptance remain open.
+- Tutorial follow-up found C16. Guided rewind now preserves its lesson while restoring the world and is available during that lesson only, so later practice choices cannot be undone. The CI host follows movement/aim/fire/rewind/collect/style/confirm prompts and chooses each of the three cards through keyboard input.

@@ -61,6 +61,7 @@ sealed class PlayabilityCheckGame : Game1
         }
 
         var director = (CampaignDirector)Get(this, "campaignDirector", typeof(Game1));
+        CheckTutorialCompletion(director);
         CheckCampaignState(director);
         CheckDraftChoices(director);
         CheckRunRewards(director);
@@ -69,6 +70,95 @@ sealed class PlayabilityCheckGame : Game1
         PlayerTexture = Player1.Instance.SpriteInstance.Texture;
         Completed = true;
         Exit();
+    }
+
+    private static void CheckTutorialCompletion(CampaignDirector director)
+    {
+        double seconds = 0;
+        foreach (int choice in new[] { 0, 1, 2 })
+        {
+            typeof(CampaignDirector).GetMethods(PrivateInstance)
+                .Single(method => method.Name == "StartTutorial" && method.GetParameters().Length == 3)
+                .Invoke(director, new object[] { false, GameFlowState.Playing, GameDifficulty.Normal });
+            KeyboardState previous = new KeyboardState();
+            bool completed = false;
+            for (int frame = 0; frame < 10800; frame++)
+            {
+                TutorialStep step = (TutorialStep)Get(director, "tutorialStep");
+                var keys = new List<Keys>();
+                bool fire = false;
+                bool rewind = false;
+                if (director.CurrentState == GameFlowState.UpgradeDraft)
+                {
+                    keys.Add(new[] { Keys.A, Keys.S, Keys.D }[choice]);
+                }
+                else
+                {
+                    switch (step)
+                    {
+                        case TutorialStep.Move:
+                            keys.Add(Keys.D);
+                            break;
+                        case TutorialStep.Aim:
+                            keys.Add(Keys.Right);
+                            break;
+                        case TutorialStep.Fire:
+                            keys.Add(Keys.Right);
+                            keys.Add(Keys.Space);
+                            fire = true;
+                            Enemy target = EntityManager.Enemies.FirstOrDefault();
+                            if (target != null)
+                                Steer(keys, new Vector2(0, target.Position.Y - Player1.Instance.Position.Y));
+                            break;
+                        case TutorialStep.Rewind:
+                            keys.Add(Keys.R);
+                            rewind = true;
+                            break;
+                        case TutorialStep.CollectPower:
+                            // Keep holding R after the lesson completes: it must not undo progress.
+                            keys.Add(Keys.R);
+                            rewind = true;
+                            PowerupPickup pickup = EntityManager.Powerups.FirstOrDefault();
+                            if (pickup != null)
+                                Steer(keys, pickup.Position - Player1.Instance.Position);
+                            break;
+                        case TutorialStep.SwitchStyle:
+                            if (!previous.IsKeyDown(Keys.E))
+                                keys.Add(Keys.E);
+                            break;
+                        case TutorialStep.ShipsAndLives:
+                            keys.Add(Keys.Enter);
+                            break;
+                    }
+                }
+                var current = new KeyboardState(keys.ToArray());
+                typeof(Input).GetField("lastKeyboardState", BindingFlags.Static | BindingFlags.NonPublic).SetValue(null, previous);
+                typeof(Input).GetField("keyboardState", BindingFlags.Static | BindingFlags.NonPublic).SetValue(null, current);
+                typeof(Input).GetField("fireHeld", BindingFlags.Static | BindingFlags.NonPublic).SetValue(null, fire);
+                typeof(Input).GetField("rewindHeld", BindingFlags.Static | BindingFlags.NonPublic).SetValue(null, rewind);
+                previous = current;
+                seconds += 1.0 / 60;
+                typeof(Game1).GetProperty("GameTime").SetValue(null,
+                    new GameTime(TimeSpan.FromSeconds(seconds), TimeSpan.FromSeconds(1.0 / 60)));
+                director.Update();
+                if (director.CurrentState != GameFlowState.Tutorial && director.CurrentState != GameFlowState.UpgradeDraft)
+                {
+                    completed = true;
+                    break;
+                }
+            }
+            Require(completed && director.CurrentStageNumber == 1 && ((OptionsData)Get(director, "options")).TutorialCompleted,
+                $"Prompt-following tutorial completes into stage 1 with draft choice {choice + 1}");
+        }
+        SetKeys();
+    }
+
+    private static void Steer(List<Keys> keys, Vector2 delta)
+    {
+        if (delta.X > 8) keys.Add(Keys.D);
+        else if (delta.X < -8) keys.Add(Keys.A);
+        if (delta.Y > 8) keys.Add(Keys.S);
+        else if (delta.Y < -8) keys.Add(Keys.W);
     }
 
     private static void CheckRunRewards(CampaignDirector director)

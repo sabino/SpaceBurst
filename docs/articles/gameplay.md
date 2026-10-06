@@ -44,7 +44,7 @@ Every weapon has one unique evolution. Evolution cards appear only after the wea
 
 XP opens a paused three-card choice on level-up. Salvage caches and kill-chain rewards add scrap; every **five scrap** immediately builds one spare ship for an in-place respawn. The HUD shows `SHIP SCRAP 0/5` through `4/5`; the run summary reports total salvage. Partial scrap progress carries between stages and through saves. Spare ships are current-stage reserves; entering a new stage refills ships to the run's reserve allowance, including armor/reserve upgrades.
 
-The tutorial uses a style core and stored charge to teach a practice draft. In campaign play, a core matching the active weapon upgrades it immediately through level 3; any other core grants **two XP**. Legacy banked charges convert to XP once at the next stage boundary, without unlocking weapons ahead of their chapter. Loading a save does not retroactively award ships for its historical scrap total.
+The tutorial uses a style core and stored charge to teach a practice draft. Its guided rewind is available during the rewind lesson; campaign rewind remains available throughout combat. In campaign play, a core matching the active weapon upgrades it immediately through level 3; any other core grants **two XP**. Legacy banked charges convert to XP once at the next stage boundary, without unlocking weapons ahead of their chapter. Loading a save does not retroactively award ships for its historical scrap total.
 
 ## Feedback Systems
 
