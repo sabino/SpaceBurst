@@ -91,7 +91,7 @@ namespace SpaceBurst.Tests
             };
 
             Assert.True(RunSaveIntegrity.TryPrepareForLoad(save, options, out _));
-            Assert.Equal(99, save.PlayerStatus.Lives);
+            Assert.Equal(PlayerStatus.MaximumLives, save.PlayerStatus.Lives);
             Assert.NotNull(save.PlayerStatus.RunProgress);
             Assert.NotNull(save.Player.Position);
             Assert.NotNull(save.Player.Velocity);

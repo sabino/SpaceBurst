@@ -7,6 +7,22 @@ namespace SpaceBurst.Tests
     public sealed class RunProgressionControllerTests
     {
         [Fact]
+        public void FullShipStock_DoesNotOfferUselessSalvageCards()
+        {
+            var controller = new RunProgressionController();
+            var progress = CreateProgress();
+            bool offeredBelowCap = false;
+            for (uint seed = 1; seed <= 200; seed++)
+            {
+                Assert.DoesNotContain(controller.BuildDraftCards(progress, new DeterministicRngState(seed), false, 1, PlayerStatus.MaximumShips),
+                    card => card.Type == UpgradeCardType.ScrapCache);
+                offeredBelowCap |= controller.BuildDraftCards(progress, new DeterministicRngState(seed), false, 1, PlayerStatus.MaximumShips - 1)
+                    .Any(card => card.Type == UpgradeCardType.ScrapCache);
+            }
+            Assert.True(offeredBelowCap);
+        }
+
+        [Fact]
         public void SupportDraft_UnlocksAndEquipsExactlyOnceAndReportsSuccess()
         {
             var progress = CreateProgress();

@@ -2434,7 +2434,7 @@ namespace SpaceBurst
             }
             else
             {
-                draftCards.AddRange(runProgressionController.BuildDraftCards(PlayerStatus.RunProgress, gameplayRandom, false, currentStageNumber));
+                draftCards.AddRange(runProgressionController.BuildDraftCards(PlayerStatus.RunProgress, gameplayRandom, false, currentStageNumber, PlayerStatus.Ships));
             }
 
             draftSelection = 0;
@@ -4597,7 +4597,7 @@ namespace SpaceBurst
                     DrawHelpPage(spriteBatch, pixel, "WEAPON EVOLUTIONS\nEVERY STYLE HAS A UNIQUE FINAL FORM\nREACH THE REQUIRED WEAPON LEVEL AND INSTALL ITS LINKED REACTOR\nAN EVOLUTION CARD CAN THEN APPEAR IN LEVEL UP DRAFTS\nEVOLUTIONS CHANGE FIRING BEHAVIOR, NOT JUST DAMAGE NUMBERS", 186f);
                     break;
                 case 4:
-                    DrawHelpPage(spriteBatch, pixel, "LIVES AND SHIPS\nSHIPS ARE YOUR IN PLACE RESPAWNS\nIF SHIPS HIT ZERO THE NEXT DEATH COSTS A LIFE\nLOSING A LIFE RESTARTS THE WHOLE STAGE\nDEATH ALSO WEAKENS YOUR CURRENT LOADOUT", 186f);
+                    DrawHelpPage(spriteBatch, pixel, "LIVES AND SHIPS\nSHIPS ARE YOUR IN PLACE RESPAWNS\nIF SHIPS HIT ZERO THE NEXT DEATH COSTS A LIFE\nLOSING A LIFE RESTARTS THE WHOLE STAGE\nDEATH WEAKENS YOUR LOADOUT - BOTH STOCKS CAP AT 9", 186f);
                     break;
                 case 5:
 #if ANDROID

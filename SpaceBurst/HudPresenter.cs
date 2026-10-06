@@ -94,7 +94,7 @@ namespace SpaceBurst
             BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("LV ", context.RunLevel.ToString()), new Vector2(pityBounds.X + 12f, pityBounds.Y + 10f), Color.White, 1.28f);
             DrawBar(spriteBatch, pixel, new Rectangle(pityBounds.X + 12, pityBounds.Y + 34, pityBounds.Width - 24, 12), context.XpRatio, Color.Lerp(Color.Cyan, Color.White, context.PickupPulse * 0.35f));
             BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("PITY ", MathF.Round(context.PityRatio * 100f).ToString("0"), "%"), new Vector2(pityBounds.X + 12f, pityBounds.Y + 52f), Color.White * 0.62f, 0.92f);
-            BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("SHIP SCRAP ", (context.Scrap % PlayerRunProgress.ScrapPerShip).ToString(), "/", PlayerRunProgress.ScrapPerShip.ToString()), new Vector2(pityBounds.X + 12f, pityBounds.Bottom - 22f), Color.Orange * 0.92f, 1f);
+            BitmapFontRenderer.Draw(spriteBatch, pixel, PlayerStatus.Ships >= PlayerStatus.MaximumShips ? "SHIP STOCK FULL" : string.Concat("SHIP SCRAP ", (context.Scrap % PlayerRunProgress.ScrapPerShip).ToString(), "/", PlayerRunProgress.ScrapPerShip.ToString()), new Vector2(pityBounds.X + 12f, pityBounds.Bottom - 22f), Color.Orange * 0.92f, 1f);
 
             BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("SCORE ", PlayerStatus.Score.ToString()), new Vector2(scoreBounds.X + 12f, scoreBounds.Y + 10f), Color.White, 1.52f);
             BitmapFontRenderer.Draw(spriteBatch, pixel, string.Concat("MULTI ", PlayerStatus.Multiplier.ToString(), "  CHAIN ", PlayerStatus.RunProgress.KillChainTier.ToString()), new Vector2(scoreBounds.X + 12f, scoreBounds.Y + 34f), Color.White, 1.12f);
