@@ -1011,11 +1011,26 @@ namespace SpaceBurst
             return new Vector3(perpendicular.X, perpendicular.Y, 0f) * lateralOffset;
         }
 
+        internal static void ReleaseInstance()
+        {
+            instance?.Dispose();
+            instance = null;
+        }
+
+        public override void Dispose()
+        {
+            cannonSprite?.Dispose();
+            cannonSprite = null;
+            base.Dispose();
+        }
+
         private void RefreshLoadoutVisuals()
         {
             float preservedHullRatio = authoritativeHullRatio > 0f ? authoritativeHullRatio : 1f;
             WeaponStyleId style = ActiveStyle;
             int level = Math.Max(0, ActiveWeaponLevel);
+            sprite?.Dispose();
+            cannonSprite?.Dispose();
             sprite = new ProceduralSpriteInstance(Game1.Instance.GraphicsDevice, WeaponCatalog.CreateHullDefinition(style, level));
             cannonSprite = new ProceduralSpriteInstance(Game1.Instance.GraphicsDevice, WeaponCatalog.CreateCannonDefinition(style, level));
             damageMask = WeaponCatalog.CreatePlayerDamageMask(style, level);

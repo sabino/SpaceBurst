@@ -78,6 +78,15 @@ namespace SpaceBurst
 
         private static readonly Dictionary<string, RenderableHullCache> hullCacheByKey = new Dictionary<string, RenderableHullCache>(StringComparer.Ordinal);
 
+        private static readonly Queue<string> hullCacheOrder = new Queue<string>();
+        internal const int MaximumCachedHulls = 128;
+
+        internal static void ClearCache()
+        {
+            hullCacheByKey.Clear();
+            hullCacheOrder.Clear();
+        }
+
         public static void Draw(
             SpriteBatch spriteBatch,
             Texture2D pixel,
@@ -638,7 +647,11 @@ namespace SpaceBurst
                 },
             };
 
+            // Damaged masks produce many unique shapes during long campaigns.
+            if (hullCacheByKey.Count >= MaximumCachedHulls)
+                hullCacheByKey.Remove(hullCacheOrder.Dequeue());
             hullCacheByKey[key] = cache;
+            hullCacheOrder.Enqueue(key);
             return cache;
         }
 

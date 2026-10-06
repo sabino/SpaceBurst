@@ -71,3 +71,7 @@ Each implementation lands through a focused PR, local verification, all PR CI jo
 - A locally published browser bundle boots after a sustained user gesture, enters the tutorial, fires, and resizes to 960×540 without reported JavaScript errors. This is a smoke check, not a completed browser campaign or audible audio review.
 
 ![Draft layout checked at 220 percent UI scale](../media/audit/draft-220.png)
+
+- PR #21 merged after all CI jobs passed: deliberate manual drafts, wrapped/fitted text, shared draw/click bounds, pointer/touch pause, and logical draft/tutorial state through sealed save/load. All ten evolution descriptions were checked at 70%, 100%, 150%, and 220% text scaling.
+- Controlled Normal campaign liveness run reached stages 1–50, all five bosses, and the ending in **2610.6 simulated seconds**, with 17 draft choices and 186 lives remaining. The runner used invulnerability and scripted high-damage hits. This validates structural completion and illustrates unbounded life generation; it does not validate human difficulty. Android/browser full runs and skill-based runs remain release gates.
+- Resource review also found unbounded managed mesh/voxel caches keyed by damaged hull shape. The resource task bounds those caches and shares immutable projectile sprites to reduce per-shot/rewind GPU allocation.

@@ -59,6 +59,13 @@ namespace SpaceBurst
 
         public static void Reset()
         {
+            foreach (Entity entity in entities.Concat(addedEntities).Distinct())
+            {
+                // The singleton player is reused after reset; loadout replacement
+                // and host shutdown manage its hull/cannon ownership separately.
+                if (entity is not Player1)
+                    entity.Dispose();
+            }
             entities.Clear();
             enemies.Clear();
             bullets.Clear();
@@ -105,6 +112,11 @@ namespace SpaceBurst
                 AddEntity(entity);
 
             addedEntities.Clear();
+            foreach (Entity entity in entities)
+            {
+                if (entity.IsExpired)
+                    entity.Dispose();
+            }
             entities = entities.Where(x => !x.IsExpired).ToList();
             enemies = enemies.Where(x => !x.IsExpired).ToList();
             bullets = bullets.Where(x => !x.IsExpired).ToList();

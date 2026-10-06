@@ -75,12 +75,9 @@ namespace SpaceBurst
         private const float ReticleMarginY = 18f;
 
         private static readonly Dictionary<string, MeshVolumeCache> cacheByKey = new Dictionary<string, MeshVolumeCache>(StringComparer.Ordinal);
-        private static readonly RasterizerState cullNoneState = new RasterizerState
-        {
-            CullMode = CullMode.None,
-            FillMode = FillMode.Solid,
-            MultiSampleAntiAlias = true,
-        };
+        private static readonly Queue<string> meshCacheOrder = new Queue<string>();
+        private static RasterizerState cullNoneState;
+        internal const int MaximumCachedMeshes = 64;
 
         private static BasicEffect opaqueEffect;
         private static BasicEffect glowEffect;
@@ -90,6 +87,19 @@ namespace SpaceBurst
         private static float smoothedCameraBank;
         private static ChaseReticleState activeReticle;
         private static float chaseEntryTimer;
+
+        internal static void ReleaseResources()
+        {
+            opaqueEffect?.Dispose();
+            glowEffect?.Dispose();
+            cullNoneState?.Dispose();
+            opaqueEffect = null;
+            glowEffect = null;
+            cullNoneState = null;
+            cacheByKey.Clear();
+            meshCacheOrder.Clear();
+            ResetTransientState();
+        }
 
         public static void ResetTransientState()
         {
@@ -725,7 +735,10 @@ namespace SpaceBurst
                 LocalMin = localMin,
                 LocalMax = localMax,
             };
+            if (cacheByKey.Count >= MaximumCachedMeshes)
+                cacheByKey.Remove(meshCacheOrder.Dequeue());
             cacheByKey[key] = cache;
+            meshCacheOrder.Enqueue(key);
             return cache;
         }
 
@@ -1053,6 +1066,13 @@ namespace SpaceBurst
             {
                 opaqueEffect?.Dispose();
                 glowEffect?.Dispose();
+                cullNoneState?.Dispose();
+                cullNoneState = new RasterizerState
+                {
+                    CullMode = CullMode.None,
+                    FillMode = FillMode.Solid,
+                    MultiSampleAntiAlias = true,
+                };
 
                 opaqueEffect = new BasicEffect(graphicsDevice)
                 {
