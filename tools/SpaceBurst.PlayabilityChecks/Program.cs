@@ -64,6 +64,7 @@ sealed class PlayabilityCheckGame : Game1
         CheckTutorialCompletion(director);
         CheckCampaignState(director);
         CheckDraftChoices(director);
+        CheckCampaignWeaponControls(director);
         CheckRunRewards(director);
         CheckSurvivalEconomy(director);
         CheckResourceOwnership(director);
@@ -161,6 +162,52 @@ sealed class PlayabilityCheckGame : Game1
         else if (delta.X < -8) keys.Add(Keys.A);
         if (delta.Y > 8) keys.Add(Keys.S);
         else if (delta.Y < -8) keys.Add(Keys.W);
+    }
+
+    private static void CheckCampaignWeaponControls(CampaignDirector director)
+    {
+        director.TryConsoleLoadStage(1);
+        PlayerStatus.BeginCampaign(new StageDefinition(), GameDifficulty.Normal);
+        Set(director, "state", GameFlowState.Playing);
+        Player1.Instance.ResetForStage();
+        PlayerStatus.RunProgress.TryEquipSupportWeapon(WeaponStyleId.Missile);
+        Player1.Instance.RefreshLoadout();
+        Set(Player1.Instance, "fireCooldown", 1.5f);
+        Set(Player1.Instance, "droneSupportTimer", 1.2f);
+        SetKeys(Keys.E);
+        director.Update();
+        Require(Player1.Instance.ActiveStyle == WeaponStyleId.Missile && PlayerStatus.RunProgress.Weapons.SupportWeapons.Contains(WeaponStyleId.Pulse),
+            "Campaign E swaps an owned support into the core");
+        Require((float)Get(Player1.Instance, "fireCooldown") > 1f && (float)Get(Player1.Instance, "droneSupportTimer") > 1f,
+            "Weapon swaps preserve firing/drone cooldowns rather than granting free attacks");
+        SetKeys(Keys.Q);
+        director.Update();
+        Require(Player1.Instance.ActiveStyle == WeaponStyleId.Pulse, "Campaign Q swaps back to the previous core");
+        SetKeys();
+        const BindingFlags flags = BindingFlags.Static | BindingFlags.NonPublic;
+        typeof(Input).GetField("lastGamepadState", flags).SetValue(null, new GamePadState());
+        typeof(Input).GetField("gamepadState", flags).SetValue(null,
+            new GamePadState(Vector2.Zero, Vector2.Zero, 0, 0, Buttons.DPadRight));
+        director.Update();
+        Require(Player1.Instance.ActiveStyle == WeaponStyleId.Missile, "Campaign controller style input reaches the core swap");
+        typeof(Input).GetField("gamepadState", flags).SetValue(null, new GamePadState());
+        typeof(Input).GetField("lastGamepadState", flags).SetValue(null, new GamePadState());
+        foreach (WeaponStyleId style in WeaponCatalog.StyleOrder)
+            PlayerStatus.RunProgress.Weapons.SetStyleProgress(style, 3);
+        foreach (WeaponStyleId style in WeaponCatalog.StyleOrder)
+            PlayerStatus.RunProgress.TryEquipSupportWeapon(style);
+        var reached = new HashSet<WeaponStyleId>();
+        for (int swap = 0; swap < WeaponCatalog.StyleOrder.Count; swap++)
+        {
+            SetKeys(Keys.E);
+            director.Update();
+            reached.Add(Player1.Instance.ActiveStyle);
+            Require(!PlayerStatus.RunProgress.Weapons.SupportWeapons.Contains(Player1.Instance.ActiveStyle)
+                && PlayerStatus.RunProgress.Weapons.SupportWeapons.Distinct().Count() == PlayerStatus.RunProgress.Weapons.SupportWeapons.Count,
+                "Live swaps keep core/support slots distinct");
+        }
+        Require(reached.SetEquals(WeaponCatalog.StyleOrder), "Every owned style stays reachable through live controls with a full support stack");
+        SetKeys();
     }
 
     private static void CheckRunRewards(CampaignDirector director)

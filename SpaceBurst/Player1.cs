@@ -945,8 +945,7 @@ namespace SpaceBurst
         {
             PlayerStatus.RunProgress.Weapons.Cycle(direction);
             RefreshLoadoutVisuals();
-            fireCooldown = 0f;
-            droneSupportTimer = 0f;
+            // A style swap must not bypass the current weapon/support cadence.
         }
 
         private void DrawAuxiliaryModules(SpriteBatch spriteBatch, bool flicker)

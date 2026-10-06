@@ -43,6 +43,7 @@ SpaceBurst is a playable shooter foundation with a substantial campaign, a compl
 | C16 | P1 | Tutorial rewind restores an earlier tutorial step as well as the world. A prompt-following keyboard run alternated FIRE/REWIND and failed to finish within 180 simulated seconds. | Preserve the rewind instruction until fulfilled; finish the tutorial with any of its three draft choices. |
 | C17 | P1 | Boss presentation scale is 1.45–3.80 while point/overlap checks and damage mapping still use the original render scale. Host pixel sampling found 52%–93% of visible boss hull pixels outside the physical mask. | Use one consistent sprite scale for rendering, collision bounds, overlap tests, and damage coordinates; cover all five bosses. |
 | C18 | P1 | 2D beam collision finds a surface point but discards it and applies damage at enemy center. Host recorded beam Y=303 and damage Y=320. | Use the sampled hit coordinate and query current enemy positions, including enlarged hull edges. |
+| C19 | P1 | README/help promise Q/E, controller and HUD style cycling, but `AllowLiveWeaponCycling` returns true only in the tutorial. A production campaign with two owned styles stayed on Pulse after E. | Enable owned-style cycling in combat, keep the full arsenal reachable, and preserve cooldowns so swaps cannot mint free attacks. |
 
 ## Balance and release questions requiring measurements
 
@@ -120,3 +121,6 @@ The merged repairs establish much stronger correctness evidence. They do not est
 5. **Audible presentation review.** Listen on actual speakers/headphones to music transitions, weapon identity, clipping, mix balance, and repeated effects. This audit used a null audio device and cannot grade sound.
 
 Release acceptance should require players to independently complete the tutorial, locate the ship and threats under load, explain rewards and choices, and finish representative unassisted runs. Record evidence and remaining failures in #19 before describing the game as feature complete, fair, and fun.
+
+- PR #27 merged after all five CI jobs passed; its master prerelease and Docs/Browser publishing also passed. A freshly published local browser bundle completed the tutorial using browser keyboard events and reached normal stage-1 play without reported JavaScript errors; firing, pause and 960×540 resize were also checked.
+- Final control review found C19. Campaign cycling is now allowed during combat as well as training, with firing/drone cooldowns preserved. The host exercises Q/E, a controller-button state, and all ten owned styles with a full support stack, checking that core/support slots stay distinct. Real controller/touch device testing remains open.
