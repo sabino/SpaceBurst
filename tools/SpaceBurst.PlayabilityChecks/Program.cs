@@ -50,6 +50,7 @@ sealed class PlayabilityCheckGame : Game1
 
         var director = (CampaignDirector)Get(this, "campaignDirector", typeof(Game1));
         CheckCampaignState(director);
+        CheckDraftChoices(director);
         Completed = true;
         Exit();
     }
@@ -97,6 +98,111 @@ sealed class PlayabilityCheckGame : Game1
         director.Update();
         Require((float)Get(director, "stageElapsedSeconds") > before, "Empty rewind does not freeze gameplay");
         typeof(Input).GetField("rewindHeld", BindingFlags.Static | BindingFlags.NonPublic).SetValue(null, false);
+    }
+
+    private static void CheckDraftChoices(CampaignDirector director)
+    {
+        PlayerStatus.BeginCampaign(new StageDefinition(), GameDifficulty.Normal);
+        PlayerStatus.RunProgress.AddXp(6);
+        SetKeys();
+        Call(director, "OpenUpgradeDraft", GameFlowState.Playing, false);
+        int pending = PlayerStatus.RunProgress.PendingLevelUps;
+        for (int frame = 0; frame < 1200; frame++)
+            Call(director, "UpdateUpgradeDraft");
+        Require(director.CurrentState == GameFlowState.UpgradeDraft && PlayerStatus.RunProgress.PendingLevelUps == pending,
+            "Manual draft waits without spending the pending upgrade");
+
+        SetKeys(Keys.Escape);
+        Call(director, "UpdateUpgradeDraft");
+        Require(director.CurrentState == GameFlowState.Paused && PlayerStatus.RunProgress.PendingLevelUps == pending,
+            "Escape pauses a draft without choosing a card");
+        var draftSave = (RunSaveData)Call(director, "CaptureRunSaveData", 0, false);
+        Require(draftSave.State == GameFlowState.UpgradeDraft && draftSave.DraftCards.Count == 3,
+            "Paused draft captures its logical state and cards");
+        PersistentStorage.SaveRunSlot(1, draftSave);
+        RunSaveData loadedDraft = PersistentStorage.LoadRunSlot(1);
+        Require(loadedDraft != null, "Pending draft survives sealed file save/load");
+        SetKeys();
+        Call(director, "RestoreRunSaveData", loadedDraft, true, false);
+        Require(director.CurrentState == GameFlowState.Paused && (GameFlowState)Get(director, "pauseReturnState") == GameFlowState.UpgradeDraft,
+            "Loaded draft stays paused with the choice intact");
+        SetKeys(Keys.Escape);
+        Call(director, "UpdatePause");
+        Require(director.CurrentState == GameFlowState.UpgradeDraft, "Resume returns to the saved draft");
+        SetKeys();
+
+        var cards = (List<UpgradeDraftCard>)Get(director, "draftCards");
+        var options = (OptionsData)Get(director, "options");
+        foreach (int percent in new[] { 70, 100, 150, 220 })
+        {
+            options.UiScalePercent = percent;
+            BitmapFontRenderer.GlobalScaleMultiplier = UiScaleHelper.GetUiTextMultiplier(percent);
+            Rectangle[] bounds = (Rectangle[])Call(director, "GetUpgradeDraftCardBounds");
+            foreach (Rectangle cardBounds in bounds)
+                Require(Game1.SafeUiBounds.Contains(cardBounds), "Draft interactive bounds fit the safe screen");
+            foreach (WeaponEvolutionDefinition evolution in WeaponProgressionCatalog.Evolutions)
+            {
+                Rectangle textBounds = new Rectangle(0, 0, bounds[0].Width - 32, bounds[0].Height - 182);
+                object[] args = { evolution.Description, textBounds, 0f };
+                string text = (string)typeof(CampaignDirector).GetMethod("FitDraftDescription", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, args);
+                Vector2 size = (Vector2)typeof(CampaignDirector).GetMethod("MeasureDraftDescription", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { text, args[2] });
+                Require(size.X <= textBounds.Width && size.Y <= textBounds.Height, "Evolution description fits inside its card");
+            }
+        }
+        BitmapFontRenderer.GlobalScaleMultiplier = 1f;
+        options.UiScalePercent = 100;
+        Rectangle pause = (Rectangle)Call(director, "GetUpgradeDraftPauseBounds");
+        Click(director, new Vector2(pause.Center.X, pause.Center.Y));
+        Require(director.CurrentState == GameFlowState.Paused && PlayerStatus.RunProgress.PendingLevelUps == pending,
+            "Pointer pause button preserves the pending upgrade");
+        SetKeys(Keys.Escape);
+        Call(director, "UpdatePause");
+        SetKeys();
+
+        options.AutoUpgradeDraft = true;
+        Set(director, "draftTimer", 0.001f);
+        Call(director, "UpdateUpgradeDraft");
+        Require(PlayerStatus.RunProgress.PendingLevelUps == pending - 1, "Opt-in auto draft still selects on timeout");
+        options.AutoUpgradeDraft = false;
+        Call(director, "RestoreRunSaveData", loadedDraft, true, false);
+        Set(director, "state", GameFlowState.UpgradeDraft);
+        Rectangle card = ((Rectangle[])Call(director, "GetUpgradeDraftCardBounds"))[0];
+        Click(director, new Vector2(card.X + 1, card.Y + 1));
+        Require(PlayerStatus.RunProgress.PendingLevelUps == pending - 1,
+            "Clicking the visible top edge of a card selects the upgrade");
+
+        Set(director, "state", GameFlowState.Paused);
+        Set(director, "pauseReturnState", GameFlowState.Tutorial);
+        var tutorialSave = (RunSaveData)Call(director, "CaptureRunSaveData", 0, false);
+        Require(tutorialSave.State == GameFlowState.Tutorial, "Paused tutorial captures its logical state");
+        Call(director, "RestoreRunSaveData", tutorialSave, true, false);
+        Require((GameFlowState)Get(director, "pauseReturnState") == GameFlowState.Tutorial,
+            "Loaded tutorial resumes tutorial flow");
+    }
+
+    private static void Click(CampaignDirector director, Vector2 point)
+    {
+        const BindingFlags flags = BindingFlags.Static | BindingFlags.NonPublic;
+        void SetPointer(string field, object value) => typeof(Input).GetField(field, flags).SetValue(null, value);
+        SetPointer("pointerPosition", point);
+        SetPointer("uiPointerPressPosition", point);
+        SetPointer("uiPointerPressed", true);
+        SetPointer("uiPointerReleased", false);
+        SetPointer("uiPointerDragging", false);
+        Call(director, "UpdateUpgradeDraft");
+        SetPointer("uiPointerPressed", false);
+        SetPointer("uiPointerReleased", true);
+        SetPointer("uiPointerReleasePosition", point);
+        Call(director, "UpdateUpgradeDraft");
+        SetPointer("uiPointerReleased", false);
+    }
+
+    private static void SetKeys(params Keys[] keys)
+    {
+        const BindingFlags flags = BindingFlags.Static | BindingFlags.NonPublic;
+        typeof(Input).GetField("keyboardState", flags).SetValue(null, new KeyboardState(keys));
+        typeof(Input).GetField("lastKeyboardState", flags).SetValue(null, new KeyboardState());
+        ((HashSet<Keys>)typeof(Input).GetField("consumedKeys", flags).GetValue(null)).Clear();
     }
 
     private static object Get(object target, string field, Type owner = null) =>

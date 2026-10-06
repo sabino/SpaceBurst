@@ -63,3 +63,11 @@ These are design risks, not reproduced balance bugs:
 7. **Release acceptance:** Windows/Linux/browser/Android matrix for start/tutorial/skip, pause/help/options, save/load, death/retry, transitions, five bosses, completion, reload, resize, focus and controller/touch. Fresh players must identify the player/threats/rewards and explain draft choices; collect enjoyment and fairness feedback before claiming “fun and feature complete”.
 
 Each implementation lands through a focused PR, local verification, all PR CI jobs, and merge only after passing checks. Track remaining acceptance work rather than closing the audit after build success.
+
+## Implementation progress
+
+- PR #20 merged after all five CI jobs passed: C01–C06 are fixed, with nine graphics-backed assertions in CI and a reserve save/transition unit regression.
+- Draft review also found mismatched draw/click bounds (drawn at y=198 with height 246; interactive at y=214 with height 220), and paused saves did not preserve the logical tutorial/draft return state. These are covered with the readable-draft work.
+- A locally published browser bundle boots after a sustained user gesture, enters the tutorial, fires, and resizes to 960×540 without reported JavaScript errors. This is a smoke check, not a completed browser campaign or audible audio review.
+
+![Draft layout checked at 220 percent UI scale](../media/audit/draft-220.png)
