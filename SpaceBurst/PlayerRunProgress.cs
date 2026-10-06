@@ -81,7 +81,8 @@ namespace SpaceBurst
                 return;
 
             StartingLives = ResolveStartingLives(stage);
-            ShipsPerLife = ResolveShipsPerLife(stage);
+            // Reserve upgrades belong to the run and survive stage changes/retries.
+            ShipsPerLife = Math.Max(ShipsPerLife, ResolveShipsPerLife(stage));
         }
 
         public void MarkMedalIneligible()

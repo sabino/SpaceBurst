@@ -1215,7 +1215,7 @@ namespace SpaceBurst
 
             HandleViewToggleInput();
 
-            if (Input.IsRewindHeld())
+            if (Input.IsRewindHeld() && rewindFrames.Count > 1 && rewindMeterSeconds > 0f)
             {
                 UpdateRewind(deltaSeconds);
                 return;
@@ -1304,7 +1304,7 @@ namespace SpaceBurst
 
             HandleViewToggleInput();
 
-            if (Input.IsRewindHeld())
+            if (Input.IsRewindHeld() && rewindFrames.Count > 1 && rewindMeterSeconds > 0f)
             {
                 UpdateRewind(deltaSeconds);
                 return;
@@ -1816,6 +1816,7 @@ namespace SpaceBurst
             scheduledEvents.Clear();
             reentryTickets.Clear();
             spawnDirector.Reset();
+            stageHadDeath = false;
             PlayerStatus.PrepareStage(currentStage, false);
             Player1.Instance.MakeInvulnerable(0.8f);
             state = GameFlowState.Playing;
@@ -1875,7 +1876,7 @@ namespace SpaceBurst
                 rewindFrames.RemoveAt(rewindFrames.Count - 1);
             }
 
-            RestoreRunSaveData(rewindFrames[rewindFrames.Count - 1], false, true);
+            RestoreRunSaveData(rewindFrames[rewindFrames.Count - 1], true, true);
             if (state == GameFlowState.Tutorial && tutorialStep == TutorialStep.Rewind && rewindHoldSeconds >= 0.18f)
                 AdvanceTutorialStep(TutorialStep.CollectPower);
         }
@@ -5336,7 +5337,7 @@ namespace SpaceBurst
             float preservedRewindMeter = rewindMeterSeconds;
             float preservedRewindHold = rewindHoldSeconds;
             float preservedRewindAccumulator = rewindStepAccumulator;
-            rewindMeterSeconds = save.RewindMeterSeconds > 0f ? save.RewindMeterSeconds : RewindCapacitySeconds;
+            rewindMeterSeconds = Math.Clamp(save.RewindMeterSeconds, 0f, RewindCapacitySeconds);
             rewindHoldSeconds = save.RewindHoldSeconds;
             rewindStepAccumulator = save.RewindAccumulatorSeconds;
             stageHadDeath = save.StageHadDeath;
@@ -5363,7 +5364,6 @@ namespace SpaceBurst
                 draftCards.AddRange(save.DraftCards);
             spawnDirector.RestoreSnapshot(save.SpawnDirector);
 
-            gameplayRandom.Restore(save.GameplayRngState == 0 ? 1u : save.GameplayRngState);
             PlayerStatus.RestoreSnapshot(save.PlayerStatus);
             options.LastSelectedDifficulty = save.Difficulty;
             if (!fromRewind)
@@ -5453,6 +5453,9 @@ namespace SpaceBurst
             EntityManager.RestoreBullets(save.Bullets);
             EntityManager.RestoreBeams(save.Beams);
             EntityManager.RestorePowerups(save.Powerups);
+            // Reconstruction uses constructors that sample gameplay randomness. Resume
+            // from the saved stream only after all entities have been rebuilt.
+            gameplayRandom.Restore(save.GameplayRngState == 0 ? 1u : save.GameplayRngState);
             activeBoss = EntityManager.Enemies.OfType<BossEnemy>().FirstOrDefault(enemy => !enemy.IsExpired);
 
             if (!fromRewind)

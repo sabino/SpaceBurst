@@ -59,6 +59,12 @@ jobs:
           -p:InformationalVersion=${{ github.sha }}
           -o artifacts/ci/linux-x64
 
+      - name: Install game host dependencies
+        run: sudo apt-get update && sudo apt-get install -y xvfb libopenal1 libsdl2-2.0-0 libgl1-mesa-dri
+
+      - name: Exercise campaign state in the game host
+        run: xvfb-run -a env ALSOFT_DRIVERS=null dotnet run --project tools/SpaceBurst.PlayabilityChecks -c Release
+
   web-publish-smoke:
     name: Web Publish Smoke
     runs-on: windows-latest
