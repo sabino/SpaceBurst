@@ -717,7 +717,6 @@ namespace SpaceBurst
                     DrawTransitionOverlay(spriteBatch, pixel);
                     break;
                 case GameFlowState.UpgradeDraft:
-                    DrawHud(spriteBatch, pixel);
                     DrawUpgradeDraft(spriteBatch, pixel);
                     break;
                 case GameFlowState.GameOver:
@@ -1361,19 +1360,27 @@ namespace SpaceBurst
                 draftSelection = (draftSelection + 1) % draftCards.Count;
 
             Rectangle[] cardBounds = GetUpgradeDraftCardBounds();
-            bool pointerActivated = HandlePointerSelection(cardBounds, ref draftSelection);
+            Rectangle[] interactiveBounds = cardBounds.Concat(new[] { GetUpgradeDraftPauseBounds() }).ToArray();
+            int pointerSelection = draftSelection;
+            bool pointerActivated = HandlePointerSelection(interactiveBounds, ref pointerSelection);
+            if (pointerSelection < draftCards.Count)
+                draftSelection = pointerSelection;
 
-            if (Input.WasCancelPressed())
+            if (Input.WasCancelPressed() || (pointerActivated && pointerSelection == draftCards.Count))
             {
-                ApplyDraftSelection(options.AutoUpgradeDraft ? gameplayRandom.NextInt(0, draftCards.Count) : draftSelection);
+                pauseReturnState = GameFlowState.UpgradeDraft;
+                state = GameFlowState.Paused;
                 return;
             }
 
-            draftTimer -= (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
-            if (draftTimer <= 0f)
+            if (options.AutoUpgradeDraft)
             {
-                ApplyDraftSelection(options.AutoUpgradeDraft ? gameplayRandom.NextInt(0, draftCards.Count) : draftSelection);
-                return;
+                draftTimer -= (float)Game1.GameTime.ElapsedGameTime.TotalSeconds;
+                if (draftTimer <= 0f)
+                {
+                    ApplyDraftSelection(gameplayRandom.NextInt(0, draftCards.Count));
+                    return;
+                }
             }
 
             if (Input.WasConfirmPressed() || pointerActivated)
@@ -3561,19 +3568,54 @@ namespace SpaceBurst
             return (leftBounds, rightBounds, tutorialBounds);
         }
 
+        private int DraftPx(int value)
+        {
+            // Keep the whole choice screen reachable while text can use larger scales.
+            return Math.Max(1, (int)MathF.Round(value * GetScopedUiScale(0.85f, 1.5f)));
+        }
+
         private Rectangle[] GetUpgradeDraftCardBounds()
         {
-            int cardWidth = 300;
-            int cardHeight = 220;
-            int gap = 24;
-            int totalWidth = cardWidth * 3 + gap * 2;
-            int startX = (Game1.VirtualWidth - totalWidth) / 2;
-            int y = 214;
+            Rectangle safe = Game1.SafeUiBounds;
+            int count = Math.Max(1, draftCards.Count);
+            int gap = DraftPx(24);
+            int cardWidth = Math.Min(DraftPx(300), Math.Max(1, (safe.Width - DraftPx(48) - gap * (count - 1)) / count));
+            int cardHeight = Math.Min(DraftPx(280), Math.Max(180, safe.Height - DraftPx(300)));
+            int totalWidth = cardWidth * count + gap * (count - 1);
+            int startX = safe.Center.X - totalWidth / 2;
+            int y = safe.Y + DraftPx(170);
             var bounds = new Rectangle[draftCards.Count];
             for (int i = 0; i < draftCards.Count; i++)
                 bounds[i] = new Rectangle(startX + i * (cardWidth + gap), y, cardWidth, cardHeight);
-
             return bounds;
+        }
+
+        private Rectangle GetUpgradeDraftPauseBounds()
+        {
+            Rectangle safe = Game1.SafeUiBounds;
+            return new Rectangle(safe.Right - DraftPx(132), safe.Y + DraftPx(16), DraftPx(116), DraftPx(40));
+        }
+
+        private static string FitDraftDescription(string text, Rectangle bounds, out float scale)
+        {
+            for (scale = 0.95f; scale > 0.1f; scale -= 0.05f)
+            {
+                string wrapped = BitmapFontRenderer.Wrap(text, bounds.Width, scale);
+                Vector2 size = MeasureDraftDescription(wrapped, scale);
+                if (size.X <= bounds.Width && size.Y <= bounds.Height)
+                    return wrapped;
+            }
+            scale = 0.1f;
+            return BitmapFontRenderer.Wrap(text, bounds.Width, scale);
+        }
+
+        private static Vector2 MeasureDraftDescription(string text, float scale)
+        {
+            Vector2 size = BitmapFontRenderer.Measure(text, scale);
+            int lineCount = text.Split('\n').Length;
+            float gap = Math.Max(4f, BitmapFontRenderer.Measure("A", scale).Y * 0.25f);
+            size.Y += (lineCount - 1) * gap;
+            return size;
         }
 
         private (Rectangle dialogBounds, Rectangle[] presetBounds, Rectangle cancelBounds, Rectangle applyBounds) GetAudioQualityDialogBounds()
@@ -4963,65 +5005,80 @@ namespace SpaceBurst
 
         private void DrawUpgradeDraft(SpriteBatch spriteBatch, Texture2D pixel)
         {
-            spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), Color.Black * 0.58f);
+            spriteBatch.Draw(pixel, new Rectangle(0, 0, Game1.VirtualWidth, Game1.VirtualHeight), Color.Black * 0.72f);
+            Rectangle[] cards = GetUpgradeDraftCardBounds();
+            if (cards.Length == 0)
+                return;
 
-            DrawCenteredText(spriteBatch, pixel, draftFromTutorial ? "UPGRADE DRAFT" : "LEVEL SURGE", Game1.ScreenSize.X / 2f, 108f, Color.White, 2.6f);
-            DrawCenteredText(spriteBatch, pixel, options.AutoUpgradeDraft ? string.Concat("AUTO PICKS RANDOMLY IN ", Math.Max(0f, draftTimer).ToString("0.0"), "s") : string.Concat("CHOOSE IN ", Math.Max(0f, draftTimer).ToString("0.0"), "s"), Game1.ScreenSize.X / 2f, 146f, Color.White * 0.72f, 1.18f);
-
-            int cardWidth = 300;
-            int cardHeight = 246;
-            int gap = 24;
-            int totalWidth = cardWidth * 3 + gap * 2;
-            int startX = (Game1.VirtualWidth - totalWidth) / 2;
-            int y = 198;
+            Rectangle safe = Game1.SafeUiBounds;
+            DrawButton(spriteBatch, pixel, new UiButton(GetUpgradeDraftPauseBounds(), "PAUSE"), false);
+            DrawTextCenteredInBounds(spriteBatch, pixel, draftFromTutorial ? "UPGRADE DRAFT" : "LEVEL SURGE",
+                new Rectangle(safe.X, safe.Y + DraftPx(70), safe.Width, DraftPx(40)), Color.White, 2.6f, 0.9f);
+            string prompt = options.AutoUpgradeDraft
+                ? string.Concat("AUTO PICKS RANDOMLY IN ", Math.Max(0f, draftTimer).ToString("0.0"), "s")
+                : "TAKE YOUR TIME - CHOOSE AN UPGRADE";
+            DrawTextCenteredInBounds(spriteBatch, pixel, prompt,
+                new Rectangle(safe.X, safe.Y + DraftPx(120), safe.Width, DraftPx(28)), Color.White * 0.85f, 1.18f, 0.8f);
 
             for (int i = 0; i < draftCards.Count; i++)
             {
                 UpgradeDraftCard card = draftCards[i];
-                Rectangle bounds = new Rectangle(startX + i * (cardWidth + gap), y, cardWidth, cardHeight);
+                Rectangle bounds = cards[i];
                 Color accent = ColorUtil.ParseHex(card.AccentColor, Color.Orange);
-                DrawPanel(spriteBatch, pixel, bounds, i == draftSelection ? accent * 0.16f : Color.Black * 0.45f, i == draftSelection ? accent : Color.White * 0.2f);
-                spriteBatch.Draw(pixel, new Rectangle(bounds.X, bounds.Y, bounds.Width, 10), accent * 0.82f);
+                DrawPanel(spriteBatch, pixel, bounds, i == draftSelection ? Color.Lerp(new Color(7, 13, 21), accent, 0.12f) : new Color(7, 13, 21), i == draftSelection ? accent : Color.White * 0.3f);
+                spriteBatch.Draw(pixel, new Rectangle(bounds.X, bounds.Y, bounds.Width, 8), accent * 0.82f);
+                int padding = 16;
+                int textWidth = bounds.Width - padding * 2;
                 if (!string.IsNullOrWhiteSpace(card.HotkeyLabel))
                 {
-                    Rectangle hotkeyBounds = new Rectangle(bounds.Right - 54, bounds.Y + 14, 34, 20);
-                    DrawPanel(spriteBatch, pixel, hotkeyBounds, accent * 0.16f, accent * 0.8f);
-                    DrawCenteredText(spriteBatch, pixel, card.HotkeyLabel, hotkeyBounds.Center.X, hotkeyBounds.Y + 2f, Color.White, 0.96f);
+                    Rectangle hotkey = new Rectangle(bounds.Right - 44, bounds.Y + 16, 28, 24);
+                    DrawPanel(spriteBatch, pixel, hotkey, accent * 0.16f, accent * 0.8f);
+                    DrawTextCenteredInBounds(spriteBatch, pixel, card.HotkeyLabel, hotkey, Color.White, 0.96f, 0.6f);
                 }
-
-                BitmapFontRenderer.Draw(spriteBatch, pixel, card.Title, new Vector2(bounds.X + 18f, bounds.Y + 22f), Color.White, 1.38f);
-                BitmapFontRenderer.Draw(spriteBatch, pixel, card.Subtitle, new Vector2(bounds.X + 18f, bounds.Y + 52f), accent * 0.92f, 0.95f);
-                if (!string.IsNullOrWhiteSpace(card.DeltaText))
-                    BitmapFontRenderer.Draw(spriteBatch, pixel, card.DeltaText, new Vector2(bounds.X + 18f, bounds.Y + 78f), Color.White, 1.06f);
-                BitmapFontRenderer.Draw(spriteBatch, pixel, card.Description, new Vector2(bounds.X + 18f, bounds.Y + 106f), Color.White * 0.82f, 0.94f);
-
-                if (card.Type == UpgradeCardType.WeaponSurge)
+                DrawTextVerticallyCentered(spriteBatch, pixel, card.Title,
+                    new Rectangle(bounds.X + padding, bounds.Y + 16, textWidth - 38, 28), Color.White,
+                    ScaleTextToFitBounds(card.Title, textWidth - 38, 28, 1.38f, 0.6f));
+                DrawTextVerticallyCentered(spriteBatch, pixel, card.Subtitle,
+                    new Rectangle(bounds.X + padding, bounds.Y + 50, textWidth, 20), accent * 0.92f,
+                    ScaleTextToFitBounds(card.Subtitle, textWidth, 20, 0.95f, 0.6f));
+                DrawTextVerticallyCentered(spriteBatch, pixel, card.DeltaText,
+                    new Rectangle(bounds.X + padding, bounds.Y + 76, textWidth, 20), Color.White,
+                    ScaleTextToFitBounds(card.DeltaText, textWidth, 20, 1.06f, 0.6f));
+                var descriptionBounds = new Rectangle(bounds.X + padding, bounds.Y + 104, textWidth, bounds.Height - 182);
+                string description = FitDraftDescription(card.Description, descriptionBounds, out float descriptionScale);
+                float lineHeight = BitmapFontRenderer.Measure("A", descriptionScale).Y;
+                float lineY = descriptionBounds.Y;
+                foreach (string line in description.Split('\n'))
+                {
+                    BitmapFontRenderer.Draw(spriteBatch, pixel, line, new Vector2(descriptionBounds.X, lineY), Color.White * 0.88f, descriptionScale);
+                    lineY += lineHeight + Math.Max(4f, lineHeight * 0.25f);
+                }
+                Rectangle preview = new Rectangle(bounds.X + padding, bounds.Bottom - 66, textWidth, 46);
+                DrawPanel(spriteBatch, pixel, preview, accent * 0.12f, accent * 0.5f);
+                bool weaponCard = card.Type == UpgradeCardType.WeaponSurge || card.Type == UpgradeCardType.SupportWeapon || card.Type == UpgradeCardType.EvolutionSurge;
+                int previewInset = weaponCard ? 42 : 6;
+                if (weaponCard)
                 {
                     WeaponStyleDefinition style = WeaponCatalog.GetStyle(card.StyleId);
-                    PixelArtRenderer.DrawRows(spriteBatch, pixel, style.IconRows, new Vector2(bounds.Center.X, bounds.Bottom - 64f), 6f, ColorUtil.ParseHex(style.PrimaryColor, Color.White), ColorUtil.ParseHex(style.SecondaryColor, Color.LightBlue), accent, true);
-                    BitmapFontRenderer.DrawCentered(spriteBatch, pixel, card.PreviewText, new Vector2(bounds.Center.X, bounds.Bottom - 30f), Color.White * 0.8f, 0.95f);
+                    PixelArtRenderer.DrawRows(spriteBatch, pixel, style.IconRows, new Vector2(preview.X + 22, preview.Center.Y), 3f,
+                        ColorUtil.ParseHex(style.PrimaryColor, Color.White), ColorUtil.ParseHex(style.SecondaryColor, Color.LightBlue), accent, true);
                 }
-                else
-                {
-                    Rectangle previewPanel = new Rectangle(bounds.X + 18, bounds.Bottom - 72, bounds.Width - 36, 38);
-                    DrawPanel(spriteBatch, pixel, previewPanel, accent * 0.15f, accent * 0.55f);
-                    DrawCenteredText(spriteBatch, pixel, card.PreviewText, previewPanel.Center.X, previewPanel.Y + 6f, Color.White, 1.08f);
-                    BitmapFontRenderer.DrawCentered(spriteBatch, pixel, card.BadgeText, new Vector2(previewPanel.Center.X, previewPanel.Bottom - 12f), Color.White * 0.6f, 0.78f);
-                }
+                DrawTextCenteredInBounds(spriteBatch, pixel, card.PreviewText,
+                    new Rectangle(preview.X + previewInset, preview.Y + 4, preview.Width - previewInset - 6, 22), Color.White, 1.08f, 0.6f);
+                DrawTextCenteredInBounds(spriteBatch, pixel, card.BadgeText,
+                    new Rectangle(preview.X + 6, preview.Y + 26, preview.Width - 12, 16), accent, 0.78f, 0.5f);
             }
 
-            string statusLine = draftFromTutorial
+            string status = draftFromTutorial
                 ? string.Concat("STORED CHARGES ", PlayerStatus.RunProgress.StoredUpgradeCharges.ToString())
-                : string.Concat(
-                    "RUN LV ", PlayerStatus.RunProgress.RunLevel.ToString(),
-                    "   PENDING ", PlayerStatus.RunProgress.PendingLevelUps.ToString(),
-                    "   SCRAP ", PlayerStatus.RunProgress.Scrap.ToString());
-            DrawCenteredText(spriteBatch, pixel, statusLine, Game1.ScreenSize.X / 2f, 476f, Color.White * 0.75f, 1.15f);
-#if ANDROID
-            DrawCenteredText(spriteBatch, pixel, "TAP A CARD TO PICK IT  AUTO DRAFT ROLLS RANDOMLY AT 0", Game1.ScreenSize.X / 2f, 520f, Color.White * 0.62f, 1.05f);
-#else
-            DrawCenteredText(spriteBatch, pixel, "A / S / D PICK LEFT / MID / RIGHT   ARROWS + ENTER STILL WORK", Game1.ScreenSize.X / 2f, 520f, Color.White * 0.62f, 1.05f);
-#endif
+                : string.Concat("RUN LV ", PlayerStatus.RunProgress.RunLevel.ToString(), "   PENDING ", PlayerStatus.RunProgress.PendingLevelUps.ToString(), "   SCRAP ", PlayerStatus.RunProgress.Scrap.ToString());
+            DrawTextCenteredInBounds(spriteBatch, pixel, status,
+                new Rectangle(safe.X, cards[0].Bottom + DraftPx(20), safe.Width, DraftPx(28)), Color.White * 0.8f, 1.15f, 0.6f);
+            string controls = PlatformServices.Capabilities.SupportsTouch
+                ? "TAP A CARD TO CHOOSE - PAUSE KEEPS YOUR CHOICE OPEN"
+                : "A / S / D OR ARROWS + ENTER CHOOSE - ESC PAUSES";
+            DrawTextCenteredInBounds(spriteBatch, pixel, controls,
+                new Rectangle(safe.X, cards[0].Bottom + DraftPx(60), safe.Width, DraftPx(28)), Color.White * 0.75f, 1.05f, 0.6f);
         }
 
         private void GetTutorialPrompt(out string title, out string body, out int stepIndex)
@@ -5239,6 +5296,16 @@ namespace SpaceBurst
             return currentStage.Sections[0];
         }
 
+        private GameFlowState GetRunStateForSave()
+        {
+            GameFlowState runState = state;
+            if (runState == GameFlowState.SaveSlots || runState == GameFlowState.LoadSlots || runState == GameFlowState.Options)
+                runState = slotReturnState;
+            if (runState == GameFlowState.Help)
+                runState = helpReturnState;
+            return runState == GameFlowState.Paused ? pauseReturnState : runState;
+        }
+
         private RunSaveData CaptureRunSaveData(int slotIndex, bool includeSummary)
         {
             var save = new RunSaveData
@@ -5248,7 +5315,7 @@ namespace SpaceBurst
                 Difficulty = PlayerStatus.RunProgress.Difficulty,
                 ViewMode = viewMode,
                 PresentationTier = presentationTier,
-                State = state == GameFlowState.SaveSlots || state == GameFlowState.LoadSlots || state == GameFlowState.Options ? GameFlowState.Paused : state,
+                State = GetRunStateForSave(),
                 HelpReturnState = helpReturnState,
                 DraftReturnState = draftReturnState,
                 StageElapsedSeconds = stageElapsedSeconds,
@@ -5460,7 +5527,12 @@ namespace SpaceBurst
 
             if (!fromRewind)
             {
-                state = save.State == GameFlowState.Playing || save.State == GameFlowState.Tutorial ? GameFlowState.Paused : save.State;
+                GameFlowState restoredRunState = save.State == GameFlowState.Paused
+                    ? (draftCards.Count > 0 ? GameFlowState.UpgradeDraft : GameFlowState.Playing)
+                    : save.State;
+                pauseReturnState = restoredRunState;
+                state = restoredRunState == GameFlowState.Playing || restoredRunState == GameFlowState.Tutorial || restoredRunState == GameFlowState.UpgradeDraft
+                    ? GameFlowState.Paused : restoredRunState;
                 float restoredMeter = rewindMeterSeconds;
                 ResetRewindBuffer();
                 rewindMeterSeconds = restoredMeter;

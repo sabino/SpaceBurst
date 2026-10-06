@@ -7,7 +7,7 @@ SpaceBurst is built as a forward-scrolling arcade shooter with a deterministic c
 1. Clear authored stage sections while the world scrolls forward.
 2. Collect style-specific power cores from destroyed enemies.
 3. Survive with `Ships` for in-place respawns and `Lives` for full stage restarts.
-4. Use stage transitions to spend stored upgrade charges on draft cards.
+4. Earn XP level-ups and choose draft cards while the action is paused. Manual drafts wait for an explicit choice; the optional auto mode chooses randomly on its countdown. You can pause and save a pending draft.
 5. Build multiplier chains at `8`, `14`, and `20` for XP, scrap, and rewind rewards.
 6. Push through five named chapters and defeat a boss on every 10th stage.
 

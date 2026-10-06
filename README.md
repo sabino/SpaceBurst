@@ -15,7 +15,7 @@ License: **The Unlicense**
 
 - Five progressively denser 10-stage chapters, with boss fights on stages 10, 20, 30, 40, and 50.
 - Authored horde packets, elite surges, presentation beats, and reachable kill-chain rewards throughout all 50 stages.
-- Deterministic rewind, save slots, and transition-time upgrade drafts.
+- Deterministic rewind, save slots, and paused XP level-up drafts.
 - Ten chapter-gated weapon styles, a core-plus-four-support loadout, and ten distinct weapon evolutions.
 - Procedural art, feedback effects, chapter-aware music, and runtime-generated audio.
 - Sabino Software falling-pixel splash intro with randomized launch palette/background, fade-in, and skip interaction.
@@ -52,7 +52,7 @@ License: **The Unlicense**
 - `Ships` give in-place respawns.
 - `Lives` restart the current stage once ships are exhausted.
 - `HULL` shows current ship integrity.
-- Power cores feed between-stage upgrade drafts and long-run weapon growth.
+- XP shards earn run level-ups and paused upgrade drafts. Manual drafts wait for a choice; optional auto drafts use a countdown. Pending choices can be paused and saved.
 - The title screen can skip the tutorial immediately, and the tutorial pause menu can skip it mid-run.
 - Starting a new campaign now opens a difficulty picker with `Easy`, `Normal`, `Hard`, `Insane`, and `Realistic`.
 - Options include `UI Scale`, 3D gameplay controls, and display/FX/audio tuning.
