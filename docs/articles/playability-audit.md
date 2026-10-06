@@ -4,7 +4,7 @@ Audit date: 2026-10-06. Baseline: `1a7d3607e20f5a0cc2f4a1f1197d17c6e48bbc6d`.
 
 ## Verdict
 
-SpaceBurst is a playable shooter foundation with a substantial campaign, a complete menu-to-run loop in code, authored encounters, five boss milestones, ten weapon styles, saves, rewind, and generated presentation/audio. It is **not yet established as a feature-complete, balanced, readable release**. Existing green CI misses reproducible failures in the actual game host. Some progression rewards promise systems that are not implemented, and dense weapon stacks impair readability.
+SpaceBurst is a playable shooter foundation with a substantial campaign, a complete menu-to-run loop in code, authored encounters, five boss milestones, ten weapon styles, saves, rewind, and generated presentation/audio. It is **not yet established as a feature-complete, balanced, readable release**. Baseline green CI missed reproducible failures in the actual game host. The baseline also had unused progression rewards and dense weapon stacks that impaired readability; implementation progress below tracks the repairs.
 
 “Fun” needs player evidence: tests establish correctness and reachability, not enjoyment. The release gate should include fresh-player observation and representative full runs, with attention to perceived fairness, understandable decisions, and distinct weapon roles.
 
@@ -77,3 +77,9 @@ Each implementation lands through a focused PR, local verification, all PR CI jo
 - Resource review also found unbounded managed mesh/voxel caches keyed by damaged hull shape. The resource task bounds those caches and shares immutable projectile sprites to reduce per-shot/rewind GPU allocation.
 
 - PR #22 merged after all five CI jobs passed: entity/player/cache GPU ownership, bounded mesh caches, shared projectile sprites, 100 repeated restores, and a 1,000-shot allocation check. The graphics-backed full campaign liveness check now runs in Linux CI.
+
+- PR #23 merged after all five CI jobs passed: salvage grants a spare ship every five scrap, campaign spare cores grant XP, legacy charges convert once, and reward help/docs match behavior. The five-scrap threshold still needs player balance evidence. Help pages outside the draft also need a full accessibility-scale/layout pass.
+
+- Readability pass renders friendly fire below ships and hostile shots above them, reduces friendly shot/beam brightness and trail emissions, and avoids friendly projectile depth writes in 3D. Side view has a stable post-bloom player locator and crisp hostile-shot contours. Controlled scenes at stages 1, 21, and 41 were reviewed with Low and Neon presets, including 3D. Collision geometry and projectile scale are unchanged. These samples are presentation checks, not proof of fair human dodging or device performance.
+
+![Dense friendly stack with stable player locator and three injected hostile shots](../media/audit/readability-after.png)

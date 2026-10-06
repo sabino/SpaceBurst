@@ -19,6 +19,8 @@ namespace SpaceBurst
             get { return Friendly; }
         }
 
+        internal override Color RenderTint => color * CombatReadability.GetOpacity(this);
+
         public bool Friendly { get; }
         public int Damage { get; }
         public int RemainingPierceHits { get; private set; }
@@ -318,8 +320,8 @@ namespace SpaceBurst
             if (trailTimer > 0f)
                 return;
 
-            trailTimer = TrailFxStyle == TrailFxStyle.Beam ? 0.02f : 0.05f;
-            Color tint = ResolveTrailColor();
+            trailTimer = (TrailFxStyle == TrailFxStyle.Beam ? 0.02f : 0.05f) * (Friendly ? 2f : 1f);
+            Color tint = ResolveTrailColor() * (Friendly ? 0.5f : 1f);
 
             switch (TrailFxStyle)
             {

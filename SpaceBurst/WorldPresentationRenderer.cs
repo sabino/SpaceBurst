@@ -106,7 +106,7 @@ namespace SpaceBurst
                 return;
             }
 
-            foreach (Entity entity in entities)
+            foreach (Entity entity in CombatReadability.InDrawOrder(entities))
             {
                 if (entity == null || entity.IsExpired)
                     continue;
@@ -660,7 +660,7 @@ namespace SpaceBurst
             return entity switch
             {
                 Enemy enemy => enemy.PresentationAccentColor,
-                _ => ColorUtil.ParseHex(entity.SpriteInstance?.AccentColorHex, entity.RenderTint),
+                _ => ColorUtil.ParseHex(entity.SpriteInstance?.AccentColorHex, entity.RenderTint) * CombatReadability.GetOpacity(entity),
             };
         }
     }

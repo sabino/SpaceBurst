@@ -125,7 +125,7 @@ namespace SpaceBurst
             get { return sprite; }
         }
 
-        internal Color RenderTint
+        internal virtual Color RenderTint
         {
             get { return color; }
         }
@@ -179,14 +179,14 @@ namespace SpaceBurst
             {
                 if (Game1.Instance != null && Game1.Instance.EnableNeonOutlines)
                 {
-                    Color outline = ColorUtil.ParseHex(sprite.AccentColorHex, color) * 0.16f;
+                    Color outline = ColorUtil.ParseHex(sprite.AccentColorHex, RenderTint) * (0.16f * CombatReadability.GetOpacity(this));
                     sprite.Draw(spriteBatch, Position + new Vector2(-2f, 0f), outline, Orientation, RenderScale);
                     sprite.Draw(spriteBatch, Position + new Vector2(2f, 0f), outline, Orientation, RenderScale);
                     sprite.Draw(spriteBatch, Position + new Vector2(0f, -2f), outline, Orientation, RenderScale);
                     sprite.Draw(spriteBatch, Position + new Vector2(0f, 2f), outline, Orientation, RenderScale);
                 }
 
-                sprite.Draw(spriteBatch, Position, color, Orientation, RenderScale);
+                sprite.Draw(spriteBatch, Position, RenderTint, Orientation, RenderScale);
             }
         }
 

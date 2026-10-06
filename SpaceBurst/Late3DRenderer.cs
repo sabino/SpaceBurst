@@ -385,7 +385,7 @@ namespace SpaceBurst
 
         private static void DrawEntityMeshes(GraphicsDevice graphicsDevice, IEnumerable<Entity> entities)
         {
-            foreach (Entity entity in entities)
+            foreach (Entity entity in CombatReadability.InDrawOrder(entities))
             {
                 if (entity == null || entity.IsExpired || entity.SpriteInstance == null)
                     continue;
@@ -395,6 +395,10 @@ namespace SpaceBurst
                     continue;
 
                 opaqueEffect.World = mesh.World;
+                float opacity = CombatReadability.GetOpacity(entity);
+                opaqueEffect.Alpha = opacity;
+                graphicsDevice.DepthStencilState = CombatReadability.IsFriendlyFire(entity)
+                    ? DepthStencilState.DepthRead : DepthStencilState.Default;
                 for (int passIndex = 0; passIndex < opaqueEffect.CurrentTechnique.Passes.Count; passIndex++)
                 {
                     EffectPass pass = opaqueEffect.CurrentTechnique.Passes[passIndex];
@@ -414,7 +418,7 @@ namespace SpaceBurst
                     graphicsDevice.BlendState = BlendState.Additive;
                     graphicsDevice.DepthStencilState = DepthStencilState.DepthRead;
                     glowEffect.World = mesh.World;
-                    glowEffect.Alpha = MathHelper.Clamp(mesh.GlowStrength, 0.15f, 1f);
+                    glowEffect.Alpha = MathHelper.Clamp(mesh.GlowStrength, 0.15f, 1f) * opacity;
                     for (int passIndex = 0; passIndex < glowEffect.CurrentTechnique.Passes.Count; passIndex++)
                     {
                         EffectPass pass = glowEffect.CurrentTechnique.Passes[passIndex];
@@ -436,6 +440,7 @@ namespace SpaceBurst
                 if (entity is Player1 player && player.CannonSpriteInstance != null)
                     DrawPlayerCannon(player, mesh.World, mesh.Cache);
             }
+            opaqueEffect.Alpha = 1f;
         }
 
         private static void DrawBeams(GraphicsDevice graphicsDevice, IEnumerable<Entity> entities)
@@ -464,8 +469,9 @@ namespace SpaceBurst
 
                 float beamWidth = Math.Max(0.55f, beam.Thickness * 0.08f);
                 Vector3 offset = right * beamWidth;
-                Color outer = ColorUtil.ParseHex(beam.AccentColorHex, Color.Cyan) * 0.48f;
-                Color inner = ColorUtil.ParseHex(beam.PrimaryColorHex, Color.White) * 0.92f;
+                float opacity = CombatReadability.GetOpacity(beam);
+                Color outer = ColorUtil.ParseHex(beam.AccentColorHex, Color.Cyan) * (0.48f * opacity);
+                Color inner = ColorUtil.ParseHex(beam.PrimaryColorHex, Color.White) * (0.92f * opacity);
 
                 DrawBeamQuad(graphicsDevice, start, end, offset * 1.7f, outer, true);
                 DrawBeamQuad(graphicsDevice, start, end, offset * 0.65f, inner, false);
