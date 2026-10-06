@@ -12,6 +12,9 @@ namespace SpaceBurst
 
     static class PlayerStatus
     {
+        public const int MaximumLives = 9;
+        public const int MaximumShips = 9;
+
         private const float multiplierExpiryTime = 1.2f;
         private const int maxMultiplier = 20;
         private const int extraLifeScoreStep = 3000;
@@ -38,8 +41,8 @@ namespace SpaceBurst
             RunProgress.BeginCampaign(openingStage, difficulty);
             Score = 0;
             Multiplier = 1;
-            Lives = RunProgress.StartingLives;
-            Ships = RunProgress.ShipsPerLife;
+            Lives = Math.Min(MaximumLives, RunProgress.StartingLives);
+            Ships = Math.Min(MaximumShips, RunProgress.ShipsPerLife);
             scoreForExtraLife = extraLifeScoreStep;
             multiplierTimeLeft = 0f;
         }
@@ -48,9 +51,9 @@ namespace SpaceBurst
         {
             RunProgress.ApplyStageDefaults(stage);
             if (resetLives)
-                Lives = RunProgress.StartingLives;
+                Lives = Math.Min(MaximumLives, RunProgress.StartingLives);
 
-            Ships = RunProgress.ShipsPerLife;
+            Ships = Math.Min(MaximumShips, RunProgress.ShipsPerLife);
         }
 
         public static void Update()
@@ -72,11 +75,17 @@ namespace SpaceBurst
             if (Player1.Instance.IsDead)
                 return;
 
-            Score += basePoints * Multiplier;
-            while (Score >= scoreForExtraLife)
+            if (basePoints <= 0)
+                return;
+
+            int previousScore = Score;
+            Score = (int)Math.Min(int.MaxValue, (long)Score + (long)basePoints * Multiplier);
+            if (previousScore < scoreForExtraLife && Score >= scoreForExtraLife)
             {
-                scoreForExtraLife += extraLifeScoreStep;
-                Lives++;
+                int awards = (Score - scoreForExtraLife) / extraLifeScoreStep + 1;
+                GrantLife(awards);
+                // Advance even at full stock, so spent lives cannot redeem old score again.
+                scoreForExtraLife = (int)Math.Min(int.MaxValue, (long)scoreForExtraLife + (long)awards * extraLifeScoreStep);
             }
         }
 
@@ -100,13 +109,13 @@ namespace SpaceBurst
         public static void GrantShips(int count)
         {
             if (count > 0)
-                Ships += count;
+                Ships = (int)Math.Min(MaximumShips, (long)Ships + count);
         }
 
         public static void GrantLife(int count = 1)
         {
             if (count > 0)
-                Lives += count;
+                Lives = (int)Math.Min(MaximumLives, (long)Lives + count);
         }
 
         public static PlayerDeathOutcome ConsumeDeath(StageDefinition stage)
@@ -123,7 +132,7 @@ namespace SpaceBurst
             if (Lives <= 0)
                 return PlayerDeathOutcome.GameOver;
 
-            Ships = RunProgress.ShipsPerLife;
+            Ships = Math.Min(MaximumShips, RunProgress.ShipsPerLife);
             return PlayerDeathOutcome.RestartStage;
         }
 
@@ -152,12 +161,13 @@ namespace SpaceBurst
             if (snapshot == null)
                 return;
 
-            Lives = snapshot.Lives;
-            Ships = snapshot.Ships;
-            Score = snapshot.Score;
-            Multiplier = snapshot.Multiplier;
+            Lives = Math.Clamp(snapshot.Lives, 0, MaximumLives);
+            Ships = Math.Clamp(snapshot.Ships, 0, MaximumShips);
+            Score = Math.Max(0, snapshot.Score);
+            Multiplier = Math.Clamp(snapshot.Multiplier, 1, maxMultiplier);
             multiplierTimeLeft = snapshot.MultiplierTimeLeft;
-            scoreForExtraLife = snapshot.ScoreForExtraLife > 0 ? snapshot.ScoreForExtraLife : extraLifeScoreStep;
+            int nextThreshold = (int)Math.Min(int.MaxValue, ((long)Score / extraLifeScoreStep + 1) * extraLifeScoreStep);
+            scoreForExtraLife = snapshot.ScoreForExtraLife > Score ? snapshot.ScoreForExtraLife : nextThreshold;
             RunProgress.RestoreSnapshot(snapshot.RunProgress);
         }
     }

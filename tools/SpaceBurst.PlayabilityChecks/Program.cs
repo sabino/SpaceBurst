@@ -65,6 +65,7 @@ sealed class PlayabilityCheckGame : Game1
         CheckCampaignState(director);
         CheckDraftChoices(director);
         CheckRunRewards(director);
+        CheckSurvivalEconomy(director);
         CheckResourceOwnership(director);
         CheckCampaignLiveness(director);
         PlayerTexture = Player1.Instance.SpriteInstance.Texture;
@@ -320,6 +321,52 @@ sealed class PlayabilityCheckGame : Game1
             "Loaded tutorial resumes tutorial flow");
     }
 
+    private static void CheckSurvivalEconomy(CampaignDirector director)
+    {
+        director.TryConsoleLoadStage(1);
+        PlayerStatus.BeginCampaign(new StageDefinition(), GameDifficulty.Normal);
+        Player1.Instance.ResetForStage();
+        PlayerStatus.GrantLife(int.MaxValue);
+        PlayerStatus.GrantShips(int.MaxValue);
+        Require(PlayerStatus.Lives == PlayerStatus.MaximumLives && PlayerStatus.Ships == PlayerStatus.MaximumShips,
+            "Life and ship rewards remain within stock limits without integer overflow");
+        PlayerStatus.AddPoints(3000);
+        for (int death = 0; death < PlayerStatus.MaximumShips; death++)
+            Require(PlayerStatus.ConsumeDeath(null) == PlayerDeathOutcome.RespawnInPlace, "Spare ships provide in-place respawns");
+        Require(PlayerStatus.ConsumeDeath(null) == PlayerDeathOutcome.RestartStage && PlayerStatus.Lives == 8,
+            "Exhausting spare ships spends a life and restarts the stage");
+        PlayerStatus.AddPoints(1);
+        Require(PlayerStatus.Lives == 8, "A full stock advances score thresholds without banking old life awards");
+        PlayerStatus.AddPoints(2999);
+        Require(PlayerStatus.Lives == 9, "A new score threshold still replenishes a spent life");
+        PlayerStatus.AddPoints(int.MaxValue);
+        Require(PlayerStatus.Score == int.MaxValue && PlayerStatus.Lives == 9, "Large score awards saturate safely");
+        var snapshot = PlayerStatus.CaptureSnapshot();
+        snapshot.Lives = 186;
+        snapshot.Ships = 100;
+        PersistentStorage.SaveRunSlot(2, new RunSaveData { PlayerStatus = snapshot });
+        RunSaveData loaded = PersistentStorage.LoadRunSlot(2);
+        Require(loaded != null && loaded.PlayerStatus.Lives == 9 && loaded.PlayerStatus.Ships == 9,
+            "Sealed save/load normalizes surplus survival stock");
+        snapshot.Lives = 186;
+        snapshot.Ships = 100;
+        PlayerStatus.RestoreSnapshot(snapshot);
+        Require(PlayerStatus.Lives == 9 && PlayerStatus.Ships == 9, "Direct snapshot restoration enforces stock limits");
+        snapshot = PlayerStatus.CaptureSnapshot();
+        snapshot.Lives = 8;
+        PlayerStatus.RestoreSnapshot(snapshot);
+        PlayerStatus.AddPoints(1);
+        Require(PlayerStatus.Lives == 8, "Exhausted integer score ceiling cannot mint repeated lives");
+        PlayerStatus.BeginCampaign(new StageDefinition(), GameDifficulty.Normal);
+        int restarts = 0;
+        while (!PlayerStatus.IsGameOver)
+        {
+            if (PlayerStatus.ConsumeDeath(null) == PlayerDeathOutcome.RestartStage)
+                restarts++;
+        }
+        Require(restarts == 1, "Deaths eventually reach game over after the default Normal stage retry");
+    }
+
     private void CheckResourceOwnership(CampaignDirector director)
     {
         Set(director, "state", GameFlowState.Title);
@@ -406,18 +453,27 @@ sealed class PlayabilityCheckGame : Game1
 
     private static void CheckCampaignLiveness(CampaignDirector director)
     {
+        foreach (GameDifficulty difficulty in new[] { GameDifficulty.Easy, GameDifficulty.Normal, GameDifficulty.Hard, GameDifficulty.Insane, GameDifficulty.Realistic })
+            RunControlledCampaign(director, difficulty);
+    }
+
+    private static void RunControlledCampaign(CampaignDirector director, GameDifficulty difficulty)
+    {
         // This is a structural liveness test: invulnerability and scripted damage
         // ensure threats clear. It does not measure human skill, balance, or fun.
         SetKeys();
         Set(director, "state", GameFlowState.Title);
+        ((OptionsData)Get(director, "options")).LastSelectedDifficulty = difficulty;
         director.TryConsoleLoadStage(1);
         Set(director, "state", GameFlowState.Playing);
+        var stages = new HashSet<int>();
         var bosses = new HashSet<int>();
         int drafts = 0;
         for (int frame = 1; frame <= 432000; frame++)
         {
             typeof(Game1).GetProperty("GameTime").SetValue(null,
                 new GameTime(TimeSpan.FromSeconds(frame / 60.0), TimeSpan.FromSeconds(1.0 / 60)));
+            stages.Add(director.CurrentStageNumber);
             if (director.CurrentState == GameFlowState.UpgradeDraft)
             {
                 Call(director, "ApplyDraftSelection", 0);
@@ -442,9 +498,10 @@ sealed class PlayabilityCheckGame : Game1
             }
             if (director.CurrentState == GameFlowState.CampaignComplete)
             {
-                Require(director.CurrentStageNumber == 50 && bosses.SetEquals(new[] { 10, 20, 30, 40, 50 }),
-                    "Controlled simulation reaches all five bosses and the stage-50 ending");
-                Console.WriteLine($"LIVENESS: seconds={frame / 60.0:F1}, drafts={drafts}, lives={PlayerStatus.Lives}, cachedProjectileSprites={Game1.Instance.ProjectileSprites.Count}");
+                Require(director.CurrentStageNumber == 50 && stages.SetEquals(Enumerable.Range(1, 50)) && bosses.SetEquals(new[] { 10, 20, 30, 40, 50 })
+                    && PlayerStatus.RunProgress.Difficulty == difficulty && PlayerStatus.Lives <= PlayerStatus.MaximumLives,
+                    $"Controlled {difficulty} simulation reaches all 50 stages/five bosses and the ending with bounded stock");
+                Console.WriteLine($"LIVENESS: difficulty={difficulty}, score={PlayerStatus.Score}, seconds={frame / 60.0:F1}, drafts={drafts}, lives={PlayerStatus.Lives}, cachedProjectileSprites={Game1.Instance.ProjectileSprites.Count}");
                 return;
             }
             if (director.CurrentState == GameFlowState.GameOver)

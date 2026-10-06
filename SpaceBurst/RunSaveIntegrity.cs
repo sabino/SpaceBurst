@@ -131,8 +131,8 @@ namespace SpaceBurst
             NormalizeList(save.ReentryTickets, 256);
 
             save.PlayerStatus.RunProgress ??= new PlayerRunProgressSnapshotData();
-            save.PlayerStatus.Lives = Math.Clamp(save.PlayerStatus.Lives, 0, 99);
-            save.PlayerStatus.Ships = Math.Clamp(save.PlayerStatus.Ships, 0, 99);
+            save.PlayerStatus.Lives = Math.Clamp(save.PlayerStatus.Lives, 0, PlayerStatus.MaximumLives);
+            save.PlayerStatus.Ships = Math.Clamp(save.PlayerStatus.Ships, 0, PlayerStatus.MaximumShips);
             save.PlayerStatus.Score = Math.Max(0, save.PlayerStatus.Score);
             save.PlayerStatus.Multiplier = Math.Clamp(save.PlayerStatus.Multiplier, 1, 99);
             save.PlayerStatus.MultiplierTimeLeft = ClampFinite(save.PlayerStatus.MultiplierTimeLeft, 0f, 3600f);

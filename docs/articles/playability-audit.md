@@ -41,6 +41,7 @@ SpaceBurst is a playable shooter foundation with a substantial campaign, a compl
 | C14 | P2 | CI covers publishing and small tests, without game-host assertions for saves/rewind/progression. | Run real graphics-backed regressions and campaign liveness checks. |
 | C15 | P1 | Legal upgrade sequences reduce movement 1.8→1.4, rewind efficiency 0.65→0.60, drop chance 0.28→0.24, and reserves 7→6 because paths use inconsistent caps. Reproduced with production progress methods. | Upgrades never reduce an existing stat, regardless of order. |
 | C16 | P1 | Tutorial rewind restores an earlier tutorial step as well as the world. A prompt-following keyboard run alternated FIRE/REWIND and failed to finish within 180 simulated seconds. | Preserve the rewind instruction until fulfilled; finish the tutorial with any of its three draft choices. |
+| C17 | P1 | Boss presentation scale is 1.45–3.80 while point/overlap checks and damage mapping still use the original render scale. Host pixel sampling found 52%–93% of visible boss hull pixels outside the physical mask. | Use one consistent sprite scale for rendering, collision bounds, overlap tests, and damage coordinates; cover all five bosses. |
 
 ## Balance and release questions requiring measurements
 
@@ -88,3 +89,18 @@ Each implementation lands through a focused PR, local verification, all PR CI jo
 
 - PR #24 merged after all five CI jobs passed: quieter/layered friendly fire, stable side-view player locator, and crisp hostile-shot contours. Human readability and 3D/device acceptance remain open.
 - Tutorial follow-up found C16. Guided rewind now preserves its lesson while restoring the world and is available during that lesson only, so later practice choices cannot be undone. The CI host follows movement/aim/fire/rewind/collect/style/confirm prompts and chooses each of the three cards through keyboard input.
+
+- PR #25 merged after all five CI jobs passed: guided tutorial rewind no longer restores an earlier lesson. All three prompt-following keyboard paths now complete into stage 1; continued R holds during collection are covered.
+- C15 upgrade paths now retain stronger existing values rather than lowering them to a different path's cap. Initial survival safeguard caps lives and spare ships at nine, advances consumed score thresholds at full stock, safely saturates scores, normalizes legacy surplus stock after integrity verification, and omits salvage drafts at full ship stock. Human testing must still tune the cap and life-award cadence.
+
+Controlled fixed-seed campaign runs (invulnerable, scripted hits; **not human balance evidence**):
+
+| Difficulty | Simulated seconds | Drafts | Lives before cap | Lives after cap |
+| --- | ---: | ---: | ---: | ---: |
+| Easy | 2610.3 | 16 | 184 | 9 |
+| Normal | 2610.6 | 17 | 186 | 9 |
+| Hard | 2609.2 | 17 | 188 | 9 |
+| Insane | 2609.0 | 16 | 184 | 9 |
+| Realistic | 2600.6 | 16 | 181 | 9 |
+
+All runs visited stages 1–50, fought bosses 10/20/30/40/50, and reached the ending. The CI host now exercises all five difficulties. Additional death/retry/game-over and score/stock overflow checks pass. C17 was discovered during this follow-up and is the next geometry task.

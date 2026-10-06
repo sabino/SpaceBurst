@@ -16,7 +16,7 @@ namespace SpaceBurst
             PassiveReactorId.ChainReactor,
         };
 
-        public List<UpgradeDraftCard> BuildDraftCards(PlayerRunProgress progress, DeterministicRngState rng, bool tutorialMode, int stageNumber = 1)
+        public List<UpgradeDraftCard> BuildDraftCards(PlayerRunProgress progress, DeterministicRngState rng, bool tutorialMode, int stageNumber = 1, int currentShips = 0)
         {
             var cards = new List<UpgradeDraftCard>();
             if (progress == null)
@@ -39,7 +39,8 @@ namespace SpaceBurst
             AddPassiveCards(pool, progress);
             AddSupportUpgradeCards(pool, progress);
             pool.Add(CreateRewindCard(progress));
-            pool.Add(CreateScrapCacheCard(progress, progress.RunLevel >= 6 ? 3 : 2));
+            if (currentShips < PlayerStatus.MaximumShips)
+                pool.Add(CreateScrapCacheCard(progress, progress.RunLevel >= 6 ? 3 : 2));
 
             while (cards.Count < 3 && pool.Count > 0)
             {

@@ -143,22 +143,22 @@ namespace SpaceBurst
             switch (passive)
             {
                 case PassiveReactorId.Overclock:
-                    MoveSpeedMultiplier = MathF.Min(1.4f, MoveSpeedMultiplier + 0.04f);
+                    MoveSpeedMultiplier = Math.Max(MoveSpeedMultiplier, MathF.Min(1.4f, MoveSpeedMultiplier + 0.04f));
                     break;
                 case PassiveReactorId.MagnetCore:
-                    DropBonusChance = MathF.Min(0.28f, DropBonusChance + 0.02f);
+                    DropBonusChance = Math.Max(DropBonusChance, MathF.Min(0.28f, DropBonusChance + 0.02f));
                     break;
                 case PassiveReactorId.ArmorPlating:
-                    ShipsPerLife = Math.Min(7, ShipsPerLife + 1);
+                    ShipsPerLife = Math.Max(ShipsPerLife, Math.Min(7, ShipsPerLife + 1));
                     break;
                 case PassiveReactorId.TimeBattery:
-                    RewindEfficiency = MathF.Min(0.65f, RewindEfficiency + 0.16f);
+                    RewindEfficiency = Math.Max(RewindEfficiency, MathF.Min(0.65f, RewindEfficiency + 0.16f));
                     break;
                 case PassiveReactorId.SalvageNode:
-                    DropBonusChance = MathF.Min(0.3f, DropBonusChance + 0.04f);
+                    DropBonusChance = Math.Max(DropBonusChance, MathF.Min(0.3f, DropBonusChance + 0.04f));
                     break;
                 case PassiveReactorId.ChainReactor:
-                    MoveSpeedMultiplier = MathF.Min(1.5f, MoveSpeedMultiplier + 0.05f);
+                    MoveSpeedMultiplier = Math.Max(MoveSpeedMultiplier, MathF.Min(1.5f, MoveSpeedMultiplier + 0.05f));
                     break;
             }
 
@@ -377,25 +377,25 @@ namespace SpaceBurst
 
         public void ApplyMobilityUpgrade()
         {
-            MoveSpeedMultiplier = MathF.Min(1.8f, MoveSpeedMultiplier + 0.08f);
+            MoveSpeedMultiplier = Math.Max(MoveSpeedMultiplier, MathF.Min(1.8f, MoveSpeedMultiplier + 0.08f));
             NonWeaponUpgradeCount++;
         }
 
         public void ApplyEmergencyReserveUpgrade()
         {
-            ShipsPerLife = Math.Min(6, ShipsPerLife + 1);
+            ShipsPerLife = Math.Max(ShipsPerLife, Math.Min(6, ShipsPerLife + 1));
             NonWeaponUpgradeCount++;
         }
 
         public void ApplyRewindUpgrade()
         {
-            RewindEfficiency = MathF.Min(0.6f, RewindEfficiency + 0.12f);
+            RewindEfficiency = Math.Max(RewindEfficiency, MathF.Min(0.6f, RewindEfficiency + 0.12f));
             NonWeaponUpgradeCount++;
         }
 
         public void ApplyEconomyUpgrade()
         {
-            DropBonusChance = MathF.Min(0.24f, DropBonusChance + 0.03f);
+            DropBonusChance = Math.Max(DropBonusChance, MathF.Min(0.24f, DropBonusChance + 0.03f));
             NonWeaponUpgradeCount++;
         }
 

@@ -6,6 +6,43 @@ namespace SpaceBurst.Tests
     public sealed class PlayerRunProgressTests
     {
         [Fact]
+        public void UpgradeOrder_NeverReducesExistingBenefits()
+        {
+            var mobility = new PlayerRunProgress();
+            for (int i = 0; i < 12; i++) mobility.ApplyMobilityUpgrade();
+            float speed = mobility.MoveSpeedMultiplier;
+            Assert.True(mobility.TryEquipPassive(PassiveReactorId.Overclock));
+            Assert.Equal(speed, mobility.MoveSpeedMultiplier);
+            mobility.AddXp(90);
+            Assert.True(mobility.TryEquipPassive(PassiveReactorId.ChainReactor));
+            Assert.Equal(speed, mobility.MoveSpeedMultiplier);
+
+            var rewind = new PlayerRunProgress();
+            for (int i = 0; i < 6; i++) rewind.ApplyRewindUpgrade();
+            Assert.True(rewind.TryEquipPassive(PassiveReactorId.TimeBattery));
+            float efficiency = rewind.RewindEfficiency;
+            rewind.ApplyRewindUpgrade();
+            Assert.Equal(0.65f, efficiency);
+            Assert.Equal(efficiency, rewind.RewindEfficiency);
+
+            var salvage = new PlayerRunProgress();
+            for (int i = 0; i < 10; i++) salvage.ApplyEconomyUpgrade();
+            Assert.True(salvage.TryEquipPassive(PassiveReactorId.SalvageNode));
+            float dropChance = salvage.DropBonusChance;
+            salvage.ApplyEconomyUpgrade();
+            Assert.Equal(dropChance, salvage.DropBonusChance);
+            salvage.AddXp(90);
+            Assert.True(salvage.TryEquipPassive(PassiveReactorId.MagnetCore));
+            Assert.Equal(dropChance, salvage.DropBonusChance);
+
+            var armor = new PlayerRunProgress();
+            for (int i = 0; i < 6; i++) armor.ApplyEmergencyReserveUpgrade();
+            Assert.True(armor.TryEquipPassive(PassiveReactorId.ArmorPlating));
+            armor.ApplyEmergencyReserveUpgrade();
+            Assert.Equal(7, armor.ShipsPerLife);
+        }
+
+        [Fact]
         public void ScrapRewards_CrossThresholdsAndPreservePartialProgressThroughSave()
         {
             var progress = new PlayerRunProgress();
