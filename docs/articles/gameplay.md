@@ -51,5 +51,5 @@ The tutorial uses a style core and stored charge to teach a practice draft. In c
 - Deterministic rewind with a slow-to-fast acceleration curve.
 - Stage transition FTL effects instead of hard level-complete cutaways.
 - Procedural audio and chapter-aware music transitions.
-- Procedural visuals, parallax backgrounds, ripples, and impact feedback.
+- Procedural visuals, parallax backgrounds, ripples, and impact feedback. Friendly fire is quieter than threats; side view uses crisp hostile-shot contours and corner markers to locate the player. The markers indicate ship position, not a smaller hitbox.
 - A run-summary screen reports final score, difficulty, level, scrap, arsenal completion, evolution completion, and medal status.

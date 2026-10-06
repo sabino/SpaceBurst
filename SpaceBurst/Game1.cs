@@ -445,6 +445,16 @@ namespace SpaceBurst
                 }
             }
 
+            if (campaignDirector.ShouldDrawWorld && CurrentViewMode == ViewMode.SideScroller)
+            {
+                // Keep player position readable after the bloom composite and during flicker.
+                Matrix locatorMatrix = Matrix.CreateTranslation(CameraOffset.X, CameraOffset.Y, 0f) * worldScaleMatrix;
+                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, locatorMatrix);
+                Player1.Instance.DrawLocator(spriteBatch);
+                CombatReadability.DrawThreats(spriteBatch, EntityManager.AllEntities);
+                spriteBatch.End();
+            }
+
             if (CurrentViewMode == ViewMode.Chase3D && CurrentPresentationTier == PresentationTier.Late3D)
             {
                 spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, uiScaleMatrix);

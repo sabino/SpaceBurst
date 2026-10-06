@@ -218,6 +218,33 @@ namespace SpaceBurst
             DrawAuxiliaryModules(spriteBatch, flicker);
         }
 
+        internal void DrawLocator(SpriteBatch spriteBatch)
+        {
+            if (IsDead || sprite == null || Game1.UiPixel == null)
+                return;
+
+            Vector2 halfSize = Size * 0.5f + new Vector2(6f);
+            Color marker = new Color(142, 239, 255);
+            // Corner markers identify the ship; they do not describe its damage mask.
+            for (int x = -1; x <= 1; x += 2)
+            {
+                for (int y = -1; y <= 1; y += 2)
+                {
+                    Vector2 corner = Position + halfSize * new Vector2(x, y);
+                    var horizontal = new Rectangle((int)corner.X - (x > 0 ? 8 : 0), (int)corner.Y - 1, 8, 2);
+                    var vertical = new Rectangle((int)corner.X - 1, (int)corner.Y - (y > 0 ? 8 : 0), 2, 8);
+                    Rectangle backing = horizontal;
+                    backing.Inflate(1, 1);
+                    spriteBatch.Draw(Game1.UiPixel, backing, Color.Black);
+                    backing = vertical;
+                    backing.Inflate(1, 1);
+                    spriteBatch.Draw(Game1.UiPixel, backing, Color.Black);
+                    spriteBatch.Draw(Game1.UiPixel, horizontal, marker);
+                    spriteBatch.Draw(Game1.UiPixel, vertical, marker);
+                }
+            }
+        }
+
         public void ResetForStage()
         {
             authoritativeHullRatio = 1f;

@@ -111,9 +111,10 @@ namespace SpaceBurst
                 return;
 
             float pulse = 0.92f + 0.08f * MathF.Sin((float)Game1.GameTime.TotalGameTime.TotalSeconds * 18f);
-            Color outer = ColorUtil.ParseHex(AccentColorHex, Color.Cyan) * 0.24f;
-            Color mid = ColorUtil.ParseHex(AccentColorHex, Color.Cyan) * 0.48f;
-            Color inner = ColorUtil.ParseHex(PrimaryColorHex, Color.White) * 0.92f;
+            float opacity = CombatReadability.GetOpacity(this);
+            Color outer = ColorUtil.ParseHex(AccentColorHex, Color.Cyan) * (0.24f * opacity);
+            Color mid = ColorUtil.ParseHex(AccentColorHex, Color.Cyan) * (0.48f * opacity);
+            Color inner = ColorUtil.ParseHex(PrimaryColorHex, Color.White) * (0.92f * opacity);
             Vector2 origin = new Vector2(0f, 0.5f);
 
             spriteBatch.Draw(

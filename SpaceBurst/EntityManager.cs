@@ -135,7 +135,7 @@ namespace SpaceBurst
 
         public static void Draw(SpriteBatch spriteBatch)
         {
-            foreach (Entity entity in entities)
+            foreach (Entity entity in CombatReadability.InDrawOrder(entities))
                 entity.Draw(spriteBatch);
         }
 
