@@ -83,9 +83,9 @@ namespace SpaceBurst
             PreviousCombatPosition = CombatPosition;
             Orientation = velocity == Vector2.Zero ? 0f : velocity.ToAngle();
             RenderScale = renderScale;
-            sprite = new ProceduralSpriteInstance(
-                Game1.Instance.GraphicsDevice,
+            sprite = Game1.Instance.ProjectileSprites.Get(
                 spriteDefinition ?? (friendly ? Element.PlayerBulletDefinition : Element.EnemyBulletDefinition));
+            ownsSprite = false;
         }
 
         public override void Update()

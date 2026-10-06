@@ -4,10 +4,11 @@ using System.Threading;
 
 namespace SpaceBurst
 {
-    abstract class Entity
+    abstract class Entity : System.IDisposable
     {
         private static long nextEntityId;
         protected ProceduralSpriteInstance sprite;
+        protected bool ownsSprite = true;
         protected Color color = Color.White;
         private Vector3 combatPosition;
         private Vector3 combatVelocity;
@@ -161,6 +162,13 @@ namespace SpaceBurst
 
                 return sprite.GetWorldBounds(Position, RenderScale);
             }
+        }
+
+        public virtual void Dispose()
+        {
+            if (ownsSprite)
+                sprite?.Dispose();
+            sprite = null;
         }
 
         public abstract void Update();

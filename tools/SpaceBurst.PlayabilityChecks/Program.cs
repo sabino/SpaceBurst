@@ -2,6 +2,7 @@ using System.Collections;
 using System.Reflection;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
+using Microsoft.Xna.Framework.Graphics;
 using SpaceBurst;
 using SpaceBurst.RuntimeData;
 
@@ -20,10 +21,19 @@ try
         MasterVolume = 0,
         TutorialCompleted = true,
     });
-    using var game = new PlayabilityCheckGame();
-    game.Run();
-    if (!game.Completed)
-        throw new InvalidOperationException("Game host exited before checks completed.");
+    Texture2D sharedTexture;
+    Texture2D playerTexture;
+    using (var game = new PlayabilityCheckGame())
+    {
+        game.Run();
+        if (!game.Completed)
+            throw new InvalidOperationException("Game host exited before checks completed.");
+        sharedTexture = game.SharedTexture;
+        playerTexture = game.PlayerTexture;
+    }
+    if (!sharedTexture.IsDisposed || !playerTexture.IsDisposed)
+        throw new InvalidOperationException("Host shutdown did not release cached/player textures.");
+    Console.WriteLine("PASS: Host shutdown releases cached projectiles and persistent player textures");
 }
 finally
 {
@@ -36,6 +46,8 @@ sealed class PlayabilityCheckGame : Game1
     private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
     private double bootSeconds;
     public bool Completed { get; private set; }
+    public Texture2D SharedTexture { get; private set; }
+    public Texture2D PlayerTexture { get; private set; }
 
     protected override void Update(GameTime time)
     {
@@ -51,6 +63,9 @@ sealed class PlayabilityCheckGame : Game1
         var director = (CampaignDirector)Get(this, "campaignDirector", typeof(Game1));
         CheckCampaignState(director);
         CheckDraftChoices(director);
+        CheckResourceOwnership(director);
+        CheckCampaignLiveness(director);
+        PlayerTexture = Player1.Instance.SpriteInstance.Texture;
         Completed = true;
         Exit();
     }
@@ -178,6 +193,139 @@ sealed class PlayabilityCheckGame : Game1
         Call(director, "RestoreRunSaveData", tutorialSave, true, false);
         Require((GameFlowState)Get(director, "pauseReturnState") == GameFlowState.Tutorial,
             "Loaded tutorial resumes tutorial flow");
+    }
+
+    private void CheckResourceOwnership(CampaignDirector director)
+    {
+        Set(director, "state", GameFlowState.Title);
+        director.TryConsoleLoadStage(1);
+        var repository = (CampaignRepository)Get(director, "repository");
+        EnemyArchetypeDefinition archetype = repository.ArchetypesById["Destroyer"];
+        Enemy CreateEnemy() => new Enemy(archetype, new Vector2(1100, 180), 180,
+            archetype.MovePattern, archetype.FirePattern, 1, 0, 1);
+
+        var expired = CreateEnemy();
+        Texture2D expiredTexture = expired.SpriteInstance.Texture;
+        EntityManager.Add(expired);
+        expired.IsExpired = true;
+        EntityManager.Update();
+        Require(expiredTexture.IsDisposed, "Expired enemies release their owned textures");
+
+        Texture2D oldHull = Player1.Instance.SpriteInstance.Texture;
+        Texture2D oldCannon = Player1.Instance.CannonSpriteInstance.Texture;
+        Player1.Instance.RefreshLoadout();
+        Require(oldHull.IsDisposed && oldCannon.IsDisposed, "Loadout refresh releases replaced hull/cannon textures");
+        Texture2D retainedHull = Player1.Instance.SpriteInstance.Texture;
+        var resetEnemy = CreateEnemy();
+        Texture2D resetTexture = resetEnemy.SpriteInstance.Texture;
+        EntityManager.Add(resetEnemy);
+        EntityManager.Reset();
+        Require(resetTexture.IsDisposed && !retainedHull.IsDisposed, "Reset releases enemies while preserving the reusable player");
+        EntityManager.Add(Player1.Instance);
+
+        Bullet CreateBullet() => new Bullet(new Vector2(600, 500), Vector2.UnitX, true, 1,
+            null, WeaponCatalog.CreateProjectileDefinition(WeaponStyleId.Pulse, 0, true), 0, 4f, 0f);
+        var first = CreateBullet();
+        var second = CreateBullet();
+        SharedTexture = first.SpriteInstance.Texture;
+        Require(ReferenceEquals(first.SpriteInstance, second.SpriteInstance), "Matching projectile specifications share an immutable sprite");
+        first.Dispose();
+        Require(!SharedTexture.IsDisposed, "Disposing one projectile does not invalidate another projectile");
+        EntityManager.Add(second);
+        EntityManager.Add(CreateEnemy());
+        Set(director, "state", GameFlowState.Playing);
+        var snapshot = (RunSaveData)Call(director, "CaptureRunSaveData", 0, false);
+        int cacheCount = ProjectileSprites.Count;
+        for (int iteration = 0; iteration < 100; iteration++)
+        {
+            Texture2D previousEnemy = EntityManager.Enemies.First().SpriteInstance.Texture;
+            Call(director, "RestoreRunSaveData", snapshot, true, true);
+            if (!previousEnemy.IsDisposed)
+                throw new InvalidOperationException("Repeated rewind reconstruction retains old enemy textures.");
+        }
+        Require(ProjectileSprites.Count == cacheCount && !SharedTexture.IsDisposed,
+            "Repeated rewind reuses projectile textures and releases replaced enemy textures");
+
+        for (int shot = 0; shot < 1000; shot++)
+            CreateBullet().Dispose();
+        Require(ProjectileSprites.Count == cacheCount, "A thousand matching shots do not allocate a thousand GPU sprites");
+
+        WorldPresentationRenderer.ClearCache();
+        Late3DRenderer.ReleaseResources();
+        const BindingFlags flags = BindingFlags.Static | BindingFlags.NonPublic;
+        for (int shape = 0; shape < 260; shape++)
+        {
+            using var sprite = new ProceduralSpriteInstance(GraphicsDevice, new ProceduralSpriteDefinition
+            {
+                Id = "CacheBudget" + shape,
+                Rows = new List<string> { "##", "##" },
+                PrimaryColor = "#FFFFFF", SecondaryColor = "#FFFFFF", AccentColor = "#FFFFFF",
+            });
+            typeof(WorldPresentationRenderer).GetMethod("GetHullCache", flags).Invoke(null, new object[] { sprite });
+            typeof(Late3DRenderer).GetMethod("GetMeshCache", flags).Invoke(null, new object[] { sprite });
+        }
+        using var pale = new ProceduralSpriteInstance(GraphicsDevice, new ProceduralSpriteDefinition
+        {
+            Id = "PaletteCheck", Rows = new List<string> { "##", "##" }, PrimaryColor = "#FFFFFF",
+        });
+        using var red = new ProceduralSpriteInstance(GraphicsDevice, new ProceduralSpriteDefinition
+        {
+            Id = "PaletteCheck", Rows = new List<string> { "##", "##" }, PrimaryColor = "#FF0000",
+        });
+        Require(pale.RenderStateKey != red.RenderStateKey, "Procedural render cache keys distinguish palette changes");
+        var hulls = (IDictionary)typeof(WorldPresentationRenderer).GetField("hullCacheByKey", flags).GetValue(null);
+        var meshes = (IDictionary)typeof(Late3DRenderer).GetField("cacheByKey", flags).GetValue(null);
+        Require(hulls.Count <= WorldPresentationRenderer.MaximumCachedHulls && meshes.Count <= Late3DRenderer.MaximumCachedMeshes,
+            "Procedural damaged-shape caches stay within bounded budgets");
+    }
+
+    private static void CheckCampaignLiveness(CampaignDirector director)
+    {
+        // This is a structural liveness test: invulnerability and scripted damage
+        // ensure threats clear. It does not measure human skill, balance, or fun.
+        SetKeys();
+        Set(director, "state", GameFlowState.Title);
+        director.TryConsoleLoadStage(1);
+        Set(director, "state", GameFlowState.Playing);
+        var bosses = new HashSet<int>();
+        int drafts = 0;
+        for (int frame = 1; frame <= 432000; frame++)
+        {
+            typeof(Game1).GetProperty("GameTime").SetValue(null,
+                new GameTime(TimeSpan.FromSeconds(frame / 60.0), TimeSpan.FromSeconds(1.0 / 60)));
+            if (director.CurrentState == GameFlowState.UpgradeDraft)
+            {
+                Call(director, "ApplyDraftSelection", 0);
+                drafts++;
+            }
+            else
+            {
+                Player1.Instance.MakeInvulnerable(2f);
+                director.Update();
+            }
+            foreach (Enemy enemy in EntityManager.Enemies.ToArray())
+            {
+                if (enemy.IsExpired || enemy.Travel >= Game1.VirtualWidth - 80)
+                    continue;
+                if (enemy.IsBoss)
+                    bosses.Add(director.CurrentStageNumber);
+                enemy.ApplyBeamHit(enemy.Position, 999, new ImpactProfileDefinition
+                {
+                    BaseCellsRemoved = 512, BonusCellsPerDamage = 1,
+                    SplashRadius = 64, SplashPercent = 100,
+                });
+            }
+            if (director.CurrentState == GameFlowState.CampaignComplete)
+            {
+                Require(director.CurrentStageNumber == 50 && bosses.SetEquals(new[] { 10, 20, 30, 40, 50 }),
+                    "Controlled simulation reaches all five bosses and the stage-50 ending");
+                Console.WriteLine($"LIVENESS: seconds={frame / 60.0:F1}, drafts={drafts}, lives={PlayerStatus.Lives}, cachedProjectileSprites={Game1.Instance.ProjectileSprites.Count}");
+                return;
+            }
+            if (director.CurrentState == GameFlowState.GameOver)
+                throw new InvalidOperationException("Controlled campaign unexpectedly reached game over.");
+        }
+        throw new InvalidOperationException("Campaign stalled before completion within 7200 simulated seconds.");
     }
 
     private static void Click(CampaignDirector director, Vector2 point)

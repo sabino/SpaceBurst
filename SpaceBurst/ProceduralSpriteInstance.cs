@@ -5,7 +5,7 @@ using System;
 
 namespace SpaceBurst
 {
-    sealed class ProceduralSpriteInstance
+    sealed class ProceduralSpriteInstance : IDisposable
     {
         private readonly GraphicsDevice graphicsDevice;
         private readonly ProceduralSpriteDefinition definition;
@@ -89,6 +89,11 @@ namespace SpaceBurst
             }
 
             RebuildTexture();
+        }
+
+        public void Dispose()
+        {
+            texture.Dispose();
         }
 
         public ProceduralSpriteInstance Clone()
@@ -286,6 +291,12 @@ namespace SpaceBurst
                 hash = hash * 31 + mask.OccupiedCount;
                 hash = hash * 31 + mask.RemainingCoreCount;
                 hash = hash * 31 + (definition.Id?.GetHashCode(StringComparison.Ordinal) ?? 0);
+                hash = hash * 31 + definition.PixelScale;
+                hash = hash * 31 + primaryColor.GetHashCode();
+                hash = hash * 31 + secondaryColor.GetHashCode();
+                hash = hash * 31 + accentColor.GetHashCode();
+                for (int i = 0; i < glyphs.Length; i++)
+                    hash = hash * 31 + glyphs[i];
                 for (int y = 0; y < mask.Height; y++)
                 {
                     for (int x = 0; x < mask.Width; x++)

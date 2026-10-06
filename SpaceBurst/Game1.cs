@@ -30,6 +30,11 @@ namespace SpaceBurst
         private readonly GraphicsDeviceManager graphics;
         private readonly OptionsData startupOptions;
         private SpriteBatch spriteBatch;
+        private ProjectileSpriteCache projectileSprites;
+        internal ProjectileSpriteCache ProjectileSprites
+        {
+            get { return projectileSprites ??= new ProjectileSpriteCache(GraphicsDevice); }
+        }
         private Rectangle worldRenderViewport;
         private Rectangle uiRenderViewport;
         private Rectangle safeUiBounds;
@@ -925,6 +930,13 @@ namespace SpaceBurst
 
         protected override void UnloadContent()
         {
+            EntityManager.Reset();
+            Player1.ReleaseInstance();
+            projectileSprites?.Dispose();
+            projectileSprites = null;
+            WorldPresentationRenderer.ClearCache();
+            Late3DRenderer.ReleaseResources();
+            spriteBatch?.Dispose();
             audioDirector?.Dispose();
             worldRenderTarget?.Dispose();
             radialTexture?.Dispose();
