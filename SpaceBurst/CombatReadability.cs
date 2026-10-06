@@ -38,7 +38,7 @@ namespace SpaceBurst
                     continue;
 
                 ProceduralSpriteInstance sprite = bullet.SpriteInstance;
-                float scale = bullet.RenderScale * bullet.PresentationScaleMultiplier;
+                float scale = bullet.SpriteScale;
                 // A crisp dark contour separates small threats from bright friendly beams.
                 sprite.Draw(spriteBatch, bullet.Position + new Vector2(-2, 0), Color.Black, bullet.Orientation, scale);
                 sprite.Draw(spriteBatch, bullet.Position + new Vector2(2, 0), Color.Black, bullet.Orientation, scale);

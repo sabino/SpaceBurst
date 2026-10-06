@@ -157,7 +157,7 @@ namespace SpaceBurst
         {
             ProceduralSpriteInstance sprite = entity.SpriteInstance;
             RenderableHullCache cache = GetHullCache(sprite);
-            float scale = entity.RenderScale * entity.PresentationScaleMultiplier;
+            float scale = entity.SpriteScale;
             Vector2 position = entity.Position;
             Color tint = entity.RenderTint;
             Color accent = ResolveAccent(entity);

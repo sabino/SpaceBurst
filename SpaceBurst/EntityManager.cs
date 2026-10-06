@@ -17,6 +17,7 @@ namespace SpaceBurst
         private static List<Entity> addedEntities = new List<Entity>();
         private static readonly EntitySpatialGrid<Enemy> enemyGrid = new EntitySpatialGrid<Enemy>(160f);
 
+        private static float maximumEnemyRadius;
         private static bool isUpdating;
         private static bool queuedPlayerHullDestruction;
         private static readonly System.Random random = new System.Random();
@@ -75,6 +76,7 @@ namespace SpaceBurst
             isUpdating = false;
             queuedPlayerHullDestruction = false;
             enemyGrid.Clear();
+            maximumEnemyRadius = 0f;
         }
 
         public static void ClearHostiles()
@@ -99,11 +101,17 @@ namespace SpaceBurst
 
             for (int i = 0; i < entities.Count; i++)
             {
-                if (!entities[i].IsExpired)
+                if (!entities[i].IsExpired && entities[i] is not BeamShot)
                     entities[i].Update();
             }
 
             RebuildSpatialIndex();
+            // Beams query current enemy positions, including their enlarged hulls.
+            for (int i = 0; i < entities.Count; i++)
+            {
+                if (!entities[i].IsExpired && entities[i] is BeamShot)
+                    entities[i].Update();
+            }
             HandleCollisions();
 
             isUpdating = false;
@@ -212,7 +220,7 @@ namespace SpaceBurst
 
         public static IEnumerable<Enemy> QueryNearbyEnemies(Vector2 position, float radius)
         {
-            return enemyGrid.Query(position, radius);
+            return enemyGrid.Query(position, radius + maximumEnemyRadius);
         }
 
         public static Enemy FindNearestEnemy(Vector3 position, float radius = 260f)
@@ -243,7 +251,11 @@ namespace SpaceBurst
 
             entities.Add(entity);
             if (entity is Enemy enemy)
+            {
                 enemies.Add(enemy);
+                enemyGrid.Add(enemy.Position, enemy);
+                maximumEnemyRadius = Math.Max(maximumEnemyRadius, enemy.ApproximateRadius);
+            }
             else if (entity is Bullet bullet)
                 bullets.Add(bullet);
             else if (entity is BeamShot beam)
@@ -255,11 +267,15 @@ namespace SpaceBurst
         private static void RebuildSpatialIndex()
         {
             enemyGrid.Clear();
+            maximumEnemyRadius = 0f;
             for (int i = 0; i < enemies.Count; i++)
             {
                 Enemy enemy = enemies[i];
                 if (!enemy.IsExpired)
+                {
                     enemyGrid.Add(enemy.Position, enemy);
+                    maximumEnemyRadius = Math.Max(maximumEnemyRadius, enemy.ApproximateRadius);
+                }
             }
         }
 
@@ -322,7 +338,7 @@ namespace SpaceBurst
         {
             bool depthAware = CombatSpaceMath.IsDepthAwareViewActive;
             float searchRadius = Math.Max(160f, bullet.Velocity.Length() * 0.05f + bullet.ApproximateRadius * 2f);
-            foreach (Enemy enemy in enemyGrid.Query(bullet.Position, searchRadius))
+            foreach (Enemy enemy in QueryNearbyEnemies(bullet.Position, searchRadius))
             {
                 if (enemy.IsExpired || !MayOverlap(enemy, bullet))
                     continue;

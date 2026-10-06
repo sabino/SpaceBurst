@@ -38,6 +38,8 @@ Every stage carries authored horde packets and presentation cues. Elite bursts r
 
 Each style has level `0` through `3`, then continues into capped diminishing-return rank growth for long runs. One core weapon and up to four support weapons fire together. Swapping styles exchanges the selected support with the previous core, so a weapon can never fire twice from duplicate loadout slots. Once the support stack is full, later chapter unlocks appear as core-swap drafts instead of disappearing from progression; the previous core stays in the arsenal and remains reachable with the style controls.
 
+Boss hull enlargement also scales collision and damage mapping, so visible armor can be hit at its displayed position. Beams damage the surface they cross rather than automatically striking an enemy’s center.
+
 Every weapon has one unique evolution. Evolution cards appear only after the weapon reaches its required level and the linked passive reactor is installed; the same requirements are checked again when the card is applied.
 
 ## Rewards and survival

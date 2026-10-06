@@ -89,15 +89,16 @@ namespace SpaceBurst
                     continue;
 
                 Vector3 combatImpactPoint = default;
+                Vector2 surfaceImpactPoint = default;
                 bool hit = CombatSpaceMath.IsDepthAwareViewActive
                     ? TryGetCombatHitPoint(enemy, out combatImpactPoint)
-                    : TryGetHitPoint(enemy, out _);
+                    : TryGetHitPoint(enemy, out surfaceImpactPoint);
 
                 if (hit)
                 {
                     Vector2 impactPoint = CombatSpaceMath.IsDepthAwareViewActive
                         ? new Vector2(combatImpactPoint.X, combatImpactPoint.Y)
-                        : GetFallbackImpactPoint(enemy);
+                        : surfaceImpactPoint;
                     enemy.ApplyBeamHit(impactPoint, Damage, ImpactProfile);
                     hitThisTick.Add(enemy);
                 }
@@ -229,11 +230,6 @@ namespace SpaceBurst
 
             impactPoint = CombatPosition + CombatDirection * Length;
             return false;
-        }
-
-        private Vector2 GetFallbackImpactPoint(Enemy enemy)
-        {
-            return enemy == null ? Position + Direction * Length : enemy.Position;
         }
     }
 }

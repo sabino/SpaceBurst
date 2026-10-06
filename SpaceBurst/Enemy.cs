@@ -558,7 +558,7 @@ namespace SpaceBurst
         private void ApplyImpact(Vector2 impactPoint, int damage, ImpactProfileDefinition impactProfile, Vector2 sourceVelocity, ImpactFxStyle impactFxStyle, bool causeShockwave)
         {
             int scaledDamage = Math.Max(1, (int)MathF.Round(damage / Math.Max(0.25f, GetDurabilityMultiplier())));
-            DamageResult result = sprite.ApplyDamage(Position, impactPoint, RenderScale, damageMask, impactProfile, scaledDamage);
+            DamageResult result = sprite.ApplyDamage(Position, impactPoint, SpriteScale, damageMask, impactProfile, scaledDamage);
             flashTimer = result.CoreCellsRemoved > 0 ? 0.14f : 0.08f;
             color = result.CoreCellsRemoved > 0 ? Color.Lerp(Color.White, Color.OrangeRed, 0.55f) : (result.CellsRemoved > 0 ? Color.Lerp(Color.White, accentColor, 0.28f) : Color.White);
 
