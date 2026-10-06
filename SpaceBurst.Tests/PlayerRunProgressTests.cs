@@ -6,6 +6,27 @@ namespace SpaceBurst.Tests
     public sealed class PlayerRunProgressTests
     {
         [Fact]
+        public void StageChangesAndSaveRestore_PreserveReserveUpgrades()
+        {
+            var stage = new StageDefinition { ShipsPerLife = 2 };
+            var progress = new PlayerRunProgress();
+            progress.BeginCampaign(stage, GameDifficulty.Normal);
+            Assert.True(progress.TryEquipPassive(PassiveReactorId.ArmorPlating));
+            progress.ApplyEmergencyReserveUpgrade();
+            Assert.Equal(4, progress.ShipsPerLife);
+
+            progress.ApplyStageDefaults(stage);
+            var restored = new PlayerRunProgress();
+            restored.RestoreSnapshot(progress.CaptureSnapshot());
+            restored.ApplyStageDefaults(stage);
+
+            Assert.Equal(4, progress.ShipsPerLife);
+            Assert.Equal(4, restored.ShipsPerLife);
+            restored.ApplyStageDefaults(new StageDefinition { ShipsPerLife = 5 });
+            Assert.Equal(5, restored.ShipsPerLife);
+        }
+
+        [Fact]
         public void CaptureAndRestore_PreservesRunProgressionState()
         {
             var progress = new PlayerRunProgress();
