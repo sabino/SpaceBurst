@@ -408,7 +408,7 @@ namespace SpaceBurst
 
         internal bool AllowLiveWeaponCycling
         {
-            get { return state == GameFlowState.Tutorial; }
+            get { return state == GameFlowState.Playing || state == GameFlowState.Tutorial; }
         }
 
         public AudioQualityPreset AudioQualityPreset
