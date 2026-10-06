@@ -1303,7 +1303,7 @@ namespace SpaceBurst
 
             HandleViewToggleInput();
 
-            if (Input.IsRewindHeld() && rewindFrames.Count > 1 && rewindMeterSeconds > 0f)
+            if (tutorialStep == TutorialStep.Rewind && Input.IsRewindHeld() && rewindFrames.Count > 1 && rewindMeterSeconds > 0f)
             {
                 UpdateRewind(deltaSeconds);
                 return;
@@ -1869,6 +1869,7 @@ namespace SpaceBurst
                 return;
             }
 
+            bool guidedRewind = state == GameFlowState.Tutorial && tutorialStep == TutorialStep.Rewind;
             PlayerStatus.RunProgress.MarkMedalIneligible();
             rewindHoldSeconds += deltaSeconds;
             float rewindSpeed = GetRewindSpeedMultiplier(rewindHoldSeconds);
@@ -1884,8 +1885,14 @@ namespace SpaceBurst
             }
 
             RestoreRunSaveData(rewindFrames[rewindFrames.Count - 1], true, true);
-            if (state == GameFlowState.Tutorial && tutorialStep == TutorialStep.Rewind && rewindHoldSeconds >= 0.18f)
-                AdvanceTutorialStep(TutorialStep.CollectPower);
+            if (guidedRewind)
+            {
+                // Rewind the world, not the instruction that asked for this input.
+                tutorialStep = TutorialStep.Rewind;
+                tutorialProgressSeconds = 0f;
+                if (rewindHoldSeconds >= 0.18f)
+                    AdvanceTutorialStep(TutorialStep.CollectPower);
+            }
         }
 
         private void ResetRewindBuffer()
