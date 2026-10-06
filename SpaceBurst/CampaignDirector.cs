@@ -4575,7 +4575,7 @@ namespace SpaceBurst
 #endif
                     break;
                 case 1:
-                    DrawHelpPage(spriteBatch, pixel, "POWER CORES\nEACH P CORE MATCHES A WEAPON STYLE\nMATCH YOUR ACTIVE STYLE TO BOOST IT IMMEDIATELY UP TO LEVEL 3\nOTHER CORES STORE STYLE SPECIFIC CHARGES FOR TRANSITION DRAFTS\nAUTO DRAFT RANDOMIZES AT ZERO  A S D PICK LEFT MID RIGHT", 186f);
+                    DrawHelpPage(spriteBatch, pixel, "RUN REWARDS\nENEMIES DROP XP SHARDS - LEVEL UP TO CHOOSE A PAUSED DRAFT\nEVERY 5 SCRAP BUILDS ONE SPARE SHIP FOR AN IN PLACE RESPAWN\nMATCHING P CORES BOOST THE ACTIVE WEAPON UP TO LEVEL 3\nOTHER P CORES GRANT XP - TRAINING USES A STORED CHARGE", 186f);
                     DrawWeaponIcons(spriteBatch, pixel, 410f, 0, 5);
                     break;
                 case 2:
@@ -4705,7 +4705,7 @@ namespace SpaceBurst
             string runLine = string.Concat(
                 DifficultyTuning.GetLabel(PlayerStatus.RunProgress.Difficulty),
                 "    LEVEL ", PlayerStatus.RunProgress.RunLevel.ToString(),
-                "    SCRAP ", PlayerStatus.RunProgress.Scrap.ToString());
+                "    SALVAGED ", PlayerStatus.RunProgress.Scrap.ToString());
             string arsenalLine = string.Concat(
                 "ARSENAL ", inventory.OwnedStyles.Count.ToString(), "/", WeaponCatalog.StyleOrder.Count.ToString(),
                 "    EVOLUTIONS ", inventory.Evolutions.Count.ToString(), "/", WeaponProgressionCatalog.Evolutions.Count.ToString());
@@ -5071,7 +5071,7 @@ namespace SpaceBurst
 
             string status = draftFromTutorial
                 ? string.Concat("STORED CHARGES ", PlayerStatus.RunProgress.StoredUpgradeCharges.ToString())
-                : string.Concat("RUN LV ", PlayerStatus.RunProgress.RunLevel.ToString(), "   PENDING ", PlayerStatus.RunProgress.PendingLevelUps.ToString(), "   SCRAP ", PlayerStatus.RunProgress.Scrap.ToString());
+                : string.Concat("RUN LV ", PlayerStatus.RunProgress.RunLevel.ToString(), "   PENDING ", PlayerStatus.RunProgress.PendingLevelUps.ToString(), "   SHIP SCRAP ", PlayerStatus.RunProgress.ScrapTowardNextShip.ToString(), "/5");
             DrawTextCenteredInBounds(spriteBatch, pixel, status,
                 new Rectangle(safe.X, cards[0].Bottom + DraftPx(20), safe.Width, DraftPx(28)), Color.White * 0.8f, 1.15f, 0.6f);
             string controls = PlatformServices.Capabilities.SupportsTouch
@@ -5124,14 +5124,14 @@ namespace SpaceBurst
                 case TutorialStep.CollectPower:
                     stepIndex = 5;
                     title = "COLLECT";
-                    body = "PICK UP THE SPREAD CORE. MATCHING YOUR ACTIVE STYLE BOOSTS IT NOW. OTHER STYLES STORE A CHARGE FOR THE NEXT DRAFT.";
+                    body = "PICK UP THE SPREAD CORE. THIS TRAINING CORE OPENS A PRACTICE DRAFT. IN THE CAMPAIGN ENEMIES DROP XP FOR DRAFTS.";
                     break;
                 case TutorialStep.UpgradeDraft:
                     stepIndex = 6;
                     title = "UPGRADE DRAFT";
                     body =
 #if ANDROID
-                        "PICK A CARD. TRANSITIONS SPEND STORED CHARGES THIS WAY BETWEEN STAGES.";
+                        "PICK A CARD. CAMPAIGN XP LEVEL UPS OPEN A PAUSED DRAFT LIKE THIS.";
 #else
                         "PICK A CARD. PRESS A / S / D TO TAKE LEFT / MID / RIGHT INSTANTLY.";
 #endif

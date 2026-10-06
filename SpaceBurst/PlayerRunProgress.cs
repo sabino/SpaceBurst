@@ -6,6 +6,10 @@ namespace SpaceBurst
 {
     sealed class PlayerRunProgress
     {
+        public const int ScrapPerShip = 5;
+        public const int SpareCoreXp = 2;
+        public int ScrapTowardNextShip => Scrap % ScrapPerShip;
+
         public WeaponInventoryState Weapons { get; } = new WeaponInventoryState();
         public PowerupDropState Powerups { get; } = new PowerupDropState();
 
@@ -83,6 +87,13 @@ namespace SpaceBurst
             StartingLives = ResolveStartingLives(stage);
             // Reserve upgrades belong to the run and survive stage changes/retries.
             ShipsPerLife = Math.Max(ShipsPerLife, ResolveShipsPerLife(stage));
+            // Legacy normal runs banked cores without a spending path. Consume once,
+            // without granting unavailable chapter weapons or changing save fields.
+            foreach (WeaponStyleId style in Weapons.ChargedStyles)
+            {
+                while (TryConsumeUpgradeCharge(style))
+                    AddXp(SpareCoreXp);
+            }
         }
 
         public void MarkMedalIneligible()
@@ -209,10 +220,14 @@ namespace SpaceBurst
             return 5f + (RunLevel - 1) * 3f + Math.Max(0, RunLevel - 5) * 2f;
         }
 
-        public void AddScrap(int amount)
+        public int AddScrap(int amount)
         {
-            if (amount > 0)
-                Scrap += amount;
+            if (amount <= 0)
+                return 0;
+
+            int previousRewards = Scrap / ScrapPerShip;
+            Scrap = (int)Math.Min(999999L, (long)Scrap + amount);
+            return Scrap / ScrapPerShip - previousRewards;
         }
 
         public void UpdateFocusFire(bool focusHeld, float deltaSeconds)

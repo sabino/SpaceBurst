@@ -63,11 +63,46 @@ sealed class PlayabilityCheckGame : Game1
         var director = (CampaignDirector)Get(this, "campaignDirector", typeof(Game1));
         CheckCampaignState(director);
         CheckDraftChoices(director);
+        CheckRunRewards(director);
         CheckResourceOwnership(director);
         CheckCampaignLiveness(director);
         PlayerTexture = Player1.Instance.SpriteInstance.Texture;
         Completed = true;
         Exit();
+    }
+
+    private static void CheckRunRewards(CampaignDirector director)
+    {
+        director.TryConsoleLoadStage(1);
+        PlayerStatus.BeginCampaign(new StageDefinition(), GameDifficulty.Normal);
+        Set(director, "state", GameFlowState.Playing);
+        Player1.Instance.RefreshLoadout();
+        int ships = PlayerStatus.Ships;
+        using (var first = PowerupPickup.CreateScrapCache(Player1.Instance.Position, 4))
+            Player1.Instance.CollectPowerup(first);
+        Require(PlayerStatus.Ships == ships, "Partial salvage does not grant an early ship");
+        using (var next = PowerupPickup.CreateScrapCache(Player1.Instance.Position, 1))
+            Player1.Instance.CollectPowerup(next);
+        Require(PlayerStatus.Ships == ships + 1, "Five collected scrap grant an actual spare ship");
+        PlayerStatus.RunProgress.AddScrap(4);
+        var controller = new RunProgressionController();
+        float meter = 1;
+        controller.ApplyDraftSelection(PlayerStatus.RunProgress,
+            new UpgradeDraftCard { Type = UpgradeCardType.ScrapCache, RewardAmount = 2 }, ref meter, 8);
+        Require(PlayerStatus.Ships == ships + 2 && PlayerStatus.RunProgress.ScrapTowardNextShip == 1,
+            "Draft salvage grants the same threshold reward and carries its remainder");
+        Player1.Instance.CollectPowerup(WeaponStyleId.Fortress);
+        Require(PlayerStatus.RunProgress.RunXp == 2 && PlayerStatus.RunProgress.StoredUpgradeCharges == 0
+            && !PlayerStatus.RunProgress.Weapons.OwnsStyle(WeaponStyleId.Fortress),
+            "Campaign spare cores grant XP without banking dead charges or bypassing chapters");
+        Player1.Instance.CollectPowerup(WeaponStyleId.Pulse);
+        Require(Player1.Instance.ActiveWeaponLevel == 1 && PlayerStatus.RunProgress.RunXp == 2,
+            "Matching cores retain their immediate weapon upgrade");
+        Set(director, "state", GameFlowState.Tutorial);
+        Player1.Instance.CollectPowerup(WeaponStyleId.Spread);
+        Require(PlayerStatus.RunProgress.GetStoredCharge(WeaponStyleId.Spread) == 1,
+            "Tutorial cores preserve the practice draft charge");
+        Set(director, "state", GameFlowState.Playing);
     }
 
     private static void CheckCampaignState(CampaignDirector director)

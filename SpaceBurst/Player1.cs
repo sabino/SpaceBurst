@@ -322,7 +322,7 @@ namespace SpaceBurst
                     break;
 
                 case PickupKind.ScrapCache:
-                    PlayerStatus.RunProgress.AddScrap(pickup.Amount);
+                    PlayerStatus.GrantShips(PlayerStatus.RunProgress.AddScrap(pickup.Amount));
                     TriggerPickupFeedback(new Color(255, 176, 87), 0.5f + pickup.Amount * 0.08f, true, FeedbackEventType.Pickup);
                     break;
 
@@ -341,9 +341,13 @@ namespace SpaceBurst
                 PlayerStatus.RunProgress.ApplyWeaponUpgrade(styleId);
                 RefreshLoadout();
             }
-            else
+            else if (Game1.Instance.CampaignDirector.CurrentState == GameFlowState.Tutorial)
             {
                 PlayerStatus.RunProgress.AddUpgradeCharge(styleId);
+            }
+            else
+            {
+                PlayerStatus.RunProgress.AddXp(PlayerRunProgress.SpareCoreXp);
             }
 
             invulnerabilityTimer = Math.Max(invulnerabilityTimer, 0.2f);
