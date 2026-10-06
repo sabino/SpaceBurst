@@ -213,7 +213,7 @@ namespace SpaceBurst
 
             bool flicker = invulnerabilityTimer > 0f && ((int)(Game1.GameTime.TotalGameTime.TotalSeconds * 18f) % 2 == 0);
             if (!flicker)
-                sprite.Draw(spriteBatch, Position, color, 0f, RenderScale);
+                sprite.Draw(spriteBatch, Position, color, 0f, SpriteScale);
 
             DrawAuxiliaryModules(spriteBatch, flicker);
         }
@@ -293,7 +293,7 @@ namespace SpaceBurst
                 ? Math.Max(sprite.Mask.InitialOccupiedCount, Math.Max(1, damage))
                 : Math.Max(1, damage);
 
-            DamageResult result = sprite.ApplyDamage(Position, impactPoint, RenderScale, damageMask, damageMask.ContactImpact, resolvedDamage);
+            DamageResult result = sprite.ApplyDamage(Position, impactPoint, SpriteScale, damageMask, damageMask.ContactImpact, resolvedDamage);
             if (result.CellsRemoved > 0)
             {
                 invulnerabilityTimer = ContactInvulnerabilitySeconds;

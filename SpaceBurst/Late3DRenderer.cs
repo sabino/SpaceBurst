@@ -926,7 +926,7 @@ namespace SpaceBurst
 
         private static float ResolveWorldScale(Entity entity)
         {
-            float baseScale = entity.SpriteInstance.PixelScale * 0.36f * entity.RenderScale * entity.PresentationScaleMultiplier;
+            float baseScale = entity.SpriteInstance.PixelScale * 0.36f * entity.SpriteScale;
             if (entity is Player1)
                 return baseScale * 1.18f;
             if (entity is Bullet)

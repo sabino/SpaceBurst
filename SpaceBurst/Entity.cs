@@ -115,9 +115,11 @@ namespace SpaceBurst
             get { return ApproximateRadius * 0.72f + 4f; }
         }
 
+        internal float SpriteScale => RenderScale * PresentationScaleMultiplier;
+
         public Vector2 Size
         {
-            get { return sprite == null ? Vector2.Zero : sprite.WorldSize * RenderScale; }
+            get { return sprite == null ? Vector2.Zero : sprite.WorldSize * SpriteScale; }
         }
 
         internal ProceduralSpriteInstance SpriteInstance
@@ -160,7 +162,7 @@ namespace SpaceBurst
                 if (sprite == null)
                     return new Rectangle((int)Position.X - 1, (int)Position.Y - 1, 2, 2);
 
-                return sprite.GetWorldBounds(Position, RenderScale);
+                return sprite.GetWorldBounds(Position, SpriteScale);
             }
         }
 
@@ -180,19 +182,19 @@ namespace SpaceBurst
                 if (Game1.Instance != null && Game1.Instance.EnableNeonOutlines)
                 {
                     Color outline = ColorUtil.ParseHex(sprite.AccentColorHex, RenderTint) * (0.16f * CombatReadability.GetOpacity(this));
-                    sprite.Draw(spriteBatch, Position + new Vector2(-2f, 0f), outline, Orientation, RenderScale);
-                    sprite.Draw(spriteBatch, Position + new Vector2(2f, 0f), outline, Orientation, RenderScale);
-                    sprite.Draw(spriteBatch, Position + new Vector2(0f, -2f), outline, Orientation, RenderScale);
-                    sprite.Draw(spriteBatch, Position + new Vector2(0f, 2f), outline, Orientation, RenderScale);
+                    sprite.Draw(spriteBatch, Position + new Vector2(-2f, 0f), outline, Orientation, SpriteScale);
+                    sprite.Draw(spriteBatch, Position + new Vector2(2f, 0f), outline, Orientation, SpriteScale);
+                    sprite.Draw(spriteBatch, Position + new Vector2(0f, -2f), outline, Orientation, SpriteScale);
+                    sprite.Draw(spriteBatch, Position + new Vector2(0f, 2f), outline, Orientation, SpriteScale);
                 }
 
-                sprite.Draw(spriteBatch, Position, RenderTint, Orientation, RenderScale);
+                sprite.Draw(spriteBatch, Position, RenderTint, Orientation, SpriteScale);
             }
         }
 
         public virtual bool ContainsPoint(Vector2 worldPoint)
         {
-            return sprite != null && sprite.ContainsWorldPoint(Position, worldPoint, RenderScale);
+            return sprite != null && sprite.ContainsWorldPoint(Position, worldPoint, SpriteScale);
         }
 
         public virtual bool ContainsCombatPoint(Vector3 combatPoint)
@@ -205,7 +207,7 @@ namespace SpaceBurst
 
         public virtual bool Overlaps(Entity other)
         {
-            return sprite != null && other.sprite != null && sprite.Overlaps(Position, other.sprite, other.Position, RenderScale, other.RenderScale);
+            return sprite != null && other.sprite != null && sprite.Overlaps(Position, other.sprite, other.Position, SpriteScale, other.SpriteScale);
         }
 
         public virtual bool OverlapsCombat(Entity other)

@@ -67,6 +67,7 @@ sealed class PlayabilityCheckGame : Game1
         CheckRunRewards(director);
         CheckSurvivalEconomy(director);
         CheckResourceOwnership(director);
+        CheckCombatGeometry(director);
         CheckCampaignLiveness(director);
         PlayerTexture = Player1.Instance.SpriteInstance.Texture;
         Completed = true;
@@ -321,6 +322,93 @@ sealed class PlayabilityCheckGame : Game1
             "Loaded tutorial resumes tutorial flow");
     }
 
+    private static void CheckCombatGeometry(CampaignDirector director)
+    {
+        foreach (int stage in new[] { 10, 20, 30, 40, 50 })
+        {
+            director.TryConsoleLoadStage(stage);
+            Call(director, "SpawnBoss");
+            BossEnemy boss = EntityManager.Enemies.OfType<BossEnemy>().Single();
+            boss.Position = new Vector2(750, 320);
+            ProceduralSpriteInstance sprite = boss.SpriteInstance;
+            float scale = boss.RenderScale * boss.PresentationScaleMultiplier;
+            Vector2 size = sprite.WorldSize * scale;
+            Vector2 edge = Vector2.Zero;
+            float farthest = -1;
+            int mismatches = 0;
+            int visible = 0;
+            for (int y = 0; y < size.Y; y++)
+            {
+                for (int x = 0; x < size.X; x++)
+                {
+                    Vector2 point = boss.Position - size / 2 + new Vector2(x + 0.5f, y + 0.5f);
+                    if (!sprite.ContainsWorldPoint(boss.Position, point, scale))
+                        continue;
+                    visible++;
+                    if (!boss.ContainsPoint(point) || !boss.Bounds.Contains((int)MathF.Floor(point.X), (int)MathF.Floor(point.Y)))
+                        mismatches++;
+                    float distance = Vector2.DistanceSquared(point, boss.Position);
+                    if (!sprite.ContainsWorldPoint(boss.Position, point, boss.RenderScale) && distance > farthest)
+                    {
+                        edge = point;
+                        farthest = distance;
+                    }
+                }
+            }
+            Require(visible > 0 && mismatches == 0 && farthest > 0,
+                $"Stage {stage} visible boss hull matches point-hit mask and collision bounds");
+            typeof(EntityManager).GetMethod("RebuildSpatialIndex", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, null);
+            Require(EntityManager.QueryNearbyEnemies(edge, 1).Contains(boss),
+                $"Stage {stage} enlarged boss edge is included by the collision broad phase");
+            using var bullet = new Bullet(edge, Vector2.Zero, true, 1,
+                new ImpactProfileDefinition { Kernel = ImpactKernelShape.Point, BaseCellsRemoved = 1, BonusCellsPerDamage = 0 },
+                Element.PlayerBulletDefinition, 0, 1, 0);
+            Require(boss.Overlaps(bullet) && bullet.Overlaps(boss), "Enlarged hull overlap works in both directions");
+            int cellsBefore = sprite.Mask.OccupiedCount;
+            typeof(EntityManager).GetMethod("HandleFriendlyBullet", BindingFlags.Static | BindingFlags.NonPublic)
+                .Invoke(null, new object[] { bullet });
+            Require(sprite.Mask.OccupiedCount < cellsBefore && bullet.IsExpired,
+                $"Stage {stage} projectile at the visible outer hull removes the matching damage cells");
+            int cellsAfter = sprite.Mask.OccupiedCount;
+            var save = (RunSaveData)Call(director, "CaptureRunSaveData", 3, false);
+            PersistentStorage.SaveRunSlot(3, save);
+            RunSaveData loaded = PersistentStorage.LoadRunSlot(3);
+            Require(loaded != null, "Damaged boss survives sealed save/load");
+            Call(director, "RestoreRunSaveData", loaded, true, false);
+            BossEnemy restored = EntityManager.Enemies.OfType<BossEnemy>().Single();
+            Require(restored.SpriteScale == scale && restored.SpriteInstance.Mask.OccupiedCount == cellsAfter,
+                $"Stage {stage} saved boss preserves hull scale and damage cells");
+        }
+
+        director.TryConsoleLoadStage(1);
+        EntityManager.Reset();
+        var repository = (CampaignRepository)Get(director, "repository");
+        var target = new RecordingEnemy(repository.ArchetypesById["Destroyer"], new Vector2(200, 320));
+        target.Position += new Vector2(400, 0);
+        float beamY = 0;
+        // Find a real surface ray away from the center, then move the target there in Update.
+        for (int y = target.Bounds.Top + 1; y < target.Position.Y - 4; y++)
+        {
+            using var probe = new BeamShot(new Vector2(target.Bounds.Left - 20, y), Vector2.UnitX,
+                target.Size.X + 40, 2, 1, 1, true, new ImpactProfileDefinition(), "#FFFFFF", "#FFFFFF");
+            object[] args = { target, Vector2.Zero };
+            if ((bool)typeof(BeamShot).GetMethod("TryGetHitPoint", PrivateInstance).Invoke(probe, args))
+            {
+                beamY = y;
+                break;
+            }
+        }
+        Require(beamY != 0, "Beam regression has a noncentral visible hull surface");
+        float originX = target.Bounds.Left - 20;
+        target.Position -= new Vector2(400, 0);
+        EntityManager.Add(target);
+        EntityManager.Add(new BeamShot(new Vector2(originX, beamY), Vector2.UnitX,
+            target.Size.X + 40, 2, 1, 1, true, new ImpactProfileDefinition(), "#FFFFFF", "#FFFFFF"));
+        EntityManager.Update();
+        Require(target.Impact.HasValue && MathF.Abs(target.Impact.Value.Y - beamY) < 0.01f,
+            "Beam hits the moved target in the same frame and damages its sampled surface, not its center");
+    }
+
     private static void CheckSurvivalEconomy(CampaignDirector director)
     {
         director.TryConsoleLoadStage(1);
@@ -546,5 +634,28 @@ sealed class PlayabilityCheckGame : Game1
         if (!passed)
             throw new InvalidOperationException(description);
         Console.WriteLine("PASS: " + description);
+    }
+}
+
+sealed class RecordingEnemy : Enemy
+{
+    public Vector2? Impact { get; private set; }
+    private bool moved;
+
+    public RecordingEnemy(EnemyArchetypeDefinition archetype, Vector2 position)
+        : base(archetype, position, position.Y, archetype.MovePattern, FirePattern.None, 0, 0, 1) { }
+
+    public override void Update()
+    {
+        if (!moved)
+        {
+            Position += new Vector2(400, 0);
+            moved = true;
+        }
+    }
+
+    public override void ApplyBeamHit(Vector2 point, int damage, ImpactProfileDefinition impact)
+    {
+        Impact = point;
     }
 }
